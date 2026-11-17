@@ -1,0 +1,9 @@
+# Store text with LF everywhere (Windows checkouts included), so CI and local agree.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.pdf binary
+*.ocd binary
+*.pmtiles binary

@@ -66,6 +66,8 @@ if (isMain(import.meta.url)) {
   console.log(`=== ${basename(file)} ===`)
   console.log(`svg:     ${(r.svg.length / 1e6).toFixed(1)} MB in ${r.svgMs.toFixed(0)} ms`)
   console.log(`extent:  ${r.widthMm.toFixed(1)} x ${r.heightMm.toFixed(1)} mm`)
-  console.log(`render:  ${image.width} x ${image.height} px at ${dpi} dpi (expected ${mmToPx(r.widthMm, dpi).toFixed(0)} x ${mmToPx(r.heightMm, dpi).toFixed(0)}) in ${renderMs.toFixed(0)} ms`)
+  console.log(
+    `render:  ${image.width} x ${image.height} px at ${dpi} dpi (expected ${mmToPx(r.widthMm, dpi).toFixed(0)} x ${mmToPx(r.heightMm, dpi).toFixed(0)}) in ${renderMs.toFixed(0)} ms`,
+  )
   console.log(`png:     ${(png.length / 1e6).toFixed(1)} MB -> ${out}`)
 }

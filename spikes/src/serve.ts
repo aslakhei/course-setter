@@ -43,7 +43,12 @@ createServer((req, res) => {
   if (range) {
     const start = Number(range[1])
     const end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1
-    res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'content-length': end - start + 1, 'accept-ranges': 'bytes' })
+    res.writeHead(206, {
+      'content-type': type,
+      'content-range': `bytes ${start}-${end}/${size}`,
+      'content-length': end - start + 1,
+      'accept-ranges': 'bytes',
+    })
     createReadStream(file, { start, end }).pipe(res)
   } else {
     res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes' })

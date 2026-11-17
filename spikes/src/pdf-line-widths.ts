@@ -40,9 +40,10 @@ if (xobjects && !xobjects.isNull()) {
 
 // Scale from the current transformation matrix is ignored; OCAD writes widths in page units.
 const counts = new Map<string, number>()
-for (const s of streams) for (const m of s.matchAll(/(?:^|\s)(\d*\.?\d+)\s+w\b/g)) {
-  const mm = (Number(m[1]) / PT_PER_MM).toFixed(3)
-  counts.set(mm, (counts.get(mm) ?? 0) + 1)
-}
+for (const s of streams)
+  for (const m of s.matchAll(/(?:^|\s)(\d*\.?\d+)\s+w\b/g)) {
+    const mm = (Number(m[1]) / PT_PER_MM).toFixed(3)
+    counts.set(mm, (counts.get(mm) ?? 0) + 1)
+  }
 console.log(`${file}: ${streams.length} content stream(s); most common stroke widths:`)
 for (const [mm, n] of [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12)) console.log(`  ${mm} mm  x${n}`)

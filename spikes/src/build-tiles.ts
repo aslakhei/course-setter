@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util'
 import * as mupdf from 'mupdf'
 import { PMTiles, type Source } from 'pmtiles'
 import sharp, { type Sharp } from 'sharp'
-import { TileType, writePmtiles, type Tile } from './lib/pmtiles-writer.ts'
+import { type Tile, TileType, writePmtiles } from './lib/pmtiles-writer.ts'
 import { MM_PER_INCH, OCAD_UNITS_PER_MM, outPath, PT_PER_MM, writeOut } from './lib/util.ts'
 import { ocadSvg, rasterise } from './render-ocad.ts'
 
@@ -35,16 +35,19 @@ async function renderSource(): Promise<Source0> {
     const map = await ocadSvg(file)
     const crs = map.ocad.getCrs()
     const { image } = rasterise(map.svg, map.widthMm, dpi)
-    const rgb = await sharp(image.pixels, { raw: { width: image.width, height: image.height, channels: 4 } }).removeAlpha().raw().toBuffer()
+    const rgb = await sharp(image.pixels, { raw: { width: image.width, height: image.height, channels: 4 } })
+      .removeAlpha()
+      .raw()
+      .toBuffer()
     const m = (ocadUnits: number) => (ocadUnits / OCAD_UNITS_PER_MM / 1000) * crs.scale
     const [x0, , x1, y1] = map.bounds
     // Boulders (ISOM 204, black dot) as known points to check the tile-grid maths.
     const objects = map.ocad.objects as unknown as Array<{ sym: number; coordinates: number[][] }>
     const boulders = objects.filter(o => o.sym === 204000)
-    const testPoints = Array.from({ length: Math.min(40, boulders.length) }, (_, i) => boulders[Math.floor((i * boulders.length) / 40)]).map(o => [
-      m(o.coordinates[0][0]),
-      m(o.coordinates[0][1]),
-    ])
+    const testPoints = Array.from(
+      { length: Math.min(40, boulders.length) },
+      (_, i) => boulders[Math.floor((i * boulders.length) / 40)],
+    ).map(o => [m(o.coordinates[0][0]), m(o.coordinates[0][1])])
     return {
       rgb,
       w: image.width,
@@ -84,7 +87,9 @@ const renderMs = performance.now() - t0
 const resM = src.widthM / src.w // ground metres per pixel at the finest level (from the actual pixel width)
 const maxZ = Math.max(0, Math.ceil(Math.log2(Math.max(src.w, src.h) / TILE)))
 console.log(`=== ${basename(file)} ===`)
-console.log(`finest level: ${src.w} x ${src.h} px, ${mmPerPx} mm paper/px (${dpi.toFixed(0)} dpi), ${resM.toFixed(4)} m/px, rendered in ${(renderMs / 1000).toFixed(1)} s`)
+console.log(
+  `finest level: ${src.w} x ${src.h} px, ${mmPerPx} mm paper/px (${dpi.toFixed(0)} dpi), ${resM.toFixed(4)} m/px, rendered in ${(renderMs / 1000).toFixed(1)} s`,
+)
 
 // --- Cut tiles per level --------------------------------------------------------------
 type RawTile = { z: number; x: number; y: number; rgb: Buffer }
@@ -106,7 +111,7 @@ for (let z = maxZ; z >= 0; z--) {
         const n = Math.min(TILE, level.w - sx0)
         const from = (sy * level.w + sx0) * 3
         level.rgb.copy(buf, y * TILE * 3, from, from + n * 3)
-        if (!ink) for (let i = from; i < from + n * 3; i++) if (level.rgb[i] < 250) ((ink = true), (i = Infinity))
+        if (!ink) ink = level.rgb.subarray(from, from + n * 3).some(v => v < 250)
       }
       if (ink) raw.push({ z, x: tx, y: ty, rgb: buf })
       else skippedWhite++
@@ -114,7 +119,10 @@ for (let z = maxZ; z >= 0; z--) {
   if (z > 0) {
     const w = Math.ceil(level.w / 2)
     const h = Math.ceil(level.h / 2)
-    const rgb = await sharp(level.rgb, { raw: { width: level.w, height: level.h, channels: 3 } }).resize(w, h, { kernel: 'lanczos3' }).raw().toBuffer()
+    const rgb = await sharp(level.rgb, { raw: { width: level.w, height: level.h, channels: 3 } })
+      .resize(w, h, { kernel: 'lanczos3' })
+      .raw()
+      .toBuffer()
     level = { rgb, w, h }
   }
 }
@@ -156,7 +164,7 @@ for (const [fmt, { type, enc }] of Object.entries(formats)) {
   for (let i = 0; i < raw.length; i += 32) {
     const batch = raw.slice(i, i + 32)
     const encoded = await Promise.all(batch.map(t => enc(sharp(t.rgb, { raw: { width: TILE, height: TILE, channels: 3 } })).toBuffer()))
-    batch.forEach((t, k) => tiles.push({ z: t.z, x: t.x, y: t.y, data: encoded[k] }))
+    for (const [k, t] of batch.entries()) tiles.push({ z: t.z, x: t.x, y: t.y, data: encoded[k] })
   }
   const archive = writePmtiles(tiles, type, { ...metadata, format: fmt }, 0, maxZ)
   const path = writeOut(outPath(`tiles/${name}.${fmt}.pmtiles`), archive)
@@ -165,14 +173,17 @@ for (const [fmt, { type, enc }] of Object.entries(formats)) {
 
 console.log(`source file: ${(statSync(file).size / 1e6).toFixed(1)} MB`)
 console.log('format         archive     encode')
-for (const [fmt, r] of Object.entries(results)) console.log(`${fmt.padEnd(14)} ${(r.bytes / 1e6).toFixed(1).padStart(6)} MB  ${(r.ms / 1000).toFixed(1).padStart(6)} s`)
+for (const [fmt, r] of Object.entries(results))
+  console.log(`${fmt.padEnd(14)} ${(r.bytes / 1e6).toFixed(1).padStart(6)} MB  ${(r.ms / 1000).toFixed(1).padStart(6)} s`)
 
 // --- Validate: read back with the official reader and compare a few tiles --------------
 const fmt0 = 'png-lossless'
 const buf = readFileSync(results[fmt0].path)
 const fileSource: Source = {
   getKey: () => results[fmt0].path,
-  getBytes: async (offset, length) => ({ data: buf.buffer.slice(buf.byteOffset + offset, buf.byteOffset + offset + length) as ArrayBuffer }),
+  getBytes: async (offset, length) => ({
+    data: buf.buffer.slice(buf.byteOffset + offset, buf.byteOffset + offset + length) as ArrayBuffer,
+  }),
 }
 const reader = new PMTiles(fileSource)
 const header = await reader.getHeader()
@@ -209,4 +220,6 @@ if (pts.length) {
   console.log(`known points: ${hits}/${pts.length} boulder centres land on a black pixel`)
   if (hits < pts.length * 0.9) throw new Error('tile grid maths does not match the map')
 }
-console.log(`read-back OK: header v${header.specVersion}, z${header.minZoom}-${header.maxZoom}, ${header.numAddressedTiles} tiles, metadata scale 1:${meta.scale}; ${checked} tiles pixel-identical`)
+console.log(
+  `read-back OK: header v${header.specVersion}, z${header.minZoom}-${header.maxZoom}, ${header.numAddressedTiles} tiles, metadata scale 1:${meta.scale}; ${checked} tiles pixel-identical`,
+)

@@ -5,9 +5,9 @@
 // Usage: pnpm --dir spikes compare-reference maps/<map>.ocd "maps/<reference>.pdf" [dpi=300]
 import { mkdirSync } from 'node:fs'
 import sharp, { type Sharp } from 'sharp'
+import { outPath, pxToMm } from './lib/util.ts'
 import { ocadSvg, rasterise } from './render-ocad.ts'
 import { renderPdfPage } from './render-pdf.ts'
-import { outPath, pxToMm } from './lib/util.ts'
 
 type Gray = { data: Uint8Array; w: number; h: number }
 type Rgb = { data: Uint8Array; w: number; h: number }
@@ -64,7 +64,9 @@ function bestShift(ref: Gray, img: Gray, cx: number, cy: number, radius: number,
     }
   // Sub-pixel refinement: parabola through neighbours on each axis.
   const sub = (cm: number | undefined, c0: number, cp: number | undefined) =>
-    cm == null || cp == null || !isFinite(cm) || !isFinite(cp) || cm + cp - 2 * c0 <= 0 ? 0 : (cm - cp) / (2 * (cm + cp - 2 * c0))
+    cm == null || cp == null || !Number.isFinite(cm) || !Number.isFinite(cp) || cm + cp - 2 * c0 <= 0
+      ? 0
+      : (cm - cp) / (2 * (cm + cp - 2 * c0))
   const sx = sub(costs.get(`${best.dx - 1},${best.dy}`), best.c, costs.get(`${best.dx + 1},${best.dy}`))
   const sy = sub(costs.get(`${best.dx},${best.dy - 1}`), best.c, costs.get(`${best.dx},${best.dy + 1}`))
   return { ...best, fx: best.dx + sx, fy: best.dy + sy }
@@ -117,7 +119,7 @@ for (let py = P; py + 2 * P < refG.h; py += P * 2)
     for (let y = win.y0; y < win.y1; y += 4) for (let x = win.x0; x < win.x1; x += 4) if (refG.data[y * refG.w + x] < 200) ink++
     if (ink < (P * P) / 16 / 10) continue // skip mostly-white patches
     const b = bestShift(refG, ocadG, dx, dy, 6, win)
-    if (!isFinite(b.c)) continue
+    if (!Number.isFinite(b.c)) continue
     samples.push({ x: px + P / 2, y: py + P / 2, ddx: b.fx - dx, ddy: b.fy - dy })
   }
 function fit(xs: number[], ys: number[]) {
@@ -134,8 +136,14 @@ function fit(xs: number[], ys: number[]) {
   const resid = Math.sqrt(xs.reduce((a, x, i) => a + (ys[i] - (my + slope * (x - mx))) ** 2, 0) / n)
   return { slope, resid }
 }
-const fx = fit(samples.map(s => s.x), samples.map(s => s.ddx))
-const fy = fit(samples.map(s => s.y), samples.map(s => s.ddy))
+const fx = fit(
+  samples.map(s => s.x),
+  samples.map(s => s.ddx),
+)
+const fy = fit(
+  samples.map(s => s.y),
+  samples.map(s => s.ddy),
+)
 const maxDisp = Math.max(...samples.map(s => Math.hypot(s.ddx, s.ddy)))
 console.log(`Local alignment over ${samples.length} patches of 25 mm:`)
 console.log(`  scale error x: ${(fx.slope * 100).toFixed(3)} %  (residual ${pxToMm(fx.resid, DPI).toFixed(3)} mm)`)
@@ -162,9 +170,8 @@ for (let y = 0; y < refRgb.h; y++)
     // Diff image: grey = agreement, red = only in reference, blue = only in ours.
     const ga = a[i] + a[i + 1] + a[i + 2]
     const gb = b[j] + b[j + 1] + b[j + 2]
-    if (d < 60) diff[i] = diff[i + 1] = diff[i + 2] = 200
-    else if (ga < gb) ((diff[i] = 220), (diff[i + 1] = 30), (diff[i + 2] = 30))
-    else ((diff[i] = 30), (diff[i + 1] = 60), (diff[i + 2] = 220))
+    const colour = d < 60 ? [200, 200, 200] : ga < gb ? [220, 30, 30] : [30, 60, 220]
+    diff.set(colour, i)
   }
 console.log(`Colour agreement on inked pixels: ${((agree / inked) * 100).toFixed(1)} %`)
 
@@ -176,13 +183,14 @@ await sharp(diff, { raw: { width: refRgb.w, height: refRgb.h, channels: 3 } })
 
 // Side-by-side detail crops (reference left, ours right) at 1:1 pixels.
 const C = Math.round((40 / 25.4) * DPI) // 40 mm square
-const spots = samples
-  .filter((_, i) => i % Math.max(1, Math.floor(samples.length / 6)) === 0)
-  .slice(0, 6)
+const spots = samples.filter((_, i) => i % Math.max(1, Math.floor(samples.length / 6)) === 0).slice(0, 6)
 for (const [k, s] of spots.entries()) {
   const left = Math.max(0, Math.min(refRgb.w - C, Math.round(s.x - C / 2)))
   const top = Math.max(0, Math.min(refRgb.h - C, Math.round(s.y - C / 2)))
-  const r = await sharp(Buffer.from(refRgb.data), { raw: { width: refRgb.w, height: refRgb.h, channels: 3 } }).extract({ left, top, width: C, height: C }).png().toBuffer()
+  const r = await sharp(Buffer.from(refRgb.data), { raw: { width: refRgb.w, height: refRgb.h, channels: 3 } })
+    .extract({ left, top, width: C, height: C })
+    .png()
+    .toBuffer()
   const o = await sharp(Buffer.from(ocadRgb.data), { raw: { width: ocadRgb.w, height: ocadRgb.h, channels: 3 } })
     .extract({ left: left + dx, top: top + dy, width: C, height: C })
     .png()
