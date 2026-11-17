@@ -31,7 +31,8 @@ export function useDisplayName(session: Session | null | undefined): string | un
       .select('display_name')
       .eq('id', userId)
       .single()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.error('Could not load profile:', error.message)
         if (!cancelled) setName(data?.display_name ?? undefined)
       })
     return () => {
