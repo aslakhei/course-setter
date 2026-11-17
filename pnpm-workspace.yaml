@@ -4,3 +4,4 @@ packages:
   - spikes
 allowBuilds:
   esbuild: true
+  workerd: false
