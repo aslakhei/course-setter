@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tile viewer spike</title>
+  <link rel="stylesheet" href="/lib/ol.css" />
+  <style>
+    :root { --bg: #fff; --fg: #1d1d1f; --panel: rgba(255,255,255,.92); --accent: #9e2a97; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+    #map { position: absolute; inset: 0; }
+    #panel { position: absolute; top: 12px; right: 12px; z-index: 2; background: var(--panel); padding: 10px 12px; border-radius: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.2); max-width: 340px; }
+    #panel select { width: 100%; margin: 4px 0 8px; }
+    #panel output { display: block; font-variant-numeric: tabular-nums; }
+    .muted { opacity: .7; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <label>Archive <select id="archive"></select></label>
+    <output id="info"></output>
+    <output id="cursor" class="muted"></output>
+    <output id="measure"><b>Measure:</b> click points, double-click to finish.</output>
+    <div class="muted">Purple rings: boulders read from the OCAD file (should sit on black dots).</div>
+  </div>
+  <script src="/lib/ol.js"></script>
+  <script src="/lib/pmtiles.js"></script>
+  <script>
+    const select = document.getElementById('archive')
+    const info = document.getElementById('info')
+    let map
+
+    async function load(name) {
+      const archive = new pmtiles.PMTiles(`/tiles/${encodeURIComponent(name)}`)
+      const meta = await archive.getMetadata()
+      // Map frame: ground metres, y up. Not Web Mercator, so lengths are plain Euclidean.
+      const projection = new ol.proj.Projection({ code: 'map-frame', units: 'm', extent: meta.extent })
+      const tileGrid = new ol.tilegrid.TileGrid({ origin: meta.origin, resolutions: meta.resolutions, tileSize: meta.tileSize, extent: meta.extent })
+      const source = new ol.source.XYZ({
+        projection,
+        tileGrid,
+        tileUrlFunction: ([z, x, y]) => `${z}/${x}/${y}`,
+        tileLoadFunction: async (tile, key) => {
+          const [z, x, y] = key.split('/').map(Number)
+          const img = tile.getImage()
+          const t = await archive.getZxy(z, x, y)
+          if (!t) { img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='; return }
+          const url = URL.createObjectURL(new Blob([t.data]))
+          img.onload = () => URL.revokeObjectURL(url)
+          img.src = url
+        },
+      })
+      const pointsLayer = new ol.layer.Vector({
+        source: new ol.source.Vector({ features: (meta.testPoints ?? []).map(c => new ol.Feature(new ol.geom.Point(c))) }),
+        style: new ol.style.Style({ image: new ol.style.Circle({ radius: 9, stroke: new ol.style.Stroke({ color: '#9e2a97', width: 2 }) }) }),
+      })
+      const measureSource = new ol.source.Vector()
+      const measureLayer = new ol.layer.Vector({ source: measureSource, style: new ol.style.Style({ stroke: new ol.style.Stroke({ color: '#9e2a97', width: 3 }) }) })
+
+      if (map) map.setTarget(null)
+      map = new ol.Map({
+        target: 'map',
+        layers: [new ol.layer.Tile({ source }), pointsLayer, measureLayer],
+        view: new ol.View({ projection, resolutions: [...meta.resolutions, meta.resolutions.at(-1) / 2, meta.resolutions.at(-1) / 4], extent: meta.extent, constrainOnlyCenter: true }),
+        controls: ol.control.defaults.defaults().extend([new ol.control.ScaleLine({ units: 'metric', bar: true, text: true, minWidth: 140 })]),
+      })
+      map.getView().fit(meta.extent)
+
+      const draw = new ol.interaction.Draw({ source: measureSource, type: 'LineString' })
+      draw.on('drawstart', () => measureSource.clear())
+      draw.on('drawend', e => {
+        const m = e.feature.getGeometry().getLength()
+        document.getElementById('measure').innerHTML = `<b>Measured:</b> ${m.toFixed(1)} m ground = ${(m / meta.scale * 1000).toFixed(2)} mm at 1:${meta.scale}`
+      })
+      map.addInteraction(draw)
+
+      map.on('pointermove', e => {
+        const [x, y] = e.coordinate
+        document.getElementById('cursor').textContent = `map frame x ${x.toFixed(1)} m, y ${y.toFixed(1)} m`
+      })
+      info.innerHTML = `1:${meta.scale} · ${meta.paperMmPerPx} mm/px · z${meta.minZoom}–${meta.maxZoom} · ${meta.format}`
+    }
+
+    fetch('/tiles/').then(r => r.json()).then(names => {
+      select.innerHTML = names.map(n => `<option>${n}</option>`).join('')
+      const preferred = names.find(n => n.includes('png-palette')) ?? names[0]
+      select.value = preferred
+      select.onchange = () => load(select.value)
+      if (preferred) load(preferred)
+    })
+  </script>
+</body>
+</html>
