@@ -65,7 +65,8 @@ export function writePmtiles(tiles: Tile[], tileType: number, metadata: object, 
   }
 
   const root = serializeDirectory(entries)
-  if (root.length > MAX_ROOT_BYTES) throw new Error(`Root directory ${root.length} B too large; leaf directories not implemented in this spike`)
+  if (root.length > MAX_ROOT_BYTES)
+    throw new Error(`Root directory ${root.length} B too large; leaf directories not implemented in this spike`)
   const meta = gzipSync(Buffer.from(JSON.stringify(metadata)))
 
   const rootOffset = HEADER_BYTES

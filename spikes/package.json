@@ -3,7 +3,6 @@
   "private": true,
   "type": "module",
   "license": "AGPL-3.0-only",
-  "packageManager": "pnpm@10.34.9",
   "scripts": {
     "inspect-ocad": "tsx src/inspect-ocad.ts",
     "render-pdf": "tsx src/render-pdf.ts",

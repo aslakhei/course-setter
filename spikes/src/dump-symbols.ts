@@ -11,7 +11,10 @@ const ocad = await readOcad(file, { quietWarnings: true })
 
 console.log('# Colours (render order = index in colour table; lower is drawn on top)')
 for (const c of ocad.colors) {
-  if (c) console.log(`  #${String(c.number).padStart(3)}  order ${String(c.renderOrder).padStart(2)}  cmyk ${c.cmyk.join('/').padEnd(14)} ${c.rgb.padEnd(20)} ${c.name}`)
+  if (c)
+    console.log(
+      `  #${String(c.number).padStart(3)}  order ${String(c.renderOrder).padStart(2)}  cmyk ${c.cmyk.join('/').padEnd(14)} ${c.rgb.padEnd(20)} ${c.name}`,
+    )
 }
 
 type Sym = {
@@ -45,8 +48,11 @@ for (const s of (ocad.symbols as unknown as Sym[]).sort((a, b) => a.symNum - b.s
   if (!n) continue
   const kind = ['', 'point', 'line', 'area', 'text', 'rect', 'ltext', 'utext'][s.type]
   let detail = ''
-  if (s.type === 3) detail = `fillOn=${s.fillOn} fill=${colourName(s.fillColor)} hatch=${s.hatchMode}${s.hatchMode ? `(${colourName(s.hatchColor)}, every ${(s.hatchDist ?? 0) / 100} mm)` : ''} struct=${s.structMode} border=${s.borderSym ? fmtSym(s.borderSym) : '-'}`
+  if (s.type === 3)
+    detail = `fillOn=${s.fillOn} fill=${colourName(s.fillColor)} hatch=${s.hatchMode}${s.hatchMode ? `(${colourName(s.hatchColor)}, every ${(s.hatchDist ?? 0) / 100} mm)` : ''} struct=${s.structMode} border=${s.borderSym ? fmtSym(s.borderSym) : '-'}`
   if (s.type === 2) detail = `width=${s.lineWidth} colour=${colourName(s.lineColor)}`
   if (s.type === 1) detail = `elements=${s.elements?.length}`
-  console.log(`  ${fmtSym(s.symNum).padEnd(8)} ${kind.padEnd(5)} x${String(n).padEnd(5)} ${s.isHidden() ? 'HIDDEN ' : ''}${(s.description ?? '').padEnd(34)} ${detail}`)
+  console.log(
+    `  ${fmtSym(s.symNum).padEnd(8)} ${kind.padEnd(5)} x${String(n).padEnd(5)} ${s.isHidden() ? 'HIDDEN ' : ''}${(s.description ?? '').padEnd(34)} ${detail}`,
+  )
 }

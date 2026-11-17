@@ -1,0 +1,7 @@
+{
+  "app": {
+    "title": "Course setter",
+    "tagline": "Set orienteering courses on your club's maps."
+  },
+  "scaleExample": "1 km is {{mm}} mm on a 1:15 000 map."
+}

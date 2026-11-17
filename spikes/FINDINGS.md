@@ -4,15 +4,15 @@ Date: 2026-11-17. Test maps (club property, not committed): one OCAD map (Skarp�
 
 ## Summary
 
-| Question | Answer |
-|---|---|
-| Can we read OCAD? | Yes. ocad2geojson reads the map in ~0.1 s, 0 warnings. Format version 2018, saved by OCAD 2020. |
-| Is the render at correct scale? | Yes. Against OCAD's own PDF export: scale error +0.020 % (x) / −0.015 % (y), max local shift 0.5 mm over an A3 sheet. |
+| Question                                      | Answer                                                                                                                                            |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Can we read OCAD?                             | Yes. ocad2geojson reads the map in ~0.1 s, 0 warnings. Format version 2018, saved by OCAD 2020.                                                   |
+| Is the render at correct scale?               | Yes. Against OCAD's own PDF export: scale error +0.020 % (x) / −0.015 % (y), max local shift 0.5 mm over an A3 sheet.                             |
 | Is the render faithful enough for the editor? | Yes, after one fix (pattern ids, below). Remaining differences are cosmetic: overprint colour blending, hatch phase, slightly different CMYK→RGB. |
-| Can we render PDF maps? | Yes. mupdf.js renders vector PDFs at any dpi; page size gives paper mm exactly. Slow: 6–13 s per page. |
-| Tile format | **256-colour palette PNG** in one PMTiles archive per map version. |
-| Storage per map version | **~14 MB** of tiles (+ original file 4–6 MB), far below the 100–300 MB estimate. |
-| Print PDF at correct scale? | Yes. Known boulders 79.12 mm apart at 1:15 000 and 76.96 mm at 1:10 000 measure exactly that (±0.01 mm) in the rendered PDF. |
+| Can we render PDF maps?                       | Yes. mupdf.js renders vector PDFs at any dpi; page size gives paper mm exactly. Slow: 6–13 s per page.                                            |
+| Tile format                                   | **256-colour palette PNG** in one PMTiles archive per map version.                                                                                |
+| Storage per map version                       | **~14 MB** of tiles (+ original file 4–6 MB), far below the 100–300 MB estimate.                                                                  |
+| Print PDF at correct scale?                   | Yes. Known boulders 79.12 mm apart at 1:15 000 and 76.96 mm at 1:10 000 measure exactly that (±0.01 mm) in the rendered PDF.                      |
 
 ## OCAD parsing
 
@@ -28,6 +28,7 @@ Date: 2026-11-17. Test maps (club property, not committed): one OCAD map (Skarp�
 Compared with `compare-reference.ts`: automatic alignment of the A3 reference inside our render, 25 local patches for scale, side-by-side crops and a difference image.
 
 Found and handled:
+
 1. **Pattern ids lost (blocking, fixed in the spike).** ocad2geojson sets `node.id = …`; xmldom does not turn that into an attribute, so every `<pattern>` lost its id. All hatched and structured areas (marsh, north lines, out-of-bounds, scattered trees, …) disappeared: about 2 300 objects on this map. Fixed by defining an `id` accessor on xmldom's `Element` (see `render-ocad.ts`). Worth reporting upstream.
 
 Remaining differences, none blocking for MVP:
@@ -53,10 +54,10 @@ Built by `build-tiles.ts`: render once at the finest level, cut 256 px tiles, do
 - Finest level 0.05 mm paper per pixel (508 dpi) = 0.75 m/px at 1:15 000. 7 levels (z0–z6).
 - Grid maths checked: 40/40 boulder centres from the OCAD file land on black pixels when converted to tile + pixel with the OpenLayers formula.
 
-| Map | Finest level | Tiles | Render | png-palette | webp-q80 | png-lossless | webp-lossless |
-|---|---|---|---|---|---|---|---|
-| Skarpåsen (OCAD) | 7882 × 8669 px | 736 | 5 s | **13.7 MB**, 9 s | 12.7 MB | 27.1 MB | 22.6 MB, 20 s |
-| Old-map-2017 (PDF) | 9565 × 5350 px | 789 | 13 s | **13.3 MB**, 10 s | 10.5 MB | 29.6 MB | – |
+| Map                | Finest level   | Tiles | Render | png-palette       | webp-q80 | png-lossless | webp-lossless |
+| ------------------ | -------------- | ----- | ------ | ----------------- | -------- | ------------ | ------------- |
+| Skarpåsen (OCAD)   | 7882 × 8669 px | 736   | 5 s    | **13.7 MB**, 9 s  | 12.7 MB  | 27.1 MB      | 22.6 MB, 20 s |
+| Old-map-2017 (PDF) | 9565 × 5350 px | 789   | 13 s   | **13.3 MB**, 10 s | 10.5 MB  | 29.6 MB      | –             |
 
 - **Lossy WebP is not suitable**: 4:2:0 chroma subsampling turns alternating blue/yellow marsh lines teal (PSNR 20 dB vs lossless; smart subsampling does not help). Palette PNG reaches 58 dB and looks identical; maps have few colours.
 - Memory: the finest level is held as raw RGB (~150–205 MB for these maps). A 60 × 60 cm map would be ~12 000² px (~430 MB RGB). For large maps the worker should render in strips (resvg can render any viewBox region, as `make-print-pdf.ts` does).
@@ -66,10 +67,10 @@ Built by `build-tiles.ts`: render once at the finest level, cut 256 px tiles, do
 
 `make-print-pdf.ts`: A4, 600 dpi palette-PNG map raster rendered just for the print area, 8 mm white margins, two 5 mm control circles + leg line in purple with Multiply blending, and a 1 km scale bar. Verified by rendering the PDF back with mupdf and finding the boulders.
 
-| Print scale | Map raster | Time | PDF size | Expected vs measured distance |
-|---|---|---|---|---|
-| 1:15 000 | 4961 × 7016 px | 5 + 3 s | 5.1 MB | 79.12 vs 79.12 mm |
-| 1:10 000 (enlarged) | 4961 × 7016 px | 4 + 3 s | 4.1 MB | 76.96 vs 76.96 mm |
+| Print scale         | Map raster     | Time    | PDF size | Expected vs measured distance |
+| ------------------- | -------------- | ------- | -------- | ----------------------------- |
+| 1:15 000            | 4961 × 7016 px | 5 + 3 s | 5.1 MB   | 79.12 vs 79.12 mm             |
+| 1:10 000 (enlarged) | 4961 × 7016 px | 4 + 3 s | 4.1 MB   | 76.96 vs 76.96 mm             |
 
 Deferred: a physical printout measured with a ruler (printer scaling must be "100 % / actual size"). The PDF export's acceptance test repeats it.
 
@@ -89,15 +90,15 @@ The viewer was checked by hand: a distance measured in the viewer matches the sa
 
 All run from the repo root with `pnpm --dir spikes <script> …`; outputs go to `spikes/out/` (gitignored).
 
-| Script | Purpose |
-|---|---|
-| `inspect-ocad <map.ocd>` | Version, scale, georef, extent, symbol/object counts |
-| `dump-symbols <map.ocd>` | Colour table and used symbols |
-| `render-ocad <map.ocd> [dpi]` | Full map PNG + SVG |
-| `render-pdf <map.pdf> [dpi]` | PDF page PNG + page size |
-| `compare-reference <map.ocd> <ref.pdf> [dpi]` | Alignment, scale error, diff + detail crops |
-| `pdf-line-widths <map.pdf>` | Stroke-width histogram (print-scale estimate) |
-| `build-tiles <map> [--scale N]` | Tile pyramid, format comparison, PMTiles, checks |
-| `tile-quality <name> <z> <x> <y>` | Encoding comparison for one tile |
-| `serve` | Local viewer on http://127.0.0.1:8787 |
-| `make-print-pdf <map.ocd> [--print-scale N]` | A4 print PDF + scale verification |
+| Script                                        | Purpose                                              |
+| --------------------------------------------- | ---------------------------------------------------- |
+| `inspect-ocad <map.ocd>`                      | Version, scale, georef, extent, symbol/object counts |
+| `dump-symbols <map.ocd>`                      | Colour table and used symbols                        |
+| `render-ocad <map.ocd> [dpi]`                 | Full map PNG + SVG                                   |
+| `render-pdf <map.pdf> [dpi]`                  | PDF page PNG + page size                             |
+| `compare-reference <map.ocd> <ref.pdf> [dpi]` | Alignment, scale error, diff + detail crops          |
+| `pdf-line-widths <map.pdf>`                   | Stroke-width histogram (print-scale estimate)        |
+| `build-tiles <map> [--scale N]`               | Tile pyramid, format comparison, PMTiles, checks     |
+| `tile-quality <name> <z> <x> <y>`             | Encoding comparison for one tile                     |
+| `serve`                                       | Local viewer on http://127.0.0.1:8787                |
+| `make-print-pdf <map.ocd> [--print-scale N]`  | A4 print PDF + scale verification                    |

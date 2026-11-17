@@ -35,6 +35,8 @@ if (isMain(import.meta.url)) {
   console.log(`=== ${basename(file)} ===`)
   console.log(`file size:   ${(statSync(file).size / 1e6).toFixed(1)} MB, ${r.pages} page(s), creator ${r.creator}`)
   console.log(`page size:   ${r.widthMm.toFixed(1)} x ${r.heightMm.toFixed(1)} mm`)
-  console.log(`render:      ${r.pixmap.getWidth()} x ${r.pixmap.getHeight()} px at ${dpi} dpi (expected ${mmToPx(r.widthMm, dpi).toFixed(0)} px wide) in ${r.renderMs.toFixed(0)} ms`)
+  console.log(
+    `render:      ${r.pixmap.getWidth()} x ${r.pixmap.getHeight()} px at ${dpi} dpi (expected ${mmToPx(r.widthMm, dpi).toFixed(0)} px wide) in ${r.renderMs.toFixed(0)} ms`,
+  )
   console.log(`png:         ${(png.length / 1e6).toFixed(1)} MB -> ${out}`)
 }

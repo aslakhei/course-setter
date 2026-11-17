@@ -33,10 +33,12 @@ const mapScale = map.ocad.getCrs().scale
 const printScale = Number(values['print-scale'] ?? mapScale)
 /** OCAD units (1/100 mm at map scale) per mm on the printed paper. */
 const unitsPerPaperMm = (OCAD_UNITS_PER_MM * printScale) / mapScale
-const [b0, b1, , b3] = map.bounds
+const [, b1, , b3] = map.bounds
 
 // Pick two boulders 60–150 mm apart on paper; centre the print area between them.
-const boulders = (map.ocad.objects as unknown as Array<{ sym: number; coordinates: number[][] }>).filter(o => o.sym === 204000).map(o => o.coordinates[0])
+const boulders = (map.ocad.objects as unknown as Array<{ sym: number; coordinates: number[][] }>)
+  .filter(o => o.sym === 204000)
+  .map(o => o.coordinates[0])
 let pair: [number[], number[]] | undefined
 outer: for (let i = 0; i < boulders.length; i += 7)
   for (let j = i + 1; j < boulders.length; j += 3) {
@@ -113,15 +115,33 @@ page.drawLine({
 const kmMm = (1000 / printScale) * 1000
 const font = await pdf.embedFont(StandardFonts.Helvetica)
 page.drawRectangle({ x: pt(MARGIN + 4), y: pt(MARGIN + 4), width: pt(kmMm + 4), height: pt(9), color: white })
-page.drawLine({ start: { x: pt(MARGIN + 6), y: pt(MARGIN + 6) }, end: { x: pt(MARGIN + 6 + kmMm), y: pt(MARGIN + 6) }, thickness: pt(0.3), color: rgb(0, 0, 0) })
-for (const x of [0, kmMm]) page.drawLine({ start: { x: pt(MARGIN + 6 + x), y: pt(MARGIN + 6) }, end: { x: pt(MARGIN + 6 + x), y: pt(MARGIN + 9) }, thickness: pt(0.3), color: rgb(0, 0, 0) })
-page.drawText(`1 km = ${kmMm.toFixed(2)} mm at 1:${printScale} (map 1:${mapScale})`, { x: pt(MARGIN + 8), y: pt(MARGIN + 7.5), size: 7, font })
+page.drawLine({
+  start: { x: pt(MARGIN + 6), y: pt(MARGIN + 6) },
+  end: { x: pt(MARGIN + 6 + kmMm), y: pt(MARGIN + 6) },
+  thickness: pt(0.3),
+  color: rgb(0, 0, 0),
+})
+for (const x of [0, kmMm])
+  page.drawLine({
+    start: { x: pt(MARGIN + 6 + x), y: pt(MARGIN + 6) },
+    end: { x: pt(MARGIN + 6 + x), y: pt(MARGIN + 9) },
+    thickness: pt(0.3),
+    color: rgb(0, 0, 0),
+  })
+page.drawText(`1 km = ${kmMm.toFixed(2)} mm at 1:${printScale} (map 1:${mapScale})`, {
+  x: pt(MARGIN + 8),
+  y: pt(MARGIN + 7.5),
+  size: 7,
+  font,
+})
 
 const bytes = await pdf.save()
 const composeMs = performance.now() - t0
 const out = writeOut(outPath(`print/${basename(file, '.ocd')}-A4-1_${printScale}-${DPI}dpi.pdf`), bytes)
 console.log(`print 1:${printScale} from 1:${mapScale} map, A4 at ${DPI} dpi`)
-console.log(`map raster ${image.width}x${image.height}px rendered in ${(renderMs / 1000).toFixed(1)} s; PDF composed in ${(composeMs / 1000).toFixed(1)} s`)
+console.log(
+  `map raster ${image.width}x${image.height}px rendered in ${(renderMs / 1000).toFixed(1)} s; PDF composed in ${(composeMs / 1000).toFixed(1)} s`,
+)
 console.log(`PDF ${(bytes.length / 1e6).toFixed(1)} MB -> ${out}`)
 
 // --- Verify: render the PDF and locate the two boulders -----------------------------
@@ -143,7 +163,11 @@ function findDot(p: number[]) {
   for (let y = Math.round(cy) - r; y <= cy + r; y++)
     for (let x = Math.round(cx) - r; x <= cx + r; x++) {
       const i = (y * W + x) * 3
-      if (px[i] < 90 && px[i + 1] < 90 && px[i + 2] < 90) ((sx += x), (sy += y), n++)
+      if (px[i] < 90 && px[i + 1] < 90 && px[i + 2] < 90) {
+        sx += x
+        sy += y
+        n++
+      }
     }
   if (!n) throw new Error(`no black dot near ${p.map(v => v.toFixed(1))} mm`)
   return { x: sx / n, y: sy / n, offMm: Math.hypot((sx / n - cx) * (25.4 / VDPI), (sy / n - cy) * (25.4 / VDPI)) }
@@ -154,5 +178,7 @@ const measuredMm = Math.hypot(dB.x - dA.x, dB.y - dA.y) * (25.4 / VDPI)
 const groundM = (Math.hypot(B[0] - A[0], B[1] - A[1]) / OCAD_UNITS_PER_MM / 1000) * mapScale
 const expectedMm = (groundM / printScale) * 1000
 console.log(`verify: page ${(pw / PT_PER_MM).toFixed(1)} x ${(ph / PT_PER_MM).toFixed(1)} mm`)
-console.log(`verify: boulders ${groundM.toFixed(1)} m apart -> expected ${expectedMm.toFixed(2)} mm, measured ${measuredMm.toFixed(2)} mm on the PDF (error ${(measuredMm - expectedMm).toFixed(2)} mm)`)
+console.log(
+  `verify: boulders ${groundM.toFixed(1)} m apart -> expected ${expectedMm.toFixed(2)} mm, measured ${measuredMm.toFixed(2)} mm on the PDF (error ${(measuredMm - expectedMm).toFixed(2)} mm)`,
+)
 console.log(`verify: boulder centres are ${dA.offMm.toFixed(2)} / ${dB.offMm.toFixed(2)} mm from the control circle centres`)

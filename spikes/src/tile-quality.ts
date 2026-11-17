@@ -13,7 +13,10 @@ const fmts = ['png-lossless', 'png-palette', 'webp-lossless', 'webp-near-lossles
 async function tile(fmt: string) {
   const path = outPath(`tiles/${name}.${fmt}.pmtiles`)
   const buf = readFileSync(path)
-  const src: Source = { getKey: () => path, getBytes: async (o, l) => ({ data: buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + l) as ArrayBuffer }) }
+  const src: Source = {
+    getKey: () => path,
+    getBytes: async (o, l) => ({ data: buf.buffer.slice(buf.byteOffset + o, buf.byteOffset + o + l) as ArrayBuffer }),
+  }
   const t = await new PMTiles(src).getZxy(z, x, y)
   if (!t) throw new Error(`no tile ${z}/${x}/${y} in ${fmt}`)
   return sharp(Buffer.from(t.data)).removeAlpha().raw().toBuffer()
@@ -27,9 +30,16 @@ for (const [i, fmt] of fmts.entries()) {
   for (let k = 0; k < px.length; k++) se += (px[k] - ref[k]) ** 2
   const psnr = 10 * Math.log10(255 ** 2 / (se / px.length || 1e-9))
   console.log(`${fmt.padEnd(13)} PSNR ${i === 0 ? '   ref' : psnr.toFixed(1).padStart(6)} dB`)
-  const big = await sharp(px, { raw: { width: 256, height: 256, channels: 3 } }).extract({ left: 64, top: 64, width: 128, height: 128 }).resize(384, 384, { kernel: 'nearest' }).png().toBuffer()
+  const big = await sharp(px, { raw: { width: 256, height: 256, channels: 3 } })
+    .extract({ left: 64, top: 64, width: 128, height: 128 })
+    .resize(384, 384, { kernel: 'nearest' })
+    .png()
+    .toBuffer()
   parts.push({ input: big, left: i * 394, top: 0 })
 }
 const out = outPath(`compare/tile-quality-${name}-${z}-${x}-${y}.png`)
-await sharp({ create: { width: fmts.length * 394 - 10, height: 384, channels: 3, background: '#000' } }).composite(parts).png().toFile(out)
+await sharp({ create: { width: fmts.length * 394 - 10, height: 384, channels: 3, background: '#000' } })
+  .composite(parts)
+  .png()
+  .toFile(out)
 console.log(`${fmts.join(' | ')} -> ${out}`)
