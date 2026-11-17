@@ -1,13 +1,16 @@
-import { groundMToPaperMm } from '@course-setter/core'
-import { useTranslation } from 'react-i18next'
+import { signInWithGoogle, signOut, useDisplayName, useSession } from './auth/useSession.ts'
+import { type AuthState, Home } from './components/Home.tsx'
 
 export function App() {
-  const { t } = useTranslation()
-  return (
-    <main>
-      <h1>{t('app.title')}</h1>
-      <p>{t('app.tagline')}</p>
-      <p>{t('scaleExample', { mm: groundMToPaperMm(1000, 15000).toFixed(1) })}</p>
-    </main>
-  )
+  const session = useSession()
+  const displayName = useDisplayName(session)
+
+  const auth: AuthState =
+    session === undefined
+      ? { status: 'loading' }
+      : session === null
+        ? { status: 'signedOut' }
+        : { status: 'signedIn', name: displayName ?? session.user.email ?? '' }
+
+  return <Home auth={auth} onSignIn={() => void signInWithGoogle()} onSignOut={() => void signOut()} />
 }
