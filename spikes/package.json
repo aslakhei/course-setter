@@ -1,0 +1,35 @@
+{
+  "name": "course-setter-spikes",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.34.9",
+  "scripts": {
+    "inspect-ocad": "tsx src/inspect-ocad.ts",
+    "render-pdf": "tsx src/render-pdf.ts",
+    "render-ocad": "tsx src/render-ocad.ts",
+    "dump-symbols": "tsx src/dump-symbols.ts",
+    "compare-reference": "tsx src/compare-reference.ts",
+    "pdf-line-widths": "tsx src/pdf-line-widths.ts",
+    "build-tiles": "tsx src/build-tiles.ts",
+    "tile-quality": "tsx src/tile-quality.ts",
+    "serve": "tsx src/serve.ts",
+    "make-print-pdf": "tsx src/make-print-pdf.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@xmldom/xmldom": "^0.9.12",
+    "mupdf": "^1.28.6",
+    "ocad2geojson": "^2.1.23",
+    "ol": "^10.11.0",
+    "pdf-lib": "^1.17.1",
+    "pmtiles": "^4.5.0",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
