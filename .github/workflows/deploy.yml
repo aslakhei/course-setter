@@ -1,7 +1,7 @@
 name: Deploy
 
 # main: apply database migrations to the hosted Supabase project, then deploy the web app to production.
-# Pull requests: deploy a preview of the web app (https://<branch>.course-setter.pages.dev).
+# Pull requests: dry-run the migrations, then deploy a preview of the web app (https://<branch>.course-setter.pages.dev).
 on:
   push:
     branches: [main]
@@ -17,7 +17,9 @@ permissions:
 jobs:
   database:
     name: Apply database migrations
-    if: github.event_name == 'push'
+    # Pull requests do a dry run against the hosted project (same token and connection, no changes).
+    # Skipped for pull requests from forks, which get no secrets.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -33,7 +35,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec supabase link --project-ref ${{ vars.SUPABASE_PROJECT_REF }}
       # The CLI targets the local stack by default; --remote targets the linked project.
-      - run: pnpm exec supabase db push --remote
+      # Hosted changes need --yes when there is no terminal to confirm in.
+      - name: Check pending migrations
+        if: github.event_name == 'pull_request'
+        run: pnpm exec supabase db push --remote --dry-run --password "$SUPABASE_DB_PASSWORD"
+      - name: Apply migrations
+        if: github.event_name == 'push'
+        run: pnpm exec supabase db push --remote --yes --password "$SUPABASE_DB_PASSWORD"
 
   web:
     name: Deploy web app
