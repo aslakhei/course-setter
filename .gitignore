@@ -1,3 +1,7 @@
+# Club map files and anything rendered from them (never commit)
+spikes/maps/
+spikes/out/
+
 # Logs
 logs
 *.log
