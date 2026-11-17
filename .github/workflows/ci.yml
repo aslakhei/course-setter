@@ -29,3 +29,30 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+
+  database:
+    name: Database and storage tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Google sign-in is configured in supabase/config.toml but not exercised in CI.
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID: ci-not-used
+      SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET: ci-not-used
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start local Supabase (only the services the tests need)
+        run: pnpm exec supabase start -x realtime,imgproxy,studio,edge-runtime,logflare,vector,supavisor,mailpit
+      - name: Database tests (row-level security)
+        run: pnpm db:test
+      - name: Storage integration tests (signed URL range requests)
+        run: pnpm test:integration
+      - name: Generated database types are up to date
+        run: |
+          pnpm db:types
+          git diff --exit-code apps/web/src/lib/database.types.ts

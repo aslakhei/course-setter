@@ -1,0 +1,8 @@
+{
+  // Root-level TypeScript: test configs and the Supabase integration tests.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["*.ts", "supabase/tests/integration"]
+}
