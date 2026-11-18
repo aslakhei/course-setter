@@ -1,16 +1,38 @@
-import { signInWithGoogle, signOut, useDisplayName, useSession } from './auth/useSession.ts'
-import { type AuthState, Home } from './components/Home.tsx'
+import { useTranslation } from 'react-i18next'
+import { Link, Route, Routes } from 'react-router'
+import { AppShell } from './components/AppShell.tsx'
+import { ClubLayout } from './pages/ClubLayout.tsx'
+import { ClubMembersPage } from './pages/ClubMembersPage.tsx'
+import { ClubOverviewPage } from './pages/ClubOverviewPage.tsx'
+import { ClubEventsPage, ClubMapsPage, ClubSettingsPage } from './pages/ClubSimplePages.tsx'
+import { ClubsPage } from './pages/ClubsPage.tsx'
+import { InvitePage } from './pages/InvitePage.tsx'
 
 export function App() {
-  const session = useSession()
-  const displayName = useDisplayName(session)
+  return (
+    <Routes>
+      <Route element={<AppShell />}>
+        <Route index element={<ClubsPage />} />
+        <Route path="clubs/:clubId" element={<ClubLayout />}>
+          <Route index element={<ClubOverviewPage />} />
+          <Route path="maps" element={<ClubMapsPage />} />
+          <Route path="events" element={<ClubEventsPage />} />
+          <Route path="members" element={<ClubMembersPage />} />
+          <Route path="settings" element={<ClubSettingsPage />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Route>
+      <Route path="invite/:token" element={<InvitePage />} />
+    </Routes>
+  )
+}
 
-  const auth: AuthState =
-    session === undefined
-      ? { status: 'loading' }
-      : session === null
-        ? { status: 'signedOut' }
-        : { status: 'signedIn', name: displayName ?? session.user.email ?? '' }
-
-  return <Home auth={auth} onSignIn={() => void signInWithGoogle()} onSignOut={() => void signOut()} />
+function NotFound() {
+  const { t } = useTranslation()
+  return (
+    <main className="mx-auto flex max-w-[1200px] flex-col items-start gap-2 px-5 py-6">
+      <h1 className="m-0 text-xl font-bold">{t('notFound.heading')}</h1>
+      <Link to="/">{t('notFound.home')}</Link>
+    </main>
+  )
 }

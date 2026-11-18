@@ -1,8 +1,8 @@
 {
-  // Root-level TypeScript: test configs and the Supabase integration tests.
+  // Root-level TypeScript: test configs, the Supabase integration tests and the web end-to-end tests.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["*.ts", "supabase/tests/integration"]
+  "include": ["*.ts", "supabase/tests/integration", "apps/web/e2e", "apps/web/playwright.config.ts"]
 }

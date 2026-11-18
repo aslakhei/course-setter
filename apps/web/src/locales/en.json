@@ -1,13 +1,122 @@
 {
   "app": {
     "title": "Course setter",
-    "tagline": "Set orienteering courses on your club's maps."
+    "tagline": "Set orienteering courses on your club's maps and print them at the right scale."
   },
-  "scaleExample": "1 km is {{mm}} mm on a 1:15 000 map.",
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong. Reload the page and try again.",
+    "you": "(you)",
+    "copy": "Copy",
+    "copied": "Copied",
+    "save": "Save",
+    "saved": "Saved"
+  },
   "auth": {
-    "loading": "Checking sign-in…",
     "signInWithGoogle": "Sign in with Google",
-    "signedInAs": "Signed in as {{name}}.",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "signInPrompt": "Sign in with your Google account to see your clubs.",
+    "accountMenu": "Account: {{name}}"
+  },
+  "nav": {
+    "switchClub": "Switch club",
+    "allClubs": "All clubs",
+    "clubs": "Clubs"
+  },
+  "roles": {
+    "admin": "Admin",
+    "member": "Member"
+  },
+  "clubs": {
+    "heading": "Your clubs",
+    "empty": "You are not in a club yet. Create one, or ask an admin of your club for an invite link.",
+    "createHeading": "Create a club",
+    "createHelp": "You become the club's first admin and can invite the other members.",
+    "nameLabel": "Club name",
+    "create": "Create club",
+    "open": "Open"
+  },
+  "club": {
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "notFound": "This club does not exist, or you are not a member of it.",
+    "backToClubs": "Back to your clubs",
+    "tabs": {
+      "label": "Club",
+      "overview": "Overview",
+      "maps": "Maps",
+      "events": "Events",
+      "members": "Members",
+      "settings": "Settings"
+    }
+  },
+  "maps": {
+    "heading": "Maps",
+    "all": "All maps",
+    "empty": "No maps yet",
+    "emptyHelp": "Map upload (OCAD and PDF) is coming soon."
+  },
+  "events": {
+    "heading": "Events",
+    "recent": "Recent events",
+    "all": "All events",
+    "empty": "No events yet",
+    "emptyHelp": "Events need a map. Once one is uploaded, courses are set here."
+  },
+  "members": {
+    "heading": "Members",
+    "manage": "Manage",
+    "viewAll": "View all",
+    "filterLabel": "Filter members",
+    "filterPlaceholder": "Filter by name",
+    "name": "Name",
+    "role": "Role",
+    "joined": "Joined",
+    "actions": "Actions",
+    "roleFor": "Role for {{name}}",
+    "remove": "Remove",
+    "removeConfirm": "Remove {{name}} from {{club}}?",
+    "leave": "Leave club",
+    "leaveConfirm": "Leave {{club}}? You need a new invite link to come back.",
+    "lastAdmin": "A club must have at least one admin. Make someone else admin first.",
+    "noMatch": "No members match the filter.",
+    "unnamed": "Unnamed member"
+  },
+  "invites": {
+    "heading": "Invite links",
+    "inviteHeading": "Invite people",
+    "help": "Anyone with a link can sign in with Google and join as member.",
+    "shareHelp": "Share the link in the club chat. People who open it sign in with Google and join as members.",
+    "validFor": "Valid for",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "create": "Create link",
+    "none": "No active invite link.",
+    "manage": "Manage links",
+    "revoke": "Revoke",
+    "expires": "Expires {{date}}",
+    "expired": "Expired {{date}}",
+    "revoked": "Revoked {{date}}",
+    "linkLabel": "Invite link"
+  },
+  "settings": {
+    "heading": "Club settings",
+    "nameHelp": "Shown to members and on invite links.",
+    "adminsOnly": "Only admins can change the club settings."
+  },
+  "invite": {
+    "heading": "Join a club",
+    "signedOut": "You have been invited to join a club on Course setter. Sign in with Google to see the invite.",
+    "valid": "You have been invited to join {{club}}.",
+    "join": "Join {{club}}",
+    "alreadyMember": "You are already a member of {{club}}.",
+    "openClub": "Open {{club}}",
+    "expired": "This invite link to {{club}} has expired. Ask a club admin for a new one.",
+    "revoked": "This invite link to {{club}} is no longer valid. Ask a club admin for a new one.",
+    "unknown": "This invite link is not valid. Check that you copied all of it, or ask a club admin for a new one."
+  },
+  "notFound": {
+    "heading": "Page not found",
+    "home": "Go to your clubs"
   }
 }

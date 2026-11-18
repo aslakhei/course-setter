@@ -34,20 +34,23 @@ Database changes are SQL migrations in `supabase/migrations/` (create one with `
 
 ## Scripts
 
-| Command                                     | Does                                                            |
-| ------------------------------------------- | --------------------------------------------------------------- |
-| `pnpm dev`                                  | Start the web app in development mode                           |
-| `pnpm lint`                                 | Biome lint + format check (what CI runs)                        |
-| `pnpm fix`                                  | Apply Biome formatting and safe fixes                           |
-| `pnpm typecheck`                            | TypeScript in every package                                     |
-| `pnpm test`                                 | Vitest across all apps and packages                             |
-| `pnpm build`                                | Production build of the web app                                 |
-| `pnpm --filter @course-setter/worker start` | Run the worker (`PORT`, default 8080; reads `apps/worker/.env`) |
-| `pnpm db:start` / `db:stop`                 | Start / stop local Supabase                                     |
-| `pnpm db:reset`                             | Recreate the local database from migrations                     |
-| `pnpm db:test`                              | Database tests (pgTAP: row-level security, clubs, job queue)    |
-| `pnpm db:types`                             | Regenerate `apps/web/src/lib/database.types.ts` from the schema |
-| `pnpm test:integration`                     | Tests against local Supabase (storage, club files, jobs)        |
+| Command                                     | Does                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------ |
+| `pnpm dev`                                  | Start the web app in development mode                              |
+| `pnpm lint`                                 | Biome lint + format check (what CI runs)                           |
+| `pnpm fix`                                  | Apply Biome formatting and safe fixes                              |
+| `pnpm typecheck`                            | TypeScript in every package                                        |
+| `pnpm test`                                 | Vitest across all apps and packages                                |
+| `pnpm build`                                | Production build of the web app                                    |
+| `pnpm --filter @course-setter/worker start` | Run the worker (`PORT`, default 8080; reads `apps/worker/.env`)    |
+| `pnpm db:start` / `db:stop`                 | Start / stop local Supabase                                        |
+| `pnpm db:reset`                             | Recreate the local database from migrations                        |
+| `pnpm db:test`                              | Database tests (pgTAP: row-level security, clubs, job queue)       |
+| `pnpm db:types`                             | Regenerate `apps/web/src/lib/database.types.ts` from the schema    |
+| `pnpm test:integration`                     | Tests against local Supabase (storage, club files, jobs)           |
+| `pnpm test:e2e`                             | End-to-end tests: web app build in Chromium against local Supabase |
+
+End-to-end tests need Chromium once: `pnpm --filter @course-setter/web exec playwright install chromium`. They sign test users in with a password, which only local Supabase allows; the app itself only offers Google.
 
 CI runs lint, typecheck, test and build, plus database and integration tests against a local Supabase (including the job queue through the built worker image), on every pull request and on `main`.
 
@@ -85,6 +88,7 @@ select id, status, attempts, result, error from public.jobs order by id desc lim
 
 - Merging to `main` applies new migrations to the hosted Supabase project (Stockholm), deploys the worker to Google Cloud Run (`europe-north1`, service `worker`, scales to zero) and deploys the web app to Cloudflare Pages.
 - Every pull request gets a preview of the web app at `https://<branch>.course-setter.pages.dev`.
+- Sign-in returns to the page it started from (an invite link stays an invite link), so hosted Supabase -> Authentication -> URL Configuration lists `https://course-setter.pages.dev/**` and `https://*.course-setter.pages.dev/**` as redirect URLs.
 - Non-secret settings are GitHub repository variables (`SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and for the worker `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKER_SERVICE_ACCOUNT`); secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are GitHub repository secrets.
 - GitHub Actions deploys to Google Cloud through Workload Identity Federation (no stored keys). The worker's own secrets live in Google Secret Manager: `supabase-secret-key` (Supabase secret key) and `worker-secret` (must match the Vault secret `worker_secret`). The worker deploy is skipped until `GCP_PROJECT_ID` is set. One-time Google Cloud setup (APIs, Artifact Registry, service accounts, Workload Identity Federation, secrets, budget): [`scripts/setup-gcp.sh`](scripts/setup-gcp.sh).
 
