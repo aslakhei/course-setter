@@ -3,10 +3,18 @@ name: Deploy
 # main: apply database migrations to the hosted Supabase project, then deploy the worker to Cloud Run and
 # the web app to production.
 # Pull requests: dry-run the migrations, then deploy a preview of the web app (https://<branch>.course-setter.pages.dev).
+# Run manually (Actions -> Deploy -> Run workflow, on main) with "enable worker" to turn the worker back on
+# after the budget guard cut it off.
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      enable_worker:
+        description: Make the worker public again if the budget guard cut it off (raise the budget first)
+        type: boolean
+        default: false
 
 concurrency:
   group: deploy-${{ github.ref }}
@@ -20,7 +28,7 @@ jobs:
     name: Apply database migrations
     # Pull requests do a dry run against the hosted project (same token and connection, no changes).
     # Skipped for pull requests from forks, which get no secrets.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -41,14 +49,14 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm exec supabase db push --remote --dry-run --password "$SUPABASE_DB_PASSWORD"
       - name: Apply migrations
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request'
         run: pnpm exec supabase db push --remote --yes --password "$SUPABASE_DB_PASSWORD"
 
   worker:
     name: Deploy worker
     needs: database
     # main only, after migrations, and only once Google Cloud is set up (repository variable GCP_PROJECT_ID).
-    if: github.event_name == 'push' && vars.GCP_PROJECT_ID != ''
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GCP_PROJECT_ID != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -69,22 +77,31 @@ jobs:
           docker build -f apps/worker/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
       # Public URL: the database calls it over the internet; requests without the shared secret get 401.
-      # Scales to zero; the timeout covers the longest job, since the worker answers when the queue is drained.
-      - name: Deploy to Cloud Run
+      # Scales to zero, at most one instance (jobs queue up). The timeout covers the longest job, since the
+      # worker answers when the queue is drained.
+      # If the budget guard has removed public access, a normal deploy keeps it that way; only a manual run
+      # with enable_worker turns it back on.
+      - name: Deploy worker to Cloud Run
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+          ENABLE_WORKER: ${{ inputs.enable_worker || false }}
         run: |
-          gcloud run deploy worker \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region europe-north1 \
-            --image "$IMAGE" \
-            --service-account "${{ vars.GCP_WORKER_SERVICE_ACCOUNT }}" \
-            --allow-unauthenticated \
-            --min-instances 0 \
-            --max-instances 2 \
-            --cpu 1 \
-            --memory 1Gi \
-            --timeout 900 \
-            --set-env-vars "SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}" \
-            --set-secrets "SUPABASE_SECRET_KEY=supabase-secret-key:latest,WORKER_SECRET=worker-secret:latest"
+          access=--allow-unauthenticated
+          if gcloud run services describe worker --project "$PROJECT" --region europe-north1 >/dev/null 2>&1 &&
+            ! gcloud run services get-iam-policy worker --project "$PROJECT" --region europe-north1 --format json |
+              jq -e '.bindings[]? | select(.role == "roles/run.invoker") | .members[] | select(. == "allUsers")' >/dev/null &&
+            [ "$ENABLE_WORKER" != "true" ]; then
+            access=
+            echo "::warning::The worker is cut off (budget guard). Raise the budget, then run Deploy manually with enable worker."
+          fi
+          gcloud run deploy worker             --project "$PROJECT"             --region europe-north1             --image "$IMAGE"             --service-account "${{ vars.GCP_WORKER_SERVICE_ACCOUNT }}"             $access             --min-instances 0             --max-instances 1             --cpu 1             --memory 512Mi             --timeout 900             --set-env-vars "SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}"             --set-secrets "SUPABASE_SECRET_KEY=supabase-secret-key:latest,WORKER_SECRET=worker-secret:latest"
+      # Receives budget notifications (Pub/Sub push, authenticated) and cuts off the worker when the budget
+      # is reached. Same image, different entry point; not public.
+      - name: Deploy budget guard to Cloud Run
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud run deploy budget-guard             --project "$PROJECT"             --region europe-north1             --image "$IMAGE"             --command node             --args src/budget-guard.ts             --service-account "budget-guard@$PROJECT.iam.gserviceaccount.com"             --no-allow-unauthenticated             --min-instances 0             --max-instances 1             --set-env-vars "GCP_PROJECT_ID=$PROJECT,GCP_REGION=europe-north1,GUARDED_SERVICE=worker"
 
   web:
     name: Deploy web app
