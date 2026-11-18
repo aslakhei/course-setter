@@ -10,9 +10,17 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6"
+    "@types/node": "^26.6.6",
+    "pdf-lib": "^1.17.1"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.119.0"
+    "@course-setter/core": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
+    "@supabase/supabase-js": "^2.119.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "mupdf": "^1.28.6",
+    "ocad2geojson": "^2.1.23",
+    "pmtiles": "^4.5.0",
+    "sharp": "^0.35.5"
   }
 }

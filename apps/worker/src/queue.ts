@@ -1,4 +1,4 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 export type Job = {
   id: number
@@ -16,10 +16,13 @@ export type JobQueue = {
   fail(jobId: number, error: string): Promise<void>
 }
 
-/** Queue backed by Supabase; needs the secret key (service role), so it only ever runs on the server. */
-export function supabaseQueue(url: string, secretKey: string): JobQueue {
-  const db = createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } })
+/** Supabase client with the secret key (service role): server only, bypasses row-level security. */
+export function serviceClient(url: string, secretKey: string): SupabaseClient {
+  return createClient(url, secretKey, { auth: { persistSession: false, autoRefreshToken: false } })
+}
 
+/** Queue backed by Supabase; needs the secret key (service role), so it only ever runs on the server. */
+export function supabaseQueue(db: SupabaseClient): JobQueue {
   return {
     async claim(workerId) {
       const { data, error } = await db.rpc('claim_job', { worker: workerId })
