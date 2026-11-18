@@ -32,7 +32,8 @@ exists() { "$@" >/dev/null 2>&1; }
 
 echo "== APIs"
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com secretmanager.googleapis.com \
-  iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com   pubsub.googleapis.com cloudbilling.googleapis.com billingbudgets.googleapis.com
+  iam.googleapis.com iamcredentials.googleapis.com sts.googleapis.com \
+  pubsub.googleapis.com cloudbilling.googleapis.com billingbudgets.googleapis.com
 
 echo "== Artifact Registry (worker images; only recent ones are kept)"
 exists gcloud artifacts repositories describe "$AR_REPO" --location "$REGION" ||
@@ -56,13 +57,26 @@ exists gcloud iam service-accounts describe "$DEPLOY_SA" ||
 exists gcloud iam service-accounts describe "$GUARD_SA" ||
   gcloud iam service-accounts create budget-guard --display-name "Budget guard (cuts off the worker)"
 
-# The deploy account may manage Cloud Run, push images and run the service as the worker account.
+# The deploy account may manage Cloud Run, push images and run the services as the worker and
+# budget-guard accounts.
 gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$DEPLOY_SA" \
   --role roles/run.admin --condition None >/dev/null
 gcloud artifacts repositories add-iam-policy-binding "$AR_REPO" --location "$REGION" \
   --member "serviceAccount:$DEPLOY_SA" --role roles/artifactregistry.writer >/dev/null
-gcloud iam service-accounts add-iam-policy-binding "$WORKER_SA" --member "serviceAccount:$DEPLOY_SA" \
-  --role roles/iam.serviceAccountUser >/dev/null
+for sa in "$WORKER_SA" "$GUARD_SA"; do
+  gcloud iam service-accounts add-iam-policy-binding "$sa" --member "serviceAccount:$DEPLOY_SA" \
+    --role roles/iam.serviceAccountUser >/dev/null
+done
+
+# The budget guard may only read and replace who can call Cloud Run services (to remove public access
+# to the worker), and call Cloud Run services (it is the identity Pub/Sub pushes to budget-guard with).
+exists gcloud iam roles describe budgetGuard --project "$PROJECT_ID" ||
+  gcloud iam roles create budgetGuard --project "$PROJECT_ID" --title "Budget guard" \
+    --permissions run.services.getIamPolicy,run.services.setIamPolicy >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$GUARD_SA" \
+  --role "projects/$PROJECT_ID/roles/budgetGuard" --condition None >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member "serviceAccount:$GUARD_SA" \
+  --role roles/run.invoker --condition None >/dev/null
 
 echo "== Workload Identity Federation (GitHub Actions on main of $GITHUB_REPO, no keys)"
 exists gcloud iam workload-identity-pools describe github --location global ||
@@ -93,10 +107,13 @@ fi
 
 echo "== Budget and kill switch"
 # Pub/Sub signs its push requests as the budget-guard account.
-gcloud iam service-accounts add-iam-policy-binding "$GUARD_SA" --role roles/iam.serviceAccountTokenCreator   --member "serviceAccount:service-$PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com" >/dev/null
+gcloud iam service-accounts add-iam-policy-binding "$GUARD_SA" --role roles/iam.serviceAccountTokenCreator \
+  --member "serviceAccount:service-$PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com" >/dev/null
 exists gcloud pubsub topics describe budget-alerts || gcloud pubsub topics create budget-alerts
 exists gcloud pubsub subscriptions describe budget-guard ||
-  gcloud pubsub subscriptions create budget-guard --topic budget-alerts     --push-endpoint "$GUARD_URL/" --push-auth-service-account "$GUARD_SA" --push-auth-token-audience "$GUARD_URL"     --ack-deadline 60 --message-retention-duration 1d --min-retry-delay 10s --max-retry-delay 600s
+  gcloud pubsub subscriptions create budget-guard --topic budget-alerts \
+    --push-endpoint "$GUARD_URL/" --push-auth-service-account "$GUARD_SA" --push-auth-token-audience "$GUARD_URL" \
+    --ack-deadline 60 --message-retention-duration 1d --min-retry-delay 10s --max-retry-delay 600s
 
 BILLING_ACCOUNT=$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingAccountName)')
 BILLING_ACCOUNT=${BILLING_ACCOUNT#billingAccounts/}
@@ -105,11 +122,15 @@ CURRENCY=$(gcloud billing accounts describe "$BILLING_ACCOUNT" --format='value(c
 budget_flags=(--billing-account "$BILLING_ACCOUNT" --billing-project "$PROJECT_ID")
 BUDGET=$(gcloud billing budgets list "${budget_flags[@]}" --filter 'displayName=course-setter' --format 'value(name)' | head -1)
 if [ -z "$BUDGET" ]; then
-  gcloud billing budgets create "${budget_flags[@]}" --display-name course-setter     --budget-amount "${BUDGET_AMOUNT:-1}$CURRENCY" --calendar-period month --filter-projects "projects/$PROJECT_ID"     --threshold-rule percent=0.5 --threshold-rule percent=0.9 --threshold-rule percent=1.0     --notifications-rule-pubsub-topic "projects/$PROJECT_ID/topics/budget-alerts" >/dev/null
+  gcloud billing budgets create "${budget_flags[@]}" --display-name course-setter \
+    --budget-amount "${BUDGET_AMOUNT:-1}$CURRENCY" --calendar-period month --filter-projects "projects/$PROJECT_ID" \
+    --threshold-rule percent=0.5 --threshold-rule percent=0.9 --threshold-rule percent=1.0 \
+    --notifications-rule-pubsub-topic "projects/$PROJECT_ID/topics/budget-alerts" >/dev/null
 elif [ -n "${BUDGET_AMOUNT:-}" ]; then
   gcloud billing budgets update "$BUDGET" "${budget_flags[@]}" --budget-amount "$BUDGET_AMOUNT$CURRENCY" >/dev/null
 fi
-gcloud billing budgets list "${budget_flags[@]}" --filter 'displayName=course-setter'   --format 'value(amount.specifiedAmount.units, amount.specifiedAmount.currencyCode)' | sed 's/^/Monthly budget: /'
+gcloud billing budgets list "${budget_flags[@]}" --filter 'displayName=course-setter' \
+  --format 'value(amount.specifiedAmount.units, amount.specifiedAmount.currencyCode)' | sed 's/^/Monthly budget: /'
 
 cat <<EOF
 
