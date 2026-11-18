@@ -77,7 +77,15 @@ select id, status, attempts, result, error from public.jobs order by id desc lim
 - Merging to `main` applies new migrations to the hosted Supabase project (Stockholm), deploys the worker to Google Cloud Run (`europe-north1`, service `worker`, scales to zero) and deploys the web app to Cloudflare Pages.
 - Every pull request gets a preview of the web app at `https://<branch>.course-setter.pages.dev`.
 - Non-secret settings are GitHub repository variables (`SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and for the worker `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKER_SERVICE_ACCOUNT`); secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are GitHub repository secrets.
-- GitHub Actions deploys to Google Cloud through Workload Identity Federation (no stored keys). The worker's own secrets live in Google Secret Manager: `supabase-secret-key` (Supabase secret key) and `worker-secret` (must match the Vault secret `worker_secret`). The worker deploy is skipped until `GCP_PROJECT_ID` is set. One-time Google Cloud setup (APIs, Artifact Registry, service accounts, Workload Identity Federation, secrets): [`scripts/setup-gcp.sh`](scripts/setup-gcp.sh).
+- GitHub Actions deploys to Google Cloud through Workload Identity Federation (no stored keys). The worker's own secrets live in Google Secret Manager: `supabase-secret-key` (Supabase secret key) and `worker-secret` (must match the Vault secret `worker_secret`). The worker deploy is skipped until `GCP_PROJECT_ID` is set. One-time Google Cloud setup (APIs, Artifact Registry, service accounts, Workload Identity Federation, secrets, budget): [`scripts/setup-gcp.sh`](scripts/setup-gcp.sh).
+
+### Cost limit
+
+The worker is meant to stay inside Google Cloud's free tier: it scales to zero, runs at most one instance (512 MiB) and only the two newest images are kept. As a hard stop, a monthly budget (default 1 unit of the billing account's currency, after the free tier) sends its notifications through Pub/Sub to the `budget-guard` Cloud Run service. When the month's cost reaches the budget, it removes public access to the worker, so no worker instance can start; jobs wait in the queue. Billing data lags by a few hours, so the cost can go slightly past the budget before the guard acts.
+
+- Later deploys keep a cut-off worker cut off (the Deploy run shows a warning).
+- To raise the budget: `BUDGET_AMOUNT=<amount> PROJECT_ID=<id> bash scripts/setup-gcp.sh` (or edit the `course-setter` budget in the console; keep the Pub/Sub topic).
+- To turn the worker back on: Actions -> Deploy -> Run workflow on `main` with "enable worker" ticked. The budget is monthly, so it also resets at the start of the next month, but the worker only comes back when you redeploy like this.
 
 ## Map files
 
