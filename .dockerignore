@@ -1,0 +1,10 @@
+# Keep the build context small, and club maps out of it entirely.
+**/node_modules
+**/dist
+.git
+.github
+spikes
+supabase
+**/.env
+**/.env.*
+**/*.test.ts
