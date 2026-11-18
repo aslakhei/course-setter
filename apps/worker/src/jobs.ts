@@ -1,3 +1,5 @@
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { mapJobHandlers } from './maps/jobs.ts'
 import type { Job, JobQueue } from './queue.ts'
 
 /** Runs one job and returns its result; throwing fails the attempt (it is retried until max_attempts). */
@@ -9,6 +11,11 @@ export const handlers: Record<string, JobHandler> = {
     if (job.payload.fail === true) throw new Error('ping asked to fail')
     return { pong: true }
   },
+}
+
+/** Every job type the worker runs; map jobs read and write the database and Storage through `db`. */
+export function allHandlers(db: SupabaseClient): Record<string, JobHandler> {
+  return { ...handlers, ...mapJobHandlers(db) }
 }
 
 export type DrainResult = { done: number; failed: number }

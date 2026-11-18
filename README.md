@@ -67,6 +67,10 @@ Everything users create belongs to a club, and row-level security limits it to t
 
 Background work (map processing, tiles, PDF export) goes through the `jobs` table. Inserting a job makes the database call the worker's `POST /jobs/run` (trigger + `pg_net`, with a shared secret in the `x-worker-secret` header); the worker claims due jobs one at a time, runs them and reports the result. Failed jobs are retried with backoff up to `max_attempts`, then marked `failed`. A `pg_cron` sweep every minute requeues jobs whose worker died and pokes the worker when retries are due. The `ping` job type checks the whole path (`{"fail": true}` makes it fail).
 
+Map jobs (`apps/worker/src/maps/`): `process_map_version` downloads the uploaded original, reads it (OCAD via ocad2geojson and resvg, PDF via mupdf), renders every zoom level from the vector source in strips of rows, cuts 256 px palette-PNG tiles at 0.05 mm of paper per pixel at the finest level, writes one PMTiles archive to `map-tiles/<club>/<map>/<version>/tiles.pmtiles` and fills in scale, paper size, frame extent, georeferencing and the tile grid on the version. A file that cannot be read fails at once with an `error_code` the app explains (`not_ocad`, `unsupported_ocad_version`, `not_pdf`, `unreadable_file`, `empty_map`); other errors are retried. `delete_map_version` removes the files and the row. A 40 × 43 cm OCAD map takes about 1.5 minutes on one CPU and peaks around 0.5 GB of memory.
+
+The OCAD test maps in `apps/worker/test/fixtures/ocad/` come from ocad2geojson's test data (AGPL-3.0). The club's own map is only ever tested locally from `spikes/maps/`: `TEST_CLUB_MAP=1 pnpm --filter @course-setter/worker exec vitest run src/maps/club-map.test.ts` (skipped otherwise).
+
 The database finds the worker through two Vault secrets. Set them in the SQL editor (hosted) or with `psql` (local), and run it again to change them:
 
 ```sql
@@ -86,7 +90,7 @@ select id, status, attempts, result, error from public.jobs order by id desc lim
 
 ## Deployment
 
-- Merging to `main` applies new migrations to the hosted Supabase project (Stockholm), deploys the worker to Google Cloud Run (`europe-north1`, service `worker`, scales to zero) and deploys the web app to Cloudflare Pages.
+- Merging to `main` applies new migrations to the hosted Supabase project (Stockholm), deploys the worker to Google Cloud Run (`europe-north1`, service `worker`, scales to zero, 2 GiB) and deploys the web app to Cloudflare Pages.
 - Every pull request gets a preview of the web app at `https://<branch>.course-setter.pages.dev`.
 - Sign-in returns to the page it started from (an invite link stays an invite link), so hosted Supabase -> Authentication -> URL Configuration lists `https://course-setter.pages.dev/**` and `https://*.course-setter.pages.dev/**` as redirect URLs.
 - Non-secret settings are GitHub repository variables (`SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and for the worker `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKER_SERVICE_ACCOUNT`); secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are GitHub repository secrets.
@@ -94,7 +98,7 @@ select id, status, attempts, result, error from public.jobs order by id desc lim
 
 ### Cost limit
 
-The worker is meant to stay inside Google Cloud's free tier: it scales to zero, runs at most one instance (512 MiB) and only the two newest images are kept. As a hard stop, a monthly budget (default 1 unit of the billing account's currency, after the free tier) sends its notifications through Pub/Sub to the `budget-guard` Cloud Run service. When the month's cost reaches the budget, it removes public access to the worker, so no worker instance can start; jobs wait in the queue. Billing data lags by a few hours, so the cost can go slightly past the budget before the guard acts.
+The worker is meant to stay inside Google Cloud's free tier: it scales to zero, runs at most one instance (2 GiB, used only while a job runs) and only the two newest images are kept. As a hard stop, a monthly budget (default 1 unit of the billing account's currency, after the free tier) sends its notifications through Pub/Sub to the `budget-guard` Cloud Run service. When the month's cost reaches the budget, it removes public access to the worker, so no worker instance can start; jobs wait in the queue. Billing data lags by a few hours, so the cost can go slightly past the budget before the guard acts.
 
 - Later deploys keep a cut-off worker cut off (the Deploy run shows a warning).
 - To raise the budget: `BUDGET_AMOUNT=<amount> PROJECT_ID=<id> bash scripts/setup-gcp.sh` (or edit the `course-setter` budget in the console; keep the Pub/Sub topic).

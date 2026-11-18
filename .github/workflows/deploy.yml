@@ -77,8 +77,8 @@ jobs:
           docker build -f apps/worker/Dockerfile -t "$IMAGE" .
           docker push "$IMAGE"
       # Public URL: the database calls it over the internet; requests without the shared secret get 401.
-      # Scales to zero, at most one instance (jobs queue up). The timeout covers the longest job, since the
-      # worker answers when the queue is drained.
+      # Scales to zero, at most one instance (jobs queue up). 2 GiB: rendering a map peaks around 0.5 GB.
+      # The timeout covers the longest job, since the worker answers when the queue is drained.
       # If the budget guard has removed public access, a normal deploy keeps it that way; only a manual run
       # with enable_worker turns it back on.
       - name: Deploy worker to Cloud Run
@@ -103,7 +103,7 @@ jobs:
             --min-instances 0 \
             --max-instances 1 \
             --cpu 1 \
-            --memory 512Mi \
+            --memory 2Gi \
             --timeout 900 \
             --set-env-vars "SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}" \
             --set-secrets "SUPABASE_SECRET_KEY=supabase-secret-key:latest,WORKER_SECRET=worker-secret:latest"
