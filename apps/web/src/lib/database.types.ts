@@ -5,7 +5,21 @@ export type Database = {
   
   "public": {
           Tables: {
-            "profiles": {
+            "jobs": {
+                  Row: {
+                    "attempts": number,"created_at": string,"error": string | null,"finished_at": string | null,"id": number,"locked_by": string | null,"locked_until": string | null,"max_attempts": number,"payload": NonNullable<Json>,"result": Json | null,"run_after": string,"started_at": string | null,"status": Database["public"]['Enums']["job_status"],"type": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "attempts"?: number,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: never,"locked_by"?: string | null,"locked_until"?: string | null,"max_attempts"?: number,"payload"?: NonNullable<Json>,"result"?: Json | null,"run_after"?: string,"started_at"?: string | null,"status"?: Database["public"]['Enums']["job_status"],"type": string
+                  }
+                  Update: {
+                    "attempts"?: number,"created_at"?: string,"error"?: string | null,"finished_at"?: string | null,"id"?: never,"locked_by"?: string | null,"locked_until"?: string | null,"max_attempts"?: number,"payload"?: NonNullable<Json>,"result"?: Json | null,"run_after"?: string,"started_at"?: string | null,"status"?: Database["public"]['Enums']["job_status"],"type"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"profiles": {
                   Row: {
                     "avatar_url": string | null,"created_at": string,"display_name": string | null,"id": string
                   }
@@ -25,10 +39,38 @@ export type Database = {
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "claim_job":
+{ Args: { "lock_seconds"?: number,"worker": string }; Returns: {
+              "attempts": number,
+"created_at": string,
+"error": string | null,
+"finished_at": string | null,
+"id": number,
+"locked_by": string | null,
+"locked_until": string | null,
+"max_attempts": number,
+"payload": NonNullable<Json>,
+"result": Json | null,
+"run_after": string,
+"started_at": string | null,
+"status": Database["public"]['Enums']["job_status"],
+"type": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "jobs"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
+"complete_job":
+{ Args: { "job_id": number,"job_result"?: Json }; Returns: undefined
+                           },
+"fail_job":
+{ Args: { "job_error": string,"job_id": number }; Returns: undefined
+                           }
           }
           Enums: {
-            [_ in never]: never
+            "job_status": "queued"|"running"|"done"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -144,7 +186,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            
+            "job_status": ["queued", "running", "done", "failed"]
           }
         }
 } as const

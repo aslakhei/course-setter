@@ -42,20 +42,42 @@ Database changes are SQL migrations in `supabase/migrations/` (create one with `
 | `pnpm typecheck`                            | TypeScript in every package                                     |
 | `pnpm test`                                 | Vitest across all apps and packages                             |
 | `pnpm build`                                | Production build of the web app                                 |
-| `pnpm --filter @course-setter/worker start` | Run the worker (`PORT`, default 8080)                           |
+| `pnpm --filter @course-setter/worker start` | Run the worker (`PORT`, default 8080; reads `apps/worker/.env`) |
 | `pnpm db:start` / `db:stop`                 | Start / stop local Supabase                                     |
 | `pnpm db:reset`                             | Recreate the local database from migrations                     |
-| `pnpm db:test`                              | Database tests (pgTAP, row-level security)                      |
+| `pnpm db:test`                              | Database tests (pgTAP: row-level security, job queue)           |
 | `pnpm db:types`                             | Regenerate `apps/web/src/lib/database.types.ts` from the schema |
-| `pnpm test:integration`                     | Tests against local Supabase (storage range requests)           |
+| `pnpm test:integration`                     | Tests against local Supabase (storage range requests, jobs)     |
 
-CI runs lint, typecheck, test and build, plus database and storage tests against a local Supabase, on every pull request and on `main`.
+CI runs lint, typecheck, test and build, plus database and integration tests against a local Supabase (including the job queue through the built worker image), on every pull request and on `main`.
+
+## Worker
+
+Background work (map processing, tiles, PDF export) goes through the `jobs` table. Inserting a job makes the database call the worker's `POST /jobs/run` (trigger + `pg_net`, with a shared secret in the `x-worker-secret` header); the worker claims due jobs one at a time, runs them and reports the result. Failed jobs are retried with backoff up to `max_attempts`, then marked `failed`. A `pg_cron` sweep every minute requeues jobs whose worker died and pokes the worker when retries are due. The `ping` job type checks the whole path (`{"fail": true}` makes it fail).
+
+The database finds the worker through two Vault secrets. Set them in the SQL editor (hosted) or with `psql` (local), and run it again to change them:
+
+```sql
+delete from vault.secrets where name in ('worker_url', 'worker_secret');
+select vault.create_secret('https://<worker-url>/jobs/run', 'worker_url');
+select vault.create_secret('<same value as the worker''s WORKER_SECRET>', 'worker_secret');
+```
+
+Without them jobs wait in the queue. Locally, run the worker with `apps/worker/.env` (see `.env.example`) and use `http://host.docker.internal:8080/jobs/run` as `worker_url`.
+
+Then try it:
+
+```sql
+insert into public.jobs (type) values ('ping');
+select id, status, attempts, result, error from public.jobs order by id desc limit 5;
+```
 
 ## Deployment
 
-- Merging to `main` applies new migrations to the hosted Supabase project (Stockholm) and deploys the web app to Cloudflare Pages.
+- Merging to `main` applies new migrations to the hosted Supabase project (Stockholm), deploys the worker to Google Cloud Run (`europe-north1`, service `worker`, scales to zero) and deploys the web app to Cloudflare Pages.
 - Every pull request gets a preview of the web app at `https://<branch>.course-setter.pages.dev`.
-- Non-secret settings are GitHub repository variables (`SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`); secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are GitHub repository secrets.
+- Non-secret settings are GitHub repository variables (`SUPABASE_PROJECT_REF`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and for the worker `GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `GCP_WORKER_SERVICE_ACCOUNT`); secrets (`SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are GitHub repository secrets.
+- GitHub Actions deploys to Google Cloud through Workload Identity Federation (no stored keys). The worker's own secrets live in Google Secret Manager: `supabase-secret-key` (Supabase secret key) and `worker-secret` (must match the Vault secret `worker_secret`). The worker deploy is skipped until `GCP_PROJECT_ID` is set.
 
 ## Map files
 

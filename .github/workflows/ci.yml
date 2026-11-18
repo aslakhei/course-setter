@@ -48,10 +48,28 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Start local Supabase (only the services the tests need)
         run: pnpm exec supabase start -x realtime,imgproxy,studio,edge-runtime,logflare,vector,supavisor,mailpit
-      - name: Database tests (row-level security)
+      - name: Database tests (row-level security, job queue)
         run: pnpm db:test
-      - name: Storage integration tests (signed URL range requests)
+      - name: Build worker image
+        run: docker build -f apps/worker/Dockerfile -t course-setter-worker .
+      # On the Supabase Docker network the database reaches the worker by container name, as it reaches
+      # Cloud Run in production.
+      - name: Start worker container
+        run: |
+          echo "JOB_WORKER_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          source "$GITHUB_ENV"
+          docker run -d --name worker --network supabase_network_course-setter \
+            -e SUPABASE_URL=http://supabase_kong_course-setter:8000 \
+            -e SUPABASE_SECRET_KEY="$(pnpm exec supabase status -o json 2>/dev/null | sed -n '/^{/,$p' | jq -r '.SECRET_KEY // .SERVICE_ROLE_KEY')" \
+            -e WORKER_SECRET="$JOB_WORKER_SECRET" \
+            course-setter-worker
+      - name: Integration tests (storage range requests, job queue through the worker container)
         run: pnpm test:integration
+        env:
+          JOB_WORKER_URL: http://worker:8080/jobs/run
+      - name: Worker logs
+        if: always()
+        run: docker logs worker || true
       - name: Generated database types are up to date
         run: |
           pnpm db:types

@@ -1,8 +1,8 @@
 import { execSync } from 'node:child_process'
 
-export type LocalSupabase = { url: string; secretKey: string; publishableKey: string }
+export type LocalSupabase = { url: string; secretKey: string; publishableKey: string; dbUrl: string }
 
-/** URL and keys of the running local Supabase (`pnpm db:start`), read from `supabase status`. */
+/** URLs and keys of the running local Supabase (`pnpm db:start`), read from `supabase status`. */
 export function localSupabase(): LocalSupabase {
   let raw: string
   try {
@@ -14,6 +14,7 @@ export function localSupabase(): LocalSupabase {
   const url = s.API_URL
   const secretKey = s.SECRET_KEY ?? s.SERVICE_ROLE_KEY
   const publishableKey = s.PUBLISHABLE_KEY ?? s.ANON_KEY
-  if (!url || !secretKey || !publishableKey) throw new Error(`Unexpected supabase status output: ${Object.keys(s).join(', ')}`)
-  return { url, secretKey, publishableKey }
+  const dbUrl = s.DB_URL
+  if (!url || !secretKey || !publishableKey || !dbUrl) throw new Error(`Unexpected supabase status output: ${Object.keys(s).join(', ')}`)
+  return { url, secretKey, publishableKey, dbUrl }
 }
