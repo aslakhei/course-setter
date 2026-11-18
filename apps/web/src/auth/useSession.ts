@@ -1,10 +1,15 @@
 import type { Session } from '@supabase/supabase-js'
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase.ts'
 
-/** Current auth session: `undefined` while loading, `null` when signed out. */
-export function useSession(): Session | null | undefined {
-  const [session, setSession] = useState<Session | null | undefined>(undefined)
+/** `undefined` while loading, `null` when signed out. */
+export type SessionState = Session | null | undefined
+
+export const SessionContext = createContext<SessionState>(undefined)
+
+/** Tracks the Supabase auth session; used once, by the provider in main.tsx. */
+export function useSupabaseSession(): SessionState {
+  const [session, setSession] = useState<SessionState>(undefined)
 
   useEffect(() => {
     // Also fires once with the initial session (after the OAuth redirect code is exchanged).
@@ -15,36 +20,13 @@ export function useSession(): Session | null | undefined {
   return session
 }
 
-/** Display name from the user's profile row (proves RLS lets a user read their own profile). */
-export function useDisplayName(session: Session | null | undefined): string | undefined {
-  const [name, setName] = useState<string>()
-  const userId = session?.user.id
-
-  useEffect(() => {
-    if (!userId) {
-      setName(undefined)
-      return
-    }
-    let cancelled = false
-    void supabase
-      .from('profiles')
-      .select('display_name')
-      .eq('id', userId)
-      .single()
-      .then(({ data, error }) => {
-        if (error) console.error('Could not load profile:', error.message)
-        if (!cancelled) setName(data?.display_name ?? undefined)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [userId])
-
-  return name
+export function useSession(): SessionState {
+  return useContext(SessionContext)
 }
 
+/** Signs in with Google and comes back to the current page (an invite link stays an invite link). */
 export function signInWithGoogle() {
-  return supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } })
+  return supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.href } })
 }
 
 export function signOut() {
