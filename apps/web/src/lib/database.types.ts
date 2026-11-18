@@ -79,6 +79,58 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"map_versions": {
+                  Row: {
+                    "club_id": string,"created_at": string,"created_by": string | null,"deleted_at": string | null,"error_code": string | null,"error_message": string | null,"file_name": string,"frame": Json | null,"georef": Json | null,"id": string,"kind": Database["public"]['Enums']["map_kind"],"map_id": string,"ocad_version": string | null,"original_path": string,"paper_height_mm": number | null,"paper_width_mm": number | null,"processed_at": string | null,"scale": number | null,"status": Database["public"]['Enums']["map_version_status"],"tiles": Json | null,"tiles_path": string | null,"transform_from_previous": Json | null,"transform_method": string | null,"transform_rms_m": number | null,"version": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"error_code"?: string | null,"error_message"?: string | null,"file_name": string,"frame"?: Json | null,"georef"?: Json | null,"id"?: string,"kind": Database["public"]['Enums']["map_kind"],"map_id": string,"ocad_version"?: string | null,"original_path": string,"paper_height_mm"?: number | null,"paper_width_mm"?: number | null,"processed_at"?: string | null,"scale"?: number | null,"status"?: Database["public"]['Enums']["map_version_status"],"tiles"?: Json | null,"tiles_path"?: string | null,"transform_from_previous"?: Json | null,"transform_method"?: string | null,"transform_rms_m"?: number | null,"version": number
+                  }
+                  Update: {
+                    "club_id"?: string,"created_at"?: string,"created_by"?: string | null,"deleted_at"?: string | null,"error_code"?: string | null,"error_message"?: string | null,"file_name"?: string,"frame"?: Json | null,"georef"?: Json | null,"id"?: string,"kind"?: Database["public"]['Enums']["map_kind"],"map_id"?: string,"ocad_version"?: string | null,"original_path"?: string,"paper_height_mm"?: number | null,"paper_width_mm"?: number | null,"processed_at"?: string | null,"scale"?: number | null,"status"?: Database["public"]['Enums']["map_version_status"],"tiles"?: Json | null,"tiles_path"?: string | null,"transform_from_previous"?: Json | null,"transform_method"?: string | null,"transform_rms_m"?: number | null,"version"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "map_versions_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "map_versions_map_id_club_id_fkey"
+      columns: ["map_id","club_id"]
+isOneToOne: false
+      referencedRelation: "maps"
+      referencedColumns: ["id","club_id"]
+    }
+                  ]
+                },"maps": {
+                  Row: {
+                    "club_id": string,"created_at": string,"created_by": string | null,"id": string,"name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string
+                  }
+                  Update: {
+                    "club_id"?: string,"created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "maps_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "maps_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "avatar_url": string | null,"created_at": string,"display_name": string | null,"id": string
@@ -131,17 +183,28 @@ isOneToOne: false
 "create_club":
 { Args: { "club_name": string }; Returns: string
                            },
+"delete_map_version":
+{ Args: { "map_version_id": string }; Returns: undefined
+                           },
 "fail_job":
 { Args: { "job_error": string,"job_id": number }; Returns: undefined
+                           },
+"finish_map_upload":
+{ Args: { "map_version_id": string }; Returns: undefined
                            },
 "invite_info":
 { Args: { "invite_token": string }; Returns: {
               "already_member": boolean,"club_id": string,"club_name": string,"status": string
             }[]
+                           },
+"start_map_upload":
+{ Args: { "club": string,"file_name": string,"kind": Database["public"]['Enums']["map_kind"],"map_id"?: string,"map_name"?: string,"scale"?: number }; Returns: {
+              "upload_path": string,"version_id": string
+            }[]
                            }
           }
           Enums: {
-            "club_role": "admin"|"member","job_status": "queued"|"running"|"done"|"failed"
+            "club_role": "admin"|"member","job_status": "queued"|"running"|"done"|"failed","map_kind": "ocad"|"pdf","map_version_status": "uploading"|"processing"|"needs_alignment"|"ready"|"failed"|"deleted"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -257,7 +320,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "club_role": ["admin", "member"],"job_status": ["queued", "running", "done", "failed"]
+            "club_role": ["admin", "member"],"job_status": ["queued", "running", "done", "failed"],"map_kind": ["ocad", "pdf"],"map_version_status": ["uploading", "processing", "needs_alignment", "ready", "failed", "deleted"]
           }
         }
 } as const
