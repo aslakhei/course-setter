@@ -45,11 +45,20 @@ Database changes are SQL migrations in `supabase/migrations/` (create one with `
 | `pnpm --filter @course-setter/worker start` | Run the worker (`PORT`, default 8080; reads `apps/worker/.env`) |
 | `pnpm db:start` / `db:stop`                 | Start / stop local Supabase                                     |
 | `pnpm db:reset`                             | Recreate the local database from migrations                     |
-| `pnpm db:test`                              | Database tests (pgTAP: row-level security, job queue)           |
+| `pnpm db:test`                              | Database tests (pgTAP: row-level security, clubs, job queue)    |
 | `pnpm db:types`                             | Regenerate `apps/web/src/lib/database.types.ts` from the schema |
-| `pnpm test:integration`                     | Tests against local Supabase (storage range requests, jobs)     |
+| `pnpm test:integration`                     | Tests against local Supabase (storage, club files, jobs)        |
 
 CI runs lint, typecheck, test and build, plus database and integration tests against a local Supabase (including the job queue through the built worker image), on every pull request and on `main`.
+
+## Clubs and access
+
+Everything users create belongs to a club, and row-level security limits it to the club's members (`supabase/migrations/*_create_clubs.sql`):
+
+- Anyone signed in can create a club (`create_club()`) and becomes its first admin. A club always keeps at least one admin.
+- Admins invite people with links: a row in `club_invites` whose random token goes into `/invite/<token>`. Links last 14 days by default (at most 90), can be revoked and can be used by many people. `invite_info()` shows what a link leads to; `accept_invite()` joins as member.
+- Members see the club, the other members and their name and avatar (never email addresses). Admins also rename the club, change roles, remove members and manage invite links. Anyone can leave.
+- Map files live in two private Storage buckets, under `<club_id>/<map_id>/<version_id>/...`. `map-originals`: club admins upload, only the worker reads (users never download an original). `map-tiles`: only the worker writes, club members read (signed URLs for the editor).
 
 ## Worker
 

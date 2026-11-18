@@ -5,7 +5,61 @@ export type Database = {
   
   "public": {
           Tables: {
-            "jobs": {
+            "club_invites": {
+                  Row: {
+                    "club_id": string,"created_at": string,"created_by": string | null,"expires_at": string,"id": string,"revoked_at": string | null,"token": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"created_at"?: string,"created_by"?: string | null,"expires_at"?: string,"id"?: string,"revoked_at"?: string | null,"token"?: string
+                  }
+                  Update: {
+                    "club_id"?: string,"created_at"?: string,"created_by"?: string | null,"expires_at"?: string,"id"?: string,"revoked_at"?: string | null,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "club_invites_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"club_members": {
+                  Row: {
+                    "club_id": string,"joined_at": string,"role": Database["public"]['Enums']["club_role"],"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"joined_at"?: string,"role"?: Database["public"]['Enums']["club_role"],"user_id": string
+                  }
+                  Update: {
+                    "club_id"?: string,"joined_at"?: string,"role"?: Database["public"]['Enums']["club_role"],"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "club_members_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"clubs": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"id": string,"name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"jobs": {
                   Row: {
                     "attempts": number,"created_at": string,"error": string | null,"finished_at": string | null,"id": number,"locked_by": string | null,"locked_until": string | null,"max_attempts": number,"payload": NonNullable<Json>,"result": Json | null,"run_after": string,"started_at": string | null,"status": Database["public"]['Enums']["job_status"],"type": string
                   }
@@ -39,7 +93,10 @@ export type Database = {
             [_ in never]: never
           }
           Functions: {
-            "claim_job":
+            "accept_invite":
+{ Args: { "invite_token": string }; Returns: string
+                           },
+"claim_job":
 { Args: { "lock_seconds"?: number,"worker": string }; Returns: {
               "attempts": number,
 "created_at": string,
@@ -65,12 +122,20 @@ export type Database = {
 "complete_job":
 { Args: { "job_id": number,"job_result"?: Json }; Returns: undefined
                            },
+"create_club":
+{ Args: { "club_name": string }; Returns: string
+                           },
 "fail_job":
 { Args: { "job_error": string,"job_id": number }; Returns: undefined
+                           },
+"invite_info":
+{ Args: { "invite_token": string }; Returns: {
+              "already_member": boolean,"club_id": string,"club_name": string,"status": string
+            }[]
                            }
           }
           Enums: {
-            "job_status": "queued"|"running"|"done"|"failed"
+            "club_role": "admin"|"member","job_status": "queued"|"running"|"done"|"failed"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -186,7 +251,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "job_status": ["queued", "running", "done", "failed"]
+            "club_role": ["admin", "member"],"job_status": ["queued", "running", "done", "failed"]
           }
         }
 } as const
