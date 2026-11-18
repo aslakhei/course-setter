@@ -25,7 +25,8 @@ describe('club map files in Storage', () => {
   let oz: Awaited<ReturnType<typeof signedInUser>>
   let clubId = ''
   const tilePath = () => `${clubId}/map1/v1/tiles.pmtiles`
-  const originalPath = () => `${clubId}/map1/v1/map.ocd`
+  let originalPath = ''
+  let versionId = ''
 
   beforeAll(async () => {
     ada = await signedInUser('ada')
@@ -33,16 +34,23 @@ describe('club map files in Storage', () => {
     const club = await ada.client.rpc('create_club', { club_name: 'Storage test club' })
     if (club.error) throw club.error
     clubId = club.data
-    // Tiles are written by the worker (secret key); the admin uploads the original.
+    // Tiles are written by the worker (secret key); the admin uploads the original through the upload flow.
     const tile = await admin.storage.from('map-tiles').upload(tilePath(), new Uint8Array([1, 2, 3]))
     if (tile.error) throw tile.error
-    const original = await ada.client.storage.from('map-originals').upload(originalPath(), new Uint8Array([4, 5, 6]))
+    const started = await ada.client.rpc('start_map_upload', { club: clubId, file_name: 'map.ocd', kind: 'ocad', map_name: 'Test map' })
+    if (started.error) throw started.error
+    versionId = started.data[0].version_id
+    originalPath = started.data[0].upload_path
+    const original = await ada.client.storage
+      .from('map-originals')
+      .upload(originalPath, new Uint8Array([4, 5, 6]), { contentType: 'application/octet-stream' })
     if (original.error) throw original.error
   })
 
   afterAll(async () => {
     await admin.storage.from('map-tiles').remove([tilePath()])
-    await admin.storage.from('map-originals').remove([originalPath()])
+    await admin.storage.from('map-originals').remove([originalPath])
+    await admin.from('jobs').delete().eq('payload->>map_version_id', versionId)
     await admin.from('clubs').delete().eq('id', clubId)
     for (const user of [ada, oz]) if (user) await admin.auth.admin.deleteUser(user.id)
   })
@@ -64,10 +72,20 @@ describe('club map files in Storage', () => {
   })
 
   it('never hands out originals, not even to the admin', async () => {
-    const signed = await ada.client.storage.from('map-originals').createSignedUrl(originalPath(), 60)
+    const signed = await ada.client.storage.from('map-originals').createSignedUrl(originalPath, 60)
     expect(signed.error).not.toBeNull()
-    const download = await ada.client.storage.from('map-originals').download(originalPath())
+    const download = await ada.client.storage.from('map-originals').download(originalPath)
     expect(download.error).not.toBeNull()
+  })
+
+  it('accepts the upload as finished, but only from the club admin', async () => {
+    expect((await oz.client.rpc('finish_map_upload', { map_version_id: versionId })).error).not.toBeNull()
+    expect((await ada.client.rpc('finish_map_upload', { map_version_id: versionId })).error).toBeNull()
+  })
+
+  it('refuses a second file for the same version', async () => {
+    const { error } = await ada.client.storage.from('map-originals').upload(originalPath, new Uint8Array([7]), { upsert: true })
+    expect(error).not.toBeNull()
   })
 
   it('refuses uploads of originals by an outsider', async () => {

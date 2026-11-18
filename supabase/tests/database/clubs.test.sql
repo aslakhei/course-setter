@@ -134,9 +134,9 @@ select throws_ok(
   $$ insert into public.club_invites (club_id, expires_at) values (pg_temp.club_x(), now() + interval '1 year') $$,
   '23514', null, 'invite links expire within 90 days'
 );
-select lives_ok(
+select throws_ok(
   $$ insert into storage.objects (bucket_id, name) values ('map-originals', pg_temp.club_x() || '/map1/v2/map.ocd') $$,
-  'an admin can upload an original map'
+  '42501', null, 'admins upload originals only to a path start_map_upload handed out (see maps tests)'
 );
 select is_empty($$ select * from storage.objects where bucket_id = 'map-originals' $$, 'not even admins can read originals');
 select throws_ok(
