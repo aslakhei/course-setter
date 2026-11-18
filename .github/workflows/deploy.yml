@@ -94,14 +94,36 @@ jobs:
             access=
             echo "::warning::The worker is cut off (budget guard). Raise the budget, then run Deploy manually with enable worker."
           fi
-          gcloud run deploy worker             --project "$PROJECT"             --region europe-north1             --image "$IMAGE"             --service-account "${{ vars.GCP_WORKER_SERVICE_ACCOUNT }}"             $access             --min-instances 0             --max-instances 1             --cpu 1             --memory 512Mi             --timeout 900             --set-env-vars "SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}"             --set-secrets "SUPABASE_SECRET_KEY=supabase-secret-key:latest,WORKER_SECRET=worker-secret:latest"
+          gcloud run deploy worker \
+            --project "$PROJECT" \
+            --region europe-north1 \
+            --image "$IMAGE" \
+            --service-account "${{ vars.GCP_WORKER_SERVICE_ACCOUNT }}" \
+            $access \
+            --min-instances 0 \
+            --max-instances 1 \
+            --cpu 1 \
+            --memory 512Mi \
+            --timeout 900 \
+            --set-env-vars "SUPABASE_URL=${{ vars.VITE_SUPABASE_URL }}" \
+            --set-secrets "SUPABASE_SECRET_KEY=supabase-secret-key:latest,WORKER_SECRET=worker-secret:latest"
       # Receives budget notifications (Pub/Sub push, authenticated) and cuts off the worker when the budget
       # is reached. Same image, different entry point; not public.
       - name: Deploy budget guard to Cloud Run
         env:
           PROJECT: ${{ vars.GCP_PROJECT_ID }}
         run: |
-          gcloud run deploy budget-guard             --project "$PROJECT"             --region europe-north1             --image "$IMAGE"             --command node             --args src/budget-guard.ts             --service-account "budget-guard@$PROJECT.iam.gserviceaccount.com"             --no-allow-unauthenticated             --min-instances 0             --max-instances 1             --set-env-vars "GCP_PROJECT_ID=$PROJECT,GCP_REGION=europe-north1,GUARDED_SERVICE=worker"
+          gcloud run deploy budget-guard \
+            --project "$PROJECT" \
+            --region europe-north1 \
+            --image "$IMAGE" \
+            --command node \
+            --args src/budget-guard.ts \
+            --service-account "budget-guard@$PROJECT.iam.gserviceaccount.com" \
+            --no-allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances 1 \
+            --set-env-vars "GCP_PROJECT_ID=$PROJECT,GCP_REGION=europe-north1,GUARDED_SERVICE=worker"
 
   web:
     name: Deploy web app
