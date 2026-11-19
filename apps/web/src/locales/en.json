@@ -118,7 +118,21 @@
     "recent": "Recent events",
     "all": "All events",
     "empty": "No events yet",
-    "emptyHelp": "Events need a map. Once one is uploaded, courses are set here."
+    "emptyHelp": "Create an event to set courses on one of the club's maps.",
+    "noMaps": "Events need a map. Once one is uploaded, courses are set here.",
+    "createHeading": "New event",
+    "createHelp": "Only you, the club's admins and the people you invite can see it.",
+    "name": "Name",
+    "date": "Date",
+    "map": "Map",
+    "create": "Create event",
+    "mapOption": "{{map}} · version {{version}}",
+    "onMap": "{{map}} · version {{version}}",
+    "updated": "Changed {{date}}",
+    "delete": "Delete",
+    "deleteConfirm": "Delete {{event}} and all its courses? This cannot be undone.",
+    "notFound": "This event does not exist, or you do not have access to it.",
+    "backToEvents": "All events"
   },
   "members": {
     "heading": "Members",
@@ -202,5 +216,110 @@
     "notNeeded": "This version has no previous version to line up with.",
     "automatic": "This version was lined up automatically. Match points only if it is off.",
     "tooFew": "Match at least two points."
+  },
+  "editor": {
+    "tools": {
+      "label": "Tools",
+      "select": "Select",
+      "start": "Start",
+      "control": "Control",
+      "finish": "Finish",
+      "crossingPoint": "Crossing point",
+      "bend": "Bend leg"
+    },
+    "undo": "Undo",
+    "redo": "Redo",
+    "hint": {
+      "select": "Click a control to select it; drag it to move it.",
+      "start": "Click on the map to place the start{{inCourse}}.",
+      "control": "Click on the map to add a control{{inCourse}}, or click an existing one to use it again.",
+      "finish": "Click on the map to place the finish{{inCourse}}.",
+      "crossingPoint": "Click on the map to add a mandatory crossing point{{inCourse}}.",
+      "bend": "Click on a course line to bend it; drag a bend to move it, click it to remove it.",
+      "inCourse": " in {{course}}"
+    },
+    "status": {
+      "saved": "Saved",
+      "savedAt": "Saved {{time}}",
+      "unsaved": "Unsaved changes",
+      "saving": "Saving…",
+      "failed": "Not saved: retrying",
+      "conflict": "Not saved"
+    },
+    "invite": "Invite",
+    "course": "Course",
+    "allControls": "All controls ({{count}})",
+    "courseOption": "{{name}} · {{length}}",
+    "newCourse": "New course",
+    "newCourseName": "Course name",
+    "addCourse": "Add",
+    "length": "Length",
+    "controls": "Controls",
+    "km": "{{km}} km",
+    "tabs": {
+      "label": "Course panel",
+      "controls": "Controls",
+      "descriptions": "Descriptions",
+      "settings": "Settings"
+    },
+    "stop": {
+      "start": "Start",
+      "finish": "Finish",
+      "crossingPoint": "Crossing point",
+      "control": "Code {{code}}"
+    },
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "removeStop": "Remove {{name}} from the course",
+    "emptyCourse": "No controls yet. Choose Start, Control or Finish in the tool bar and click on the map.",
+    "emptyPool": "No controls yet. Choose a tool and click on the map.",
+    "usedIn_zero": "Not in any course",
+    "usedIn_one": "In {{courses}}",
+    "usedIn_other": "In {{courses}}",
+    "descriptionsLater": "Control descriptions come in a later version.",
+    "settings": {
+      "name": "Course name",
+      "printScale": "Print scale",
+      "printScaleHelp": "The scale the course is printed at. Symbol sizes follow it.",
+      "delete": "Delete course",
+      "deleteConfirm": "Delete the course {{course}}? Its controls stay in the event."
+    },
+    "selected": "Selected: {{name}}",
+    "code": "Code",
+    "codeInUse": "Code {{code}} is already used.",
+    "removeFromCourse": "Remove from {{course}}",
+    "deleteControl": "Delete control",
+    "deleteControlConfirm": "Delete {{name}}? It is removed from every course.",
+    "kind": {
+      "start": "start",
+      "control": "control {{code}}",
+      "finish": "finish",
+      "crossingPoint": "crossing point"
+    },
+    "conflict": {
+      "heading": "Someone else saved this event",
+      "body": "{{name}} saved this event at {{time}} while you were editing. Your changes are not saved yet.",
+      "someone": "Someone",
+      "keepMine": "Keep my version",
+      "keepMineHelp": "Saves your version. Theirs stays in the event's history.",
+      "useTheirs": "Use theirs",
+      "useTheirsHelp": "Saves your version as a copy of the event ({{copy}}), then opens theirs.",
+      "copyName": "{{name}} (my copy)"
+    },
+    "access": {
+      "heading": "Who can see and edit {{event}}",
+      "creator": "Created the event",
+      "admin": "Club admin",
+      "invited": "Invited",
+      "inviteLabel": "Invite a club member",
+      "invitePlaceholder": "Choose a member",
+      "invite": "Invite",
+      "everyone": "Everyone in the club has access already.",
+      "remove": "Remove",
+      "leave": "Leave event",
+      "leaveConfirm": "Leave {{event}}? You need someone with access to invite you again.",
+      "close": "Close"
+    },
+    "outsideMap": "This point is outside the map."
   }
 }

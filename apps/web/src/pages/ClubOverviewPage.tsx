@@ -4,8 +4,10 @@ import { CopyButton } from '../components/CopyButton.tsx'
 import { CalendarIcon, MapIcon } from '../components/icons.tsx'
 import { Avatar, EmptyState, Loading, Panel } from '../components/ui.tsx'
 import { inviteUrl, isActive, useInvites } from '../lib/api.ts'
+import { useEvents } from '../lib/events.ts'
 import { formatDate } from '../lib/format.ts'
 import { useMaps } from '../lib/maps.ts'
+import { EventRow } from './ClubEventsPage.tsx'
 import { useClubContext } from './ClubLayout.tsx'
 import { MapRow } from './ClubMapsPage.tsx'
 
@@ -19,26 +21,7 @@ export function ClubOverviewPage() {
     <main className="mx-auto grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-start gap-3.5 px-5 pt-4 pb-8">
       <OverviewMaps />
 
-      <Panel
-        title={t('events.recent')}
-        titleId="overview-events"
-        actions={
-          <Link to="events" className="text-[13px]">
-            {t('events.all')}
-          </Link>
-        }
-      >
-        <EmptyState
-          icon={
-            <span className="text-[#a59fa9]">
-              <CalendarIcon />
-            </span>
-          }
-          title={t('events.empty')}
-        >
-          {t('events.emptyHelp')}
-        </EmptyState>
-      </Panel>
+      <OverviewEvents />
 
       <Panel
         title={
@@ -72,6 +55,46 @@ export function ClubOverviewPage() {
 }
 
 const MAPS_SHOWN = 6
+const EVENTS_SHOWN = 5
+
+function OverviewEvents() {
+  const { t } = useTranslation()
+  const { club } = useClubContext()
+  const events = useEvents(club.id)
+  const shown = events.data?.slice(0, EVENTS_SHOWN)
+  return (
+    <Panel
+      title={t('events.recent')}
+      titleId="overview-events"
+      actions={
+        <Link to="events" className="text-[13px]">
+          {t('events.all')}
+        </Link>
+      }
+    >
+      {shown === undefined ? (
+        <Loading label={t('common.loading')} />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          icon={
+            <span className="text-[#a59fa9]">
+              <CalendarIcon />
+            </span>
+          }
+          title={t('events.empty')}
+        >
+          {t('events.emptyHelp')}
+        </EmptyState>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {shown.map((event, i) => (
+            <EventRow key={event.id} event={event} first={i === 0} linkPrefix="events/" />
+          ))}
+        </ul>
+      )}
+    </Panel>
+  )
+}
 
 function OverviewMaps() {
   const { t } = useTranslation()
