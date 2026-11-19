@@ -64,6 +64,14 @@ Everything users create belongs to a club, and row-level security limits it to t
 - Maps: admins upload OCAD or PDF maps on the club's Maps tab (a PDF needs its scale); the worker processes them and members open them in the map viewer (OpenLayers in the map's own metre frame, with a scale bar and a measuring tool).
 - Map files live in two private Storage buckets, under `<club_id>/<map_id>/<version_id>/...`. `map-originals`: club admins upload, only the worker reads (users never download an original). `map-tiles`: only the worker writes, club members read (signed URLs for the editor).
 
+## Events
+
+An event (a training or race) belongs to a club and is set on one map version; its courses are one JSON document (`events.doc`) validated by `packages/core` (`supabase/migrations/*_create_events.sql`):
+
+- Only the creator, the club's admins and club members invited to the event (`event_members`) see it. Everyone with access edits it and may invite other club members; the creator and admins remove access and delete it; invitees may leave. Leaving the club ends access to its events.
+- `create_event()` starts an empty document on a ready map version. `save_event(event, doc, expected_revision)` saves only when nobody else saved since `expected_revision`; otherwise it fails with hint `conflict` and details `{revision, savedBy, savedAt}`. Every saved revision is kept in `event_revisions`.
+- A map version that events use cannot be deleted.
+
 ## Worker
 
 Background work (map processing, tiles, PDF export) goes through the `jobs` table. Inserting a job makes the database call the worker's `POST /jobs/run` (trigger + `pg_net`, with a shared secret in the `x-worker-secret` header); the worker claims due jobs one at a time, runs them and reports the result. Failed jobs are retried with backoff up to `max_attempts`, then marked `failed`. A `pg_cron` sweep every minute requeues jobs whose worker died and pokes the worker when retries are due. The `ping` job type checks the whole path (`{"fail": true}` makes it fail).

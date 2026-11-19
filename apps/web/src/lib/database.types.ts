@@ -65,6 +65,102 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"event_members": {
+                  Row: {
+                    "event_id": string,"invited_at": string,"invited_by": string | null,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "event_id": string,"invited_at"?: string,"invited_by"?: string | null,"user_id": string
+                  }
+                  Update: {
+                    "event_id"?: string,"invited_at"?: string,"invited_by"?: string | null,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "event_members_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: false
+      referencedRelation: "events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "event_members_invited_by_fkey"
+      columns: ["invited_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "event_members_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"event_revisions": {
+                  Row: {
+                    "doc": NonNullable<Json>,"event_id": string,"revision": number,"saved_at": string,"saved_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "doc": NonNullable<Json>,"event_id": string,"revision": number,"saved_at"?: string,"saved_by"?: string | null
+                  }
+                  Update: {
+                    "doc"?: NonNullable<Json>,"event_id"?: string,"revision"?: number,"saved_at"?: string,"saved_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "event_revisions_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: false
+      referencedRelation: "events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "event_revisions_saved_by_fkey"
+      columns: ["saved_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"events": {
+                  Row: {
+                    "club_id": string,"created_at": string,"created_by": string | null,"doc": NonNullable<Json>,"event_date": string | null,"id": string,"map_version_id": string,"name": string,"revision": number,"schema_version": number,"updated_at": string,"updated_by": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"created_at"?: string,"created_by"?: string | null,"doc": NonNullable<Json>,"event_date"?: string | null,"id"?: string,"map_version_id": string,"name": string,"revision"?: number,"schema_version"?: number,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Update: {
+                    "club_id"?: string,"created_at"?: string,"created_by"?: string | null,"doc"?: NonNullable<Json>,"event_date"?: string | null,"id"?: string,"map_version_id"?: string,"name"?: string,"revision"?: number,"schema_version"?: number,"updated_at"?: string,"updated_by"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "events_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "events_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "events_map_version_id_fkey"
+      columns: ["map_version_id"]
+isOneToOne: false
+      referencedRelation: "map_versions"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "events_updated_by_fkey"
+      columns: ["updated_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"jobs": {
                   Row: {
                     "attempts": number,"created_at": string,"error": string | null,"finished_at": string | null,"id": number,"locked_by": string | null,"locked_until": string | null,"max_attempts": number,"payload": NonNullable<Json>,"result": Json | null,"run_after": string,"started_at": string | null,"status": Database["public"]['Enums']["job_status"],"type": string
@@ -189,6 +285,9 @@ isOneToOne: false
 "create_club":
 { Args: { "club_name": string }; Returns: string
                            },
+"create_event":
+{ Args: { "club": string,"event_date"?: string,"event_name": string,"map_version": string }; Returns: string
+                           },
 "delete_map_version":
 { Args: { "map_version_id": string }; Returns: undefined
                            },
@@ -202,6 +301,9 @@ isOneToOne: false
 { Args: { "invite_token": string }; Returns: {
               "already_member": boolean,"club_id": string,"club_name": string,"status": string
             }[]
+                           },
+"save_event":
+{ Args: { "doc": Json,"event": string,"expected_revision": number }; Returns: number
                            },
 "set_map_version_alignment":
 { Args: { "map_version_id": string,"rms_m": number,"transform": Json }; Returns: undefined

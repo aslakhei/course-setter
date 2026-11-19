@@ -27,7 +27,7 @@ insert into public.maps (id, club_id, name) values ('dddddddd-0000-0000-0000-000
 insert into public.map_versions (id, map_id, club_id, version, kind, status, file_name, original_path, scale) values
   ('eeeeeeee-0000-0000-0000-000000000001', 'dddddddd-0000-0000-0000-000000000001', current_setting('test.club')::uuid, 1, 'ocad', 'ready', 'a.ocd', 'p1', 15000),
   ('eeeeeeee-0000-0000-0000-000000000002', 'dddddddd-0000-0000-0000-000000000001', current_setting('test.club')::uuid, 2, 'pdf', 'needs_alignment', 'b.pdf', 'p2', 15000);
-update public.map_versions set previous_version_id = 'eeeeeeee-0000-0000-0000-000000000001' where version = 2;
+update public.map_versions set previous_version_id = 'eeeeeeee-0000-0000-0000-000000000001' where id = 'eeeeeeee-0000-0000-0000-000000000002';
 
 select pg_temp.sign_in('cccccccc-0000-0000-0000-000000000002');
 select is_empty($$ select * from public.map_versions where status = 'needs_alignment' $$, 'members do not see a version waiting to be lined up');
@@ -57,7 +57,7 @@ select lives_ok(
 reset role;
 
 select results_eq(
-  $$ select status::text, transform_method, transform_rms_m, transform_from_previous from public.map_versions where version = 2 $$,
+  $$ select status::text, transform_method, transform_rms_m, transform_from_previous from public.map_versions where id = 'eeeeeeee-0000-0000-0000-000000000002' $$,
   $$ values ('ready', 'points', 1.2::double precision, '{"a":0.999,"b":0.03,"tx":12.5,"ty":-4}'::jsonb) $$,
   'the version becomes ready with the transform, keeping only its four numbers'
 );
