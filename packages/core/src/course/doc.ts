@@ -30,6 +30,8 @@ const course = z.object({
   printScale: z.number().int().min(500).max(100000),
   /** Bend points of a leg, keyed by `legKey(from, to)`; the leg is drawn and measured through them. */
   bends: z.record(z.string(), z.array(point)),
+  /** Control numbers the setter moved: offset from the control's centre in paper mm, by control id. */
+  numberPositions: z.record(z.string(), point).default({}),
 })
 
 export const eventDocSchema = z

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertCourseControl } from './commands.ts'
+import { insertCourseControl, setNumberPosition } from './commands.ts'
 import { courseById, type Point } from './doc.ts'
 import { allControlsDrawing, courseDrawing, type Primitive, symbolSizes, toPaperMm } from './symbols.ts'
 import { testEvent } from './test-doc.ts'
@@ -80,6 +80,37 @@ describe('courseDrawing', () => {
     const lines = of(courseDrawing(d, courseById(d, 'A')), 'polyline').filter(p => !p.closed)
     // 5 legs + 2 crossing lines.
     expect(lines).toHaveLength(7)
+  })
+
+  it('draws the crossing point as an hourglass: the two lines are closest in the middle', () => {
+    let d = testEvent()
+    d = { ...d, controls: [...d.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 0] }] }
+    d = insertCourseControl(d, 'A', 'x', 4)
+    const lines = of(courseDrawing(d, courseById(d, 'A')), 'polyline').filter(p => p.owner === 'x')
+    expect(lines).toHaveLength(2)
+    const [left, right] = lines.map(l => l.points)
+    const gap = (i: number) => Math.hypot((left?.[i]?.[0] ?? 0) - (right?.[i]?.[0] ?? 0), (left?.[i]?.[1] ?? 0) - (right?.[i]?.[1] ?? 0))
+    expect(gap(6)).toBeCloseTo(1.2, 9) // middle: the spacing
+    expect(gap(0)).toBeGreaterThan(gap(6) + 0.9) // ends: wider by twice the bulge
+  })
+
+  it('tags every symbol and number with its control, and course lines as legs', () => {
+    const tags = drawing.map(p => `${p.role}:${p.owner ?? ''}`)
+    expect(tags.filter(t => t.startsWith('leg:'))).toHaveLength(4)
+    expect(tags).toContain('symbol:s')
+    expect(tags).toContain('number:b')
+    expect(drawing.filter(p => p.owner === 'f').map(p => p.type)).toEqual(['circle', 'circle'])
+  })
+
+  it('puts a moved number where the setter put it, relative to its control', () => {
+    const moved = setNumberPosition(testEvent(), 'A', 'b', [-6, 0])
+    const number = of(courseDrawing(moved, courseById(moved, 'A')), 'text').find(t => t.owner === 'b')
+    const b = toPaperMm([300, 1000], 15000)
+    expect(number?.at).toEqual([b[0] - 6, b[1]])
+    // Other courses are not affected, and null puts it back.
+    expect(courseById(moved, 'B').numberPositions).toEqual({})
+    const back = setNumberPosition(moved, 'A', 'b', null)
+    expect(courseById(back, 'A').numberPositions).toEqual({})
   })
 
   it('uses the course print scale: the 1:10 000 course gets 150 % symbols', () => {

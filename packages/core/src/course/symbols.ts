@@ -69,10 +69,17 @@ export function symbolSizes(standard: Standard, printScale: number): SymbolSizes
   return Object.fromEntries(Object.entries(sizes).map(([k, v]) => [k, v * factor])) as SymbolSizes
 }
 
+/**
+ * What a primitive draws: a control's symbol, its number, or a course line. `owner` is the control it
+ * belongs to (for highlighting and dragging in the editor); course lines have none.
+ */
+export type PrimitiveRole = 'symbol' | 'number' | 'leg'
+type Tagged = { role: PrimitiveRole; owner?: string }
+
 export type Primitive =
-  | { type: 'circle'; center: Point; radius: number; lineWidth: number }
-  | { type: 'polyline'; points: Point[]; lineWidth: number; closed: boolean }
-  | { type: 'text'; at: Point; text: string; height: number }
+  | ({ type: 'circle'; center: Point; radius: number; lineWidth: number } & Tagged)
+  | ({ type: 'polyline'; points: Point[]; lineWidth: number; closed: boolean } & Tagged)
+  | ({ type: 'text'; at: Point; text: string; height: number } & Tagged)
 
 /** Map frame metres -> print paper mm at a print scale. */
 export const toPaperMm = ([x, y]: Point, printScale: number): Point => [(x * 1000) / printScale, (y * 1000) / printScale]
@@ -103,22 +110,25 @@ function triangle(center: Point, dir: Point, side: number): Point[] {
   })
 }
 
-/** Two lines curving outwards on either side of the course line, along the leg direction `dir`. */
-function crossing(center: Point, dir: Point, s: SymbolSizes): Primitive[] {
+/**
+ * A crossing point (710): two curved lines on either side of the course line, along the leg direction
+ * `dir`, closest together in the middle where the course passes through, like an hourglass ")(".
+ */
+function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string): Primitive[] {
   const normal: Point = [-dir[1], dir[0]]
   const half = s.crossingLength / 2
   return [1, -1].map(side => {
     const points: Point[] = []
     for (let i = 0; i <= 12; i++) {
       const t = -1 + i / 6 // -1 .. 1 along the line
-      const offset = s.crossingSpacing / 2 + s.crossingBulge * (1 - t * t) // parabola bulging outwards
+      const offset = s.crossingSpacing / 2 + s.crossingBulge * t * t // narrowest at the middle, opening towards the ends
       points.push(along(along(center, dir, t * half), normal, side * offset))
     }
-    return { type: 'polyline', points, lineWidth: s.lineWidth, closed: false } as const
+    return { type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'symbol', owner } as const
   })
 }
 
-/** Where to put a control number: the direction around the circle farthest from the course lines. */
+/** Where to put a control number automatically: the direction around the circle farthest from the course lines. */
 function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes): Point {
   let best: Point = [Math.SQRT1_2, Math.SQRT1_2]
   let bestGap = -1
@@ -160,11 +170,13 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
     }
     points[0] = along(first, unit(sub(second, first)), Math.min(startCut, len(sub(second, first))))
     points[points.length - 1] = along(last, unit(sub(beforeLast, last)), Math.min(endCut, len(sub(last, beforeLast))))
-    out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false })
+    out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg' })
   }
 
   stops.forEach((stop, i) => {
     const p = at(i)
+    const owner = stop.controlId
+    const tag = { role: 'symbol', owner } as const
     const next = i + 1 < stops.length ? path(i)[1] : undefined
     const prev = i > 0 ? path(i - 1).at(-2) : undefined
     if (stop.kind === 'start') {
@@ -173,17 +185,21 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
         points: triangle(p, next ? unit(sub(next, p)) : [0, 1], s.startSide),
         lineWidth: s.lineWidth,
         closed: true,
+        ...tag,
       })
     } else if (stop.kind === 'finish') {
-      out.push({ type: 'circle', center: p, radius: s.finishInner / 2, lineWidth: s.lineWidth })
-      out.push({ type: 'circle', center: p, radius: s.finishOuter / 2, lineWidth: s.lineWidth })
+      out.push({ type: 'circle', center: p, radius: s.finishInner / 2, lineWidth: s.lineWidth, ...tag })
+      out.push({ type: 'circle', center: p, radius: s.finishOuter / 2, lineWidth: s.lineWidth, ...tag })
     } else if (stop.kind === 'crossingPoint') {
       const dir = unit(next && prev ? sub(next, prev) : next ? sub(next, p) : prev ? sub(p, prev) : [0, 1])
-      out.push(...crossing(p, dir, s))
+      out.push(...crossing(p, dir, s, owner))
     } else {
-      out.push({ type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth })
+      out.push({ type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth, ...tag })
       const legs = [next, prev].filter((q): q is Point => q !== undefined).map(q => unit(sub(q, p)))
-      out.push({ type: 'text', at: numberPosition(p, legs, s), text: String(stop.number), height: s.numberHeight })
+      // A number the setter moved keeps its place relative to the control (in paper mm).
+      const moved = course.numberPositions[owner]
+      const numberAt = moved ? ([p[0] + moved[0], p[1] + moved[1]] as Point) : numberPosition(p, legs, s)
+      out.push({ type: 'text', at: numberAt, text: String(stop.number), height: s.numberHeight, role: 'number', owner })
     }
   })
   return out
@@ -194,17 +210,19 @@ export function allControlsDrawing(doc: EventDoc, printScale: number): Primitive
   const s = symbolSizes(doc.standard, printScale)
   return doc.controls.flatMap((c): Primitive[] => {
     const p = toPaperMm(c.position, printScale)
-    if (c.kind === 'start') return [{ type: 'polyline', points: triangle(p, [0, 1], s.startSide), lineWidth: s.lineWidth, closed: true }]
+    const tag = { role: 'symbol', owner: c.id } as const
+    if (c.kind === 'start')
+      return [{ type: 'polyline', points: triangle(p, [0, 1], s.startSide), lineWidth: s.lineWidth, closed: true, ...tag }]
     if (c.kind === 'finish') {
       return [
-        { type: 'circle', center: p, radius: s.finishInner / 2, lineWidth: s.lineWidth },
-        { type: 'circle', center: p, radius: s.finishOuter / 2, lineWidth: s.lineWidth },
+        { type: 'circle', center: p, radius: s.finishInner / 2, lineWidth: s.lineWidth, ...tag },
+        { type: 'circle', center: p, radius: s.finishOuter / 2, lineWidth: s.lineWidth, ...tag },
       ]
     }
-    if (c.kind === 'crossingPoint') return crossing(p, [0, 1], s)
+    if (c.kind === 'crossingPoint') return crossing(p, [0, 1], s, c.id)
     return [
-      { type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth },
-      { type: 'text', at: numberPosition(p, [], s), text: String(c.code), height: s.numberHeight },
+      { type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth, ...tag },
+      { type: 'text', at: numberPosition(p, [], s), text: String(c.code), height: s.numberHeight, role: 'number', owner: c.id },
     ]
   })
 }

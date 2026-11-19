@@ -58,7 +58,7 @@ export function setControlCode(doc: EventDoc, id: string, code: number): EventDo
 }
 
 export function addCourse(doc: EventDoc, { id, name, printScale }: { id: string; name: string; printScale: number }): EventDoc {
-  return { ...doc, courses: [...doc.courses, { id, name: name.trim(), controls: [], printScale, bends: {} }] }
+  return { ...doc, courses: [...doc.courses, { id, name: name.trim(), controls: [], printScale, bends: {}, numberPositions: {} }] }
 }
 
 export function updateCourse(doc: EventDoc, id: string, change: { name?: string; printScale?: number }): EventDoc {
@@ -109,6 +109,15 @@ export function setLegBends(doc: EventDoc, courseId: string, from: string, to: s
   return withCourse(doc, courseId, c => {
     const { [legKey(from, to)]: _old, ...rest } = c.bends
     return { ...c, bends: points.length ? { ...rest, [legKey(from, to)]: points } : rest }
+  })
+}
+
+/** Move a control's number in a course (offset from the control's centre in paper mm), or with null put it back where it goes by itself. */
+export function setNumberPosition(doc: EventDoc, courseId: string, controlId: string, offset: Point | null): EventDoc {
+  controlById(doc, controlId)
+  return withCourse(doc, courseId, c => {
+    const { [controlId]: _old, ...rest } = c.numberPositions
+    return { ...c, numberPositions: offset ? { ...rest, [controlId]: offset } : rest }
   })
 }
 

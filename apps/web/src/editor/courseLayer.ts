@@ -10,15 +10,20 @@ import { Fill, Stroke, Style, Text } from 'ol/style.js'
 /** Course overprint purple (ISOM "purple", close to Pantone Purple C), drawn with Multiply. */
 export const COURSE_PURPLE = '#b5179e'
 
-type Paint = { color: string; lineDash?: number[] }
+export type Paint = { color: string; lineDash?: number[] }
 
 const mmToMetres = (mm: number, printScale: number) => (mm * printScale) / 1000
 
 /** Features for `primitives` (in paper mm at `printScale`), each styled for whatever zoom is shown. */
-export function primitiveFeatures(primitives: Primitive[], printScale: number, paint: Paint = { color: COURSE_PURPLE }): Feature[] {
+export function primitiveFeatures(
+  primitives: Primitive[],
+  printScale: number,
+  paintOf: Paint | ((p: Primitive) => Paint) = { color: COURSE_PURPLE },
+): Feature[] {
   const m = (mm: number) => mmToMetres(mm, printScale)
   const point = ([x, y]: [number, number]): [number, number] => [m(x), m(y)]
   return primitives.map(p => {
+    const paint = typeof paintOf === 'function' ? paintOf(p) : paintOf
     const feature =
       p.type === 'circle'
         ? new Feature(new CircleGeometry(point(p.center), m(p.radius)))
