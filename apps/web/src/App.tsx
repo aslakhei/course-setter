@@ -13,6 +13,7 @@ import { InvitePage } from './pages/InvitePage.tsx'
 
 // The map page brings OpenLayers; load it only when a map is opened.
 const MapPage = lazy(() => import('./pages/MapPage.tsx').then(m => ({ default: m.MapPage })))
+const AlignPage = lazy(() => import('./pages/AlignPage.tsx').then(m => ({ default: m.AlignPage })))
 
 export function App() {
   const { t } = useTranslation()
@@ -28,6 +29,14 @@ export function App() {
             element={
               <Suspense fallback={<Loading label={t('common.loading')} />}>
                 <MapPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="maps/:mapId/align/:versionId"
+            element={
+              <Suspense fallback={<Loading label={t('common.loading')} />}>
+                <AlignPage />
               </Suspense>
             }
           />

@@ -98,8 +98,20 @@
       "submit": "Upload",
       "uploading": "Uploading…",
       "failed": "The upload failed. Try again.",
-      "done": "Uploaded. The map appears in the list when it has been processed."
-    }
+      "done": "Uploaded. The map appears in the list when it has been processed.",
+      "versionHeading": "Upload a new version",
+      "versionHelp": "The new OCAD or PDF file of this map, up to 50 MB. It is lined up with the current version: automatically when the map's coordinates allow it, otherwise you match a few points."
+    },
+    "needsAlignment": "Version {{number}} has to be lined up with the previous version before members can use it.",
+    "lineUp": "Line up",
+    "lineUpAgain": "Line up again",
+    "newVersion": "Upload new version",
+    "alignedBy": {
+      "identity": "Unchanged from version {{number}}.",
+      "georef": "Lined up with version {{number}} from the map's coordinates.",
+      "points": "Lined up with version {{number}} from matched points, within {{rms}} m."
+    },
+    "uploadAbandoned": "The upload of version {{number}} ({{file}}) did not finish. Open the map, choose this version, delete it and upload the file again."
   },
   "events": {
     "heading": "Events",
@@ -169,5 +181,26 @@
     "fit": "Whole map",
     "clear": "Clear",
     "measureHelp": "Click on the map to measure; double-click to finish."
+  },
+  "align": {
+    "heading": "Line up version {{next}} with version {{previous}}",
+    "help": "Click a point on version {{previous}}, then the same point on version {{next}}: a path junction, a building corner, a boulder. Two pairs are enough; three or more, spread across the map, are better.",
+    "previous": "Version {{number}} (current)",
+    "next": "Version {{number}} (new)",
+    "pairs": "Matched points",
+    "none": "No points yet.",
+    "pair": "Point {{number}}",
+    "clickNext": "now click the same point on version {{number}}",
+    "clickPrevious": "now click the same point on version {{number}}",
+    "off": "{{distance}} m off",
+    "fit": "The points fit within {{rms}} m.",
+    "fitTwo": "Two points always fit exactly. Add a third to check them.",
+    "overlay": "Show version {{number}} on top",
+    "remove": "Remove",
+    "clear": "Start over",
+    "save": "Save and use version {{number}}",
+    "notNeeded": "This version has no previous version to line up with.",
+    "automatic": "This version was lined up automatically. Match points only if it is off.",
+    "tooFew": "Match at least two points."
   }
 }

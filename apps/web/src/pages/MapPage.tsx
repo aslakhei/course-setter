@@ -1,11 +1,12 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { MapViewer } from '../components/MapViewer.tsx'
 import { Button, ErrorMessage, fieldClass, Loading } from '../components/ui.tsx'
 import { formatDate } from '../lib/format.ts'
-import { latestReady, useDeleteMapVersion, useMaps, useMapVersion, useTilesUrl } from '../lib/maps.ts'
+import { type ClubMap, latestReady, type MapVersionSummary, useDeleteMapVersion, useMaps, useMapVersion, useTilesUrl } from '../lib/maps.ts'
 import { useClubContext } from './ClubLayout.tsx'
-import { VersionStatus, versionLabel } from './ClubMapsPage.tsx'
+import { UploadPanel, VersionStatus, versionLabel } from './ClubMapsPage.tsx'
 
 /** /clubs/:clubId/maps/:mapId?version=<id>: one map in the viewer. */
 export function MapPage() {
@@ -20,6 +21,7 @@ export function MapPage() {
   const version = useMapVersion(chosen?.status === 'ready' ? chosen.id : undefined)
   const tilesUrl = useTilesUrl(version.data?.tilesPath)
   const deleteVersion = useDeleteMapVersion(club.id)
+  const [uploading, setUploading] = useState(false)
 
   if (maps.isError) return <PageMessage>{t('common.error')}</PageMessage>
   if (maps.data === undefined) return <Loading label={t('common.loading')} />
@@ -60,17 +62,30 @@ export function MapPage() {
             </option>
           ))}
         </select>
+        {chosen && <Alignment version={chosen} map={map} isAdmin={isAdmin} />}
         <span className="grow" />
-        {isAdmin && chosen && (
-          <Button size="sm" variant="danger" onClick={remove} disabled={deleteVersion.isPending}>
-            {t('maps.deleteVersion')}
-          </Button>
+        {isAdmin && (
+          <>
+            <Button size="sm" onClick={() => setUploading(u => !u)} aria-expanded={uploading}>
+              {t('maps.newVersion')}
+            </Button>
+            {chosen && (
+              <Button size="sm" variant="danger" onClick={remove} disabled={deleteVersion.isPending}>
+                {t('maps.deleteVersion')}
+              </Button>
+            )}
+          </>
         )}
       </div>
       {deleteVersion.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
+      {isAdmin && uploading && (
+        <div className="max-w-md">
+          <UploadPanel mapId={map.id} onUploaded={() => setUploading(false)} />
+        </div>
+      )}
       {chosen && chosen.status !== 'ready' ? (
         <div className="rounded-md border border-line bg-white px-3.5 py-3">
-          <VersionStatus version={chosen} />
+          <VersionStatus version={chosen} mapId={map.id} linkPrefix="../" />
         </div>
       ) : version.isError || tilesUrl.isError ? (
         <ErrorMessage>{t('common.error')}</ErrorMessage>
@@ -82,6 +97,24 @@ export function MapPage() {
         <Loading label={t('common.loading')} />
       )}
     </main>
+  )
+}
+
+/** How a version was lined up with the one before it, and a way for admins to redo it. */
+function Alignment({ version, map, isAdmin }: { version: MapVersionSummary; map: ClubMap; isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const previous = map.versions.find(v => v.id === version.previousVersionId)
+  if (version.status !== 'ready' || !previous || !version.transformMethod) return null
+  return (
+    <span className="text-[13px] text-muted">
+      {t(`maps.alignedBy.${version.transformMethod}`, { number: previous.version, rms: (version.transformRms ?? 0).toFixed(1) })}
+      {isAdmin && (
+        <>
+          {' '}
+          <Link to={`align/${version.id}`}>{t('maps.lineUpAgain')}</Link>
+        </>
+      )}
+    </span>
   )
 }
 

@@ -184,6 +184,9 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      pdf-lib:
+        specifier: ^1.17.1
+        version: 1.17.1
       postgres:
         specifier: ^3.4.9
         version: 3.4.9

@@ -1,7 +1,7 @@
 // Data access for maps and map versions. Admins see every version (also while uploading, processing or
 // failed); members only ready ones. Uploads go straight from the browser to Storage, framed by the
 // start_map_upload / finish_map_upload functions (see migration create_maps).
-import type { TileGrid } from '@course-setter/core'
+import type { Similarity, TileGrid } from '@course-setter/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from './api.ts'
 import type { Database } from './database.types.ts'
@@ -20,11 +20,20 @@ export type MapVersionSummary = {
   errorCode: string | null
   errorMessage: string | null
   createdAt: string
+  /** The version this one was lined up with, and how (null for a first version). */
+  previousVersionId: string | null
+  transformMethod: 'identity' | 'georef' | 'points' | null
+  transformRms: number | null
 }
 
 export type ClubMap = { id: string; name: string; versions: MapVersionSummary[] }
 
-export type MapVersionDetail = MapVersionSummary & { mapId: string; tilesPath: string | null; tiles: TileGrid | null }
+export type MapVersionDetail = MapVersionSummary & {
+  mapId: string
+  tilesPath: string | null
+  tiles: TileGrid | null
+  transform: Similarity | null
+}
 
 /** 50 MB: the Supabase free plan's limit per file (also set on the bucket). */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -38,7 +47,8 @@ export const mapKeys = {
   tilesUrl: (path: string) => ['tiles-url', path] as const,
 }
 
-const versionColumns = 'id, version, kind, status, file_name, scale, error_code, error_message, created_at'
+const versionColumns =
+  'id, version, kind, status, file_name, scale, error_code, error_message, created_at, previous_version_id, transform_method, transform_rms_m'
 
 type VersionRow = {
   id: string
@@ -50,6 +60,9 @@ type VersionRow = {
   error_code: string | null
   error_message: string | null
   created_at: string
+  previous_version_id: string | null
+  transform_method: string | null
+  transform_rms_m: number | null
 }
 
 function summary(r: VersionRow): MapVersionSummary {
@@ -63,6 +76,9 @@ function summary(r: VersionRow): MapVersionSummary {
     errorCode: r.error_code,
     errorMessage: r.error_message,
     createdAt: r.created_at,
+    previousVersionId: r.previous_version_id,
+    transformMethod: r.transform_method as MapVersionSummary['transformMethod'],
+    transformRms: r.transform_rms_m,
   }
 }
 
@@ -76,7 +92,14 @@ export function latestReady(map: ClubMap): MapVersionSummary | undefined {
   return sortVersions(map.versions).find(v => v.status === 'ready')
 }
 
-const isBusy = (v: MapVersionSummary) => v.status === 'uploading' || v.status === 'processing'
+/** An upload not finished after this long was abandoned (the page was closed mid-upload). */
+const UPLOAD_GIVE_UP_MS = 15 * 60 * 1000
+
+export function uploadAbandoned(v: MapVersionSummary, now = Date.now()): boolean {
+  return v.status === 'uploading' && now - Date.parse(v.createdAt) > UPLOAD_GIVE_UP_MS
+}
+
+export const isBusy = (v: MapVersionSummary) => v.status === 'processing' || (v.status === 'uploading' && !uploadAbandoned(v))
 
 export function useMaps(clubId: string) {
   return useQuery({
@@ -102,12 +125,18 @@ export function useMapVersion(versionId: string | undefined) {
     queryFn: async (): Promise<MapVersionDetail | null> => {
       const { data, error } = await supabase
         .from('map_versions')
-        .select(`${versionColumns}, map_id, tiles_path, tiles`)
+        .select(`${versionColumns}, map_id, tiles_path, tiles, transform_from_previous`)
         .eq('id', versionId ?? '')
         .maybeSingle()
       if (error) throw new ApiError(error)
       if (!data) return null
-      return { ...summary(data), mapId: data.map_id, tilesPath: data.tiles_path, tiles: data.tiles as TileGrid | null }
+      return {
+        ...summary(data),
+        mapId: data.map_id,
+        tilesPath: data.tiles_path,
+        tiles: data.tiles as TileGrid | null,
+        transform: data.transform_from_previous as Similarity | null,
+      }
     },
   })
 }
@@ -139,20 +168,21 @@ export function nameFromFile(fileName: string): string {
   return fileName.replace(/\.(ocd|pdf)$/i, '').trim()
 }
 
-export type UploadInput = { file: File; name: string; scale?: number }
+/** A new map (`name`) or a new version of an existing one (`mapId`). */
+export type UploadInput = { file: File; name?: string; mapId?: string; scale?: number }
 
-/** Upload a new map: reserve the version, upload the file to its path, queue processing. */
+/** Upload a map or a new version of one: reserve the version, upload the file to its path, queue processing. */
 export function useUploadMap(clubId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ file, name, scale }: UploadInput): Promise<{ mapId: string; versionId: string }> => {
+    mutationFn: async ({ file, name, mapId, scale }: UploadInput): Promise<{ mapId: string; versionId: string }> => {
       const kind = kindOf(file.name)
       if (!kind) throw new Error('unsupported file type')
       const started = await supabase.rpc('start_map_upload', {
         club: clubId,
         file_name: file.name,
         kind,
-        map_name: name.trim(),
+        ...(mapId ? { map_id: mapId } : { map_name: (name ?? '').trim() }),
         ...(kind === 'pdf' ? { scale } : {}),
       })
       if (started.error) throw new ApiError(started.error)
@@ -189,5 +219,21 @@ export function useDeleteMapVersion(clubId: string) {
       if (error) throw new ApiError(error)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: mapKeys.maps(clubId) }),
+  })
+}
+
+/** Save the transform an admin found by matching points; the version becomes ready. */
+export function useSaveAlignment(clubId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ versionId, transform, rms }: { versionId: string; transform: Similarity; rms: number }) => {
+      const { error } = await supabase.rpc('set_map_version_alignment', { map_version_id: versionId, transform, rms_m: rms })
+      if (error) throw new ApiError(error)
+    },
+    onSuccess: (_data, { versionId }) =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: mapKeys.maps(clubId) }),
+        queryClient.invalidateQueries({ queryKey: mapKeys.version(versionId) }),
+      ]),
   })
 }

@@ -10,17 +10,9 @@ export class MapError extends Error {
   }
 }
 
-export type Georef = {
-  /** EPSG code of the projected coordinate system, when OCAD knows it. */
-  epsg: number | null
-  /** Projected coordinates of the paper origin, in metres. */
-  easting: number
-  northing: number
-  /** Angle between grid north and map north, in degrees. */
-  grivationDeg: number
-  /** OCAD's own grid id, kept for formats we do not map to EPSG yet. */
-  ocadGridId: number | null
-}
+export type { Georef } from '@course-setter/core'
+
+import type { Georef } from '@course-setter/core'
 
 export type Region = { x: number; y: number; width: number; height: number }
 
