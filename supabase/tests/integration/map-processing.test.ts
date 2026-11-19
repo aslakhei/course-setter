@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { PDFDocument } from 'pdf-lib'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { localSupabase } from './local-supabase.ts'
 import { startWorker, type TestWorker, waitFor } from './worker.ts'
@@ -39,11 +40,20 @@ describe('map processing', () => {
   let mo: Awaited<ReturnType<typeof signedInUser>>
   let clubId = ''
 
-  async function upload(fileName: string, bytes: Uint8Array): Promise<string> {
-    const started = await ada.client.rpc('start_map_upload', { club: clubId, file_name: fileName, kind: 'ocad', map_name: fileName })
+  async function upload(fileName: string, bytes: Uint8Array, version?: { mapId: string; scale?: number }): Promise<string> {
+    const kind = fileName.endsWith('.pdf') ? 'pdf' : 'ocad'
+    const started = await ada.client.rpc('start_map_upload', {
+      club: clubId,
+      file_name: fileName,
+      kind,
+      ...(version ? { map_id: version.mapId } : { map_name: fileName }),
+      ...(kind === 'pdf' ? { scale: version?.scale ?? 15000 } : {}),
+    })
     if (started.error) throw started.error
     const { version_id, upload_path } = started.data[0]
-    const put = await ada.client.storage.from('map-originals').upload(upload_path, bytes, { contentType: 'application/octet-stream' })
+    const put = await ada.client.storage
+      .from('map-originals')
+      .upload(upload_path, bytes, { contentType: kind === 'pdf' ? 'application/pdf' : 'application/octet-stream' })
     if (put.error) throw put.error
     const finished = await ada.client.rpc('finish_map_upload', { map_version_id: version_id })
     if (finished.error) throw finished.error
@@ -97,6 +107,49 @@ describe('map processing', () => {
     const head = await fetch(signed.data?.signedUrl ?? '', { headers: { range: 'bytes=0-6' } })
     expect(head.status).toBe(206)
     expect(await head.text()).toBe('PMTiles')
+  })
+
+  it('lines up new versions automatically when it can, and waits for the admin when it cannot', { timeout: 180_000 }, async () => {
+    const first = await upload('lined-up.ocd', fixture)
+    await versionWhen(first, v => v.status === 'ready')
+    const { data: row } = await admin.from('map_versions').select('map_id').eq('id', first).single()
+    const mapId = row?.map_id ?? ''
+
+    // The same OCAD map again: same georeferencing, so nothing moved.
+    const second = await upload('lined-up-2.ocd', fixture, { mapId })
+    await versionWhen(second, v => v.status !== 'processing')
+    const auto = await admin
+      .from('map_versions')
+      .select('status, previous_version_id, transform_method, transform_from_previous')
+      .eq('id', second)
+      .single()
+    expect(auto.data).toEqual({
+      status: 'ready',
+      previous_version_id: first,
+      transform_method: 'identity',
+      transform_from_previous: { a: 1, b: 0, tx: 0, ty: 0 },
+    })
+
+    // A PDF has no georeferencing: it waits until an admin has matched points.
+    const pdf = await PDFDocument.create()
+    pdf.addPage([400, 300]).drawCircle({ x: 200, y: 150, size: 20 })
+    const third = await upload('lined-up.pdf', await pdf.save(), { mapId, scale: 15000 })
+    const waiting = await versionWhen(third, v => v.status !== 'processing')
+    expect(waiting.status).toBe('needs_alignment')
+    expect((await mo.client.from('map_versions').select('id').eq('id', third)).data).toEqual([])
+
+    const saved = await ada.client.rpc('set_map_version_alignment', {
+      map_version_id: third,
+      transform: { a: 1.0002, b: -0.01, tx: 15.5, ty: -3 },
+      rms_m: 1.4,
+    })
+    expect(saved.error).toBeNull()
+    const done = await admin
+      .from('map_versions')
+      .select('status, previous_version_id, transform_method, transform_rms_m')
+      .eq('id', third)
+      .single()
+    expect(done.data).toEqual({ status: 'ready', previous_version_id: second, transform_method: 'points', transform_rms_m: 1.4 })
   })
 
   it('fails a file that is not an OCAD map with a code the app can explain', { timeout: 60_000 }, async () => {

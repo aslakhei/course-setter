@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type Page, test } from '@playwright/test'
+import { PDFDocument, rgb } from 'pdf-lib'
 import { admin, createUser, deleteUsers, pageFor, type TestUser } from './users.ts'
 
 const users: TestUser[] = []
@@ -26,7 +27,7 @@ test.afterAll(async () => {
 function inkedPixels(page: Page): Promise<number> {
   return page.evaluate(() => {
     let inked = 0
-    for (const canvas of document.querySelectorAll<HTMLCanvasElement>('[data-testid="map-viewer"] canvas')) {
+    for (const canvas of document.querySelectorAll<HTMLCanvasElement>('[data-testid^="map-viewer"] canvas')) {
       const data = canvas.getContext('2d')?.getImageData(0, 0, canvas.width, canvas.height).data ?? []
       for (let i = 0; i < data.length; i += 4)
         if ((data[i + 3] ?? 0) > 0 && (data[i] ?? 255) + (data[i + 1] ?? 255) + (data[i + 2] ?? 255) < 600) inked++
@@ -61,7 +62,7 @@ test('an admin uploads a map, it is processed and shown, and members can open it
   await adaPage.getByRole('link', { name: 'Test forest' }).click()
 
   // The viewer draws the map and measures on it.
-  const viewer = adaPage.getByTestId('map-viewer')
+  const viewer = adaPage.getByTestId(/^map-viewer/)
   await expect(viewer).toBeVisible()
   await expect.poll(() => inkedPixels(adaPage), { timeout: 30_000 }).toBeGreaterThan(20)
   await adaPage.getByRole('button', { name: 'Measure' }).click()
@@ -109,5 +110,78 @@ test('a file that is not a map fails with an explanation for the admin', async (
 
   const { data: versions } = await admin.from('map_versions').select('original_path').eq('club_id', clubId)
   for (const v of versions ?? []) await admin.storage.from('map-originals').remove([v.original_path])
+  await admin.from('clubs').delete().eq('id', clubId)
+})
+
+test('a new version that cannot be lined up automatically is lined up by matching points', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const page = await pageFor(browser, ada)
+  await page.goto('/')
+  await page.getByLabel('Club name').fill(`${clubName} 3`)
+  await page.getByRole('button', { name: 'Create club' }).click()
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  const clubId = page.url().split('/clubs/')[1] ?? ''
+
+  // Version 1: the OCAD test map.
+  await page.goto(`/clubs/${clubId}/maps`)
+  await page.getByLabel('Map file').setInputFiles(fixture)
+  await page.getByRole('button', { name: 'Upload', exact: true }).click()
+  await expect(page.getByText(/^Version 1 · 1:15.000 · OCAD$/)).toBeVisible({ timeout: 120_000 })
+  await page.getByRole('link', { name: 'basic-1' }).click()
+
+  // Version 2: a PDF, which has no georeferencing.
+  const pdf = await PDFDocument.create()
+  const sheet = pdf.addPage([1180, 640])
+  for (const [x, y] of [
+    [200, 150],
+    [900, 200],
+    [600, 500],
+  ] as const) {
+    sheet.drawCircle({ x, y, size: 12, color: rgb(0, 0, 0) })
+  }
+  await page.getByRole('button', { name: 'Upload new version' }).click()
+  await page
+    .getByLabel('Map file')
+    .setInputFiles({ name: 'basic-1 v2.pdf', mimeType: 'application/pdf', buffer: Buffer.from(await pdf.save()) })
+  await expect(page.getByLabel('Map scale')).toHaveValue('15000')
+  await page.getByRole('button', { name: 'Upload', exact: true }).click()
+  // The form closes once the file is uploaded; leaving earlier would cancel the upload.
+  await expect(page.getByRole('heading', { name: 'Upload a new version' })).toHaveCount(0, { timeout: 60_000 })
+
+  await page.goto(`/clubs/${clubId}/maps`)
+  await expect(page.getByText('Version 2 has to be lined up with the previous version', { exact: false })).toBeVisible({ timeout: 120_000 })
+  await page.getByRole('link', { name: 'Line up' }).click()
+  await expect(page.getByRole('heading', { name: 'Line up version 2 with version 1' })).toBeVisible()
+
+  // Three pairs: left map (version 1), then right map (version 2).
+  const viewers = page.getByTestId(/^map-viewer/)
+  await expect(viewers).toHaveCount(2)
+  const [left, right] = [await viewers.nth(0).boundingBox(), await viewers.nth(1).boundingBox()]
+  if (!left || !right) throw new Error('viewers have no size')
+  for (const [fx, fy] of [
+    [0.25, 0.3],
+    [0.75, 0.35],
+    [0.5, 0.75],
+  ] as const) {
+    await page.mouse.click(left.x + left.width * fx, left.y + left.height * fy)
+    await page.waitForTimeout(300)
+    await page.mouse.click(right.x + right.width * fx, right.y + right.height * fy)
+    await page.waitForTimeout(300)
+  }
+  await expect(page.getByText('Point 3')).toBeVisible()
+  await expect(page.getByTestId('align-fit')).toHaveText(/^The points fit within [\d.]+ m\.$/)
+  await page.getByLabel('Show version 1 on top').check()
+  await page.getByRole('button', { name: 'Save and use version 2' }).click()
+
+  await expect(page.getByText(/Lined up with version 1 from matched points, within [\d.]+ m\./)).toBeVisible()
+  await expect(page.getByLabel('Map version')).toHaveValue(/.+/)
+
+  const { data: versions } = await admin.from('map_versions').select('original_path, tiles_path').eq('club_id', clubId)
+  for (const v of versions ?? []) {
+    await admin.storage.from('map-originals').remove([v.original_path])
+    if (v.tiles_path) await admin.storage.from('map-tiles').remove([v.tiles_path])
+  }
   await admin.from('clubs').delete().eq('id', clubId)
 })

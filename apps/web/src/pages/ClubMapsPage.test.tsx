@@ -22,6 +22,9 @@ const version = (extra: Partial<maps.MapVersionSummary>): maps.MapVersionSummary
   errorCode: null,
   errorMessage: null,
   createdAt: '2026-11-18T10:00:00Z',
+  previousVersionId: null,
+  transformMethod: null,
+  transformRms: null,
   ...extra,
 })
 
@@ -55,6 +58,18 @@ describe('maps page', () => {
     // A map with no ready version is not a link yet.
     expect(screen.queryByRole('link', { name: 'Old map' })).toBeNull()
     expect(screen.getByText(/Version 1 \(old.pdf\) could not be processed: the file is not a PDF\./)).toBeInTheDocument()
+  })
+
+  it('says when an upload was abandoned instead of waiting for it forever', () => {
+    vi.mocked(maps.useMaps).mockReturnValue(
+      query<maps.ClubMap[]>([
+        { id: 'm1', name: 'Skogen', versions: [version({ id: 'v9', version: 2, status: 'uploading', createdAt: '2026-01-01T10:00:00Z' })] },
+      ]),
+    )
+    renderClubPage(<ClubMapsPage />, clubContext(ada))
+    expect(screen.getByText(/The upload of version 2 \(skogen.ocd\) did not finish\./)).toBeInTheDocument()
+    expect(maps.isBusy(version({ status: 'uploading', createdAt: '2026-01-01T10:00:00Z' }))).toBe(false)
+    expect(maps.isBusy(version({ status: 'uploading', createdAt: new Date().toISOString() }))).toBe(true)
   })
 
   it('asks for the scale of a PDF map and uploads it', async () => {

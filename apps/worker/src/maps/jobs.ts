@@ -1,5 +1,5 @@
 // Job handlers for map versions (see migration create_maps for the life cycle).
-import { maxZoom, tileGrid } from '@course-setter/core'
+import { automaticAlignment, type Georef, maxZoom, tileGrid } from '@course-setter/core'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JobHandler } from '../jobs.ts'
 import { loadOcad } from './ocad.ts'
@@ -13,6 +13,7 @@ const TILES = 'map-tiles'
 
 type VersionRow = {
   id: string
+  version: number
   map_id: string
   club_id: string
   kind: 'ocad' | 'pdf'
@@ -28,7 +29,7 @@ export function mapJobHandlers(db: SupabaseClient): Record<string, JobHandler> {
     if (typeof id !== 'string') throw new Error('payload.map_version_id missing')
     const { data, error } = await db
       .from('map_versions')
-      .select('id, map_id, club_id, kind, status, original_path, tiles_path, scale')
+      .select('id, version, map_id, club_id, kind, status, original_path, tiles_path, scale')
       .eq('id', id)
       .maybeSingle()
     if (error) throw new Error(`reading map version ${id}: ${error.message}`)
@@ -42,6 +43,43 @@ export function mapJobHandlers(db: SupabaseClient): Record<string, JobHandler> {
       .eq('id', id)
       .eq('status', 'processing')
     if (error) throw new Error(`marking map version ${id} failed: ${error.message}`)
+  }
+
+  /**
+   * How a freshly processed version lines up with the newest earlier ready version of the map:
+   * automatically when the files say so, otherwise it waits for an admin to match points.
+   */
+  async function alignment(v: VersionRow, source: MapSource) {
+    const { data, error } = await db
+      .from('map_versions')
+      .select('id, kind, scale, georef')
+      .eq('map_id', v.map_id)
+      .eq('status', 'ready')
+      .lt('version', v.version)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) throw new Error(`reading previous version: ${error.message}`)
+    if (!data) {
+      return { status: 'ready', previous_version_id: null, transform_from_previous: null, transform_method: null, transform_rms_m: null }
+    }
+    const previous = data as { id: string; kind: 'ocad' | 'pdf'; scale: number; georef: Georef | null }
+    const auto = automaticAlignment(previous, { kind: source.kind, scale: source.scale, georef: source.georef })
+    return auto
+      ? {
+          status: 'ready',
+          previous_version_id: previous.id,
+          transform_from_previous: auto.transform,
+          transform_method: auto.method,
+          transform_rms_m: 0,
+        }
+      : {
+          status: 'needs_alignment',
+          previous_version_id: previous.id,
+          transform_from_previous: null,
+          transform_method: null,
+          transform_rms_m: null,
+        }
   }
 
   return {
@@ -64,10 +102,11 @@ export function mapJobHandlers(db: SupabaseClient): Record<string, JobHandler> {
         const upload = await db.storage.from(TILES).upload(tilesPath, archive, { contentType: 'application/octet-stream', upsert: true })
         if (upload.error) throw new Error(`uploading tiles: ${upload.error.message}`)
 
+        const aligned = await alignment(v, source)
         const updated = await db
           .from('map_versions')
           .update({
-            status: 'ready',
+            ...aligned,
             scale: source.scale,
             paper_width_mm: source.widthMm,
             paper_height_mm: source.heightMm,
@@ -89,7 +128,13 @@ export function mapJobHandlers(db: SupabaseClient): Record<string, JobHandler> {
           await db.storage.from(TILES).remove([tilesPath])
           return { skipped: 'deleted while processing' }
         }
-        return { tiles: tiles.length, bytes: archive.length, zoomLevels: grid.levels.length }
+        return {
+          tiles: tiles.length,
+          bytes: archive.length,
+          zoomLevels: grid.levels.length,
+          status: aligned.status,
+          alignment: aligned.transform_method,
+        }
       } catch (err) {
         if (err instanceof MapError) {
           await markFailed(v.id, err.code, err.message)
