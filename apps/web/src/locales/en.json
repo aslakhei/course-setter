@@ -54,7 +54,52 @@
     "heading": "Maps",
     "all": "All maps",
     "empty": "No maps yet",
-    "emptyHelp": "Map upload (OCAD and PDF) is coming soon."
+    "emptyAdmin": "Upload an OCAD or PDF map to start setting courses on it.",
+    "emptyMember": "Club admins upload the maps. They show up here when they are ready.",
+    "version": "Version {{number}}",
+    "versionLabel": "Map version",
+    "kind": {
+      "ocad": "OCAD",
+      "pdf": "PDF"
+    },
+    "status": {
+      "uploading": "uploading",
+      "processing": "processing",
+      "needs_alignment": "needs lining up",
+      "ready": "ready",
+      "failed": "failed",
+      "deleted": "deleted"
+    },
+    "processing": "Version {{number}} ({{file}}) is being processed. This takes a minute or two.",
+    "failed": "Version {{number}} ({{file}}) could not be processed:",
+    "errors": {
+      "not_ocad": "the file is not an OCAD map.",
+      "unsupported_ocad_version": "this OCAD format version is not supported. Save the map as OCAD 2018 or OCAD 12 and upload it again.",
+      "not_pdf": "the file is not a PDF.",
+      "unreadable_file": "the file could not be read. It may be damaged.",
+      "empty_map": "the map is empty.",
+      "processing_failed": "something went wrong while processing it. Try uploading it again."
+    },
+    "notFound": "This map does not exist, or it has no version you can see yet.",
+    "backToMaps": "All maps",
+    "deleteVersion": "Delete version",
+    "deleteConfirm": "Delete version {{number}} of {{map}}? Its files are removed for good.",
+    "upload": {
+      "heading": "Upload a map",
+      "help": "An OCAD (.ocd) or PDF map, up to 50 MB.",
+      "file": "Map file",
+      "name": "Map name",
+      "scale": "Map scale",
+      "scaleHelp": "A PDF does not store its scale. Give the scale the map is drawn at, for example 15000 for 1:15 000.",
+      "ocadScale": "The scale is read from the OCAD file.",
+      "badScale": "Give the scale as a whole number between 500 and 100 000.",
+      "wrongType": "Choose an OCAD (.ocd) or PDF file.",
+      "tooLarge": "The file is {{size}}; the limit is 50 MB.",
+      "submit": "Upload",
+      "uploading": "Uploading…",
+      "failed": "The upload failed. Try again.",
+      "done": "Uploaded. The map appears in the list when it has been processed."
+    }
   },
   "events": {
     "heading": "Events",
@@ -118,5 +163,11 @@
   "notFound": {
     "heading": "Page not found",
     "home": "Go to your clubs"
+  },
+  "viewer": {
+    "measure": "Measure",
+    "fit": "Whole map",
+    "clear": "Clear",
+    "measureHelp": "Click on the map to measure; double-click to finish."
   }
 }

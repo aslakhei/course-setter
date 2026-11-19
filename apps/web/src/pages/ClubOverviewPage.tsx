@@ -2,10 +2,12 @@ import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { CopyButton } from '../components/CopyButton.tsx'
 import { CalendarIcon, MapIcon } from '../components/icons.tsx'
-import { Avatar, EmptyState, Panel } from '../components/ui.tsx'
+import { Avatar, EmptyState, Loading, Panel } from '../components/ui.tsx'
 import { inviteUrl, isActive, useInvites } from '../lib/api.ts'
 import { formatDate } from '../lib/format.ts'
+import { useMaps } from '../lib/maps.ts'
 import { useClubContext } from './ClubLayout.tsx'
+import { MapRow } from './ClubMapsPage.tsx'
 
 const MEMBERS_SHOWN = 8
 
@@ -15,26 +17,7 @@ export function ClubOverviewPage() {
 
   return (
     <main className="mx-auto grid max-w-[1200px] grid-cols-[repeat(auto-fit,minmax(min(100%,440px),1fr))] items-start gap-3.5 px-5 pt-4 pb-8">
-      <Panel
-        title={t('maps.heading')}
-        titleId="overview-maps"
-        actions={
-          <Link to="maps" className="text-[13px]">
-            {t('maps.all')}
-          </Link>
-        }
-      >
-        <EmptyState
-          icon={
-            <span className="text-[#a59fa9]">
-              <MapIcon />
-            </span>
-          }
-          title={t('maps.empty')}
-        >
-          {t('maps.emptyHelp')}
-        </EmptyState>
-      </Panel>
+      <OverviewMaps />
 
       <Panel
         title={t('events.recent')}
@@ -85,6 +68,48 @@ export function ClubOverviewPage() {
 
       {isAdmin && <InviteSummary />}
     </main>
+  )
+}
+
+const MAPS_SHOWN = 6
+
+function OverviewMaps() {
+  const { t } = useTranslation()
+  const { club, isAdmin } = useClubContext()
+  const maps = useMaps(club.id)
+  const shown = maps.data?.slice(0, MAPS_SHOWN)
+
+  return (
+    <Panel
+      title={t('maps.heading')}
+      titleId="overview-maps"
+      actions={
+        <Link to="maps" className="text-[13px]">
+          {t('maps.all')}
+        </Link>
+      }
+    >
+      {shown === undefined ? (
+        <Loading label={t('common.loading')} />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          icon={
+            <span className="text-[#a59fa9]">
+              <MapIcon />
+            </span>
+          }
+          title={t('maps.empty')}
+        >
+          {isAdmin ? t('maps.emptyAdmin') : t('maps.emptyMember')}
+        </EmptyState>
+      ) : (
+        <ul className="m-0 list-none p-0">
+          {shown.map((map, i) => (
+            <MapRow key={map.id} map={map} first={i === 0} linkPrefix="maps/" />
+          ))}
+        </ul>
+      )}
+    </Panel>
   )
 }
 

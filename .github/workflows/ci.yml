@@ -72,8 +72,10 @@ jobs:
         run: docker logs worker || true
       - name: Install Chromium for end-to-end tests
         run: pnpm --filter @course-setter/web exec playwright install --with-deps chromium
-      - name: End-to-end tests (web app against local Supabase)
+      - name: End-to-end tests (web app against local Supabase and the worker container)
         run: pnpm test:e2e
+        env:
+          JOB_WORKER_URL: http://worker:8080/jobs/run
       - name: Upload Playwright traces
         if: failure()
         uses: actions/upload-artifact@v4
