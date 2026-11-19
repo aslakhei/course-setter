@@ -43,3 +43,8 @@
     outline-offset: 2px;
   }
 }
+
+/* Course overprint is drawn with Multiply, as when printed: map detail under purple stays visible. */
+.course-layer {
+  mix-blend-mode: multiply;
+}

@@ -1,31 +1,10 @@
 import { type FormEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CalendarIcon } from '../components/icons.tsx'
-import { Button, EmptyState, ErrorMessage, fieldClass, Panel } from '../components/ui.tsx'
+import { Button, ErrorMessage, fieldClass, Panel } from '../components/ui.tsx'
 import { useRenameClub } from '../lib/api.ts'
 import { useClubContext } from './ClubLayout.tsx'
 
 const pageClass = 'mx-auto flex max-w-[1200px] flex-col gap-3.5 px-5 pt-4 pb-8'
-
-export function ClubEventsPage() {
-  const { t } = useTranslation()
-  return (
-    <main className={pageClass}>
-      <Panel title={t('events.heading')} titleId="events-heading">
-        <EmptyState
-          icon={
-            <span className="text-[#a59fa9]">
-              <CalendarIcon />
-            </span>
-          }
-          title={t('events.empty')}
-        >
-          {t('events.emptyHelp')}
-        </EmptyState>
-      </Panel>
-    </main>
-  )
-}
 
 export function ClubSettingsPage() {
   const { t } = useTranslation()

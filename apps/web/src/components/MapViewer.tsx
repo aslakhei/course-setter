@@ -62,16 +62,16 @@ type Props = {
   overlay?: Overlay | null
 }
 
-const extentOf = (grid: CoreTileGrid) => [grid.extent.minX, grid.extent.minY, grid.extent.maxX, grid.extent.maxY]
+export const extentOf = (grid: CoreTileGrid) => [grid.extent.minX, grid.extent.minY, grid.extent.maxX, grid.extent.maxY]
 
-function projectionFor(versionId: string, grid: CoreTileGrid): Projection {
+export function projectionFor(versionId: string, grid: CoreTileGrid): Projection {
   const projection = new Projection({ code: `map-frame-${versionId}`, units: 'm', extent: extentOf(grid) })
   // Registered so OpenLayers can reproject another version's tiles onto this one.
   addProjection(projection)
   return projection
 }
 
-function tileSource(grid: CoreTileGrid, tilesUrl: string, projection: Projection): XYZ {
+export function tileSource(grid: CoreTileGrid, tilesUrl: string, projection: Projection): XYZ {
   const archive = new PMTiles(tilesUrl)
   return new XYZ({
     projection,
