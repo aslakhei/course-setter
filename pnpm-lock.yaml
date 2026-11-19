@@ -178,6 +178,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.6.8
         version: 2.6.8
+      '@course-setter/core':
+        specifier: workspace:*
+        version: link:packages/core
       '@supabase/supabase-js':
         specifier: ^2.119.0
         version: 2.119.0

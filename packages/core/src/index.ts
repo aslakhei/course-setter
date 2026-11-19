@@ -33,7 +33,7 @@ export {
 } from './course/doc.ts'
 export { canRedo, canUndo, createHistory, HISTORY_LIMIT, type History, record, redo, undo } from './course/history.ts'
 export { courseLength, legLengths, legPath, pathLength } from './course/length.ts'
-export { chainTransforms, type MovedDoc, moveDocToVersion } from './course/move.ts'
+export { chainTransforms, type MovedDoc, moveDocToVersion, transformBetween, type VersionLink } from './course/move.ts'
 export { type CourseStop, courseStops, coursesUsing, FIRST_CODE, nextFreeCode } from './course/numbering.ts'
 export {
   allControlsDrawing,

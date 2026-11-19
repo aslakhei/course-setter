@@ -35,3 +35,23 @@ export function moveDocToVersion(doc: EventDoc, transform: Similarity, newExtent
     outside: controls.filter(c => !inside(c.position)).map(c => c.id),
   }
 }
+
+/** What moving needs to know about a map version: which version it was lined up with, and how. */
+export type VersionLink = { id: string; previousVersionId: string | null; transform: Similarity | null }
+
+/**
+ * The transform from version `fromId` to version `toId`, following each version's link back to the one
+ * it was lined up with. Null when the chain does not lead back to `fromId` (a version in between was
+ * deleted, or is not lined up yet): then the event cannot be moved automatically.
+ */
+export function transformBetween(versions: VersionLink[], fromId: string, toId: string): Similarity | null {
+  const byId = new Map(versions.map(v => [v.id, v]))
+  const steps: Similarity[] = []
+  let at = byId.get(toId)
+  while (at && at.id !== fromId) {
+    if (!at.transform || !at.previousVersionId || steps.length >= versions.length) return null
+    steps.unshift(at.transform)
+    at = byId.get(at.previousVersionId)
+  }
+  return at ? chainTransforms(steps) : null
+}

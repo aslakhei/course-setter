@@ -18,6 +18,8 @@ export type Autosave = {
   keepMine: () => void
   /** Start over from a document and revision (after taking someone else's version). */
   reset: (doc: EventDoc, revision: number) => void
+  /** The revision the last save produced (what the next save is based on). */
+  revision: () => number
 }
 
 export function useAutosave(eventId: string, doc: EventDoc, initialRevision: number, save = saveEvent): Autosave {
@@ -106,5 +108,6 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
     setStatus('saved')
   }, [])
 
-  return { status, savedAt, conflict, keepMine, reset }
+  const currentRevision = useCallback(() => revision.current, [])
+  return { status, savedAt, conflict, keepMine, reset, revision: currentRevision }
 }

@@ -79,3 +79,25 @@ export async function removeClub(clubId: string) {
   await admin.from('events').delete().eq('club_id', clubId)
   await admin.from('clubs').delete().eq('id', clubId)
 }
+
+/** Upload another version of a club's map (same file is fine: it lines up as unchanged). */
+export async function uploadNewVersion(admin_: TestUser, clubId: string, mapId: string, ocdFile: string): Promise<string> {
+  const client = await clientFor(admin_)
+  const started = await client.rpc('start_map_upload', { club: clubId, file_name: 'map-v2.ocd', kind: 'ocad', map_id: mapId })
+  if (started.error) throw started.error
+  const { version_id, upload_path } = started.data[0]
+  const { readFileSync } = await import('node:fs')
+  const put = await client.storage
+    .from('map-originals')
+    .upload(upload_path, readFileSync(ocdFile), { contentType: 'application/octet-stream' })
+  if (put.error) throw put.error
+  const finished = await client.rpc('finish_map_upload', { map_version_id: version_id })
+  if (finished.error) throw finished.error
+  for (let i = 0; i < 300; i++) {
+    const { data } = await admin.from('map_versions').select('status').eq('id', version_id).single()
+    if (data?.status === 'ready') return version_id
+    if (data?.status === 'failed' || data?.status === 'needs_alignment') throw new Error(`new version is ${data.status}`)
+    await new Promise(resolve => setTimeout(resolve, 400))
+  }
+  throw new Error('new version was not processed in time')
+}

@@ -35,12 +35,15 @@ export function ConflictDialog({
   conflict,
   eventName,
   busy,
+  canKeepMine,
   onKeepMine,
   onUseTheirs,
 }: {
   conflict: SaveConflict
   eventName: string
   busy: boolean
+  /** False when they also moved the event to another map version: mine cannot replace theirs then. */
+  canKeepMine: boolean
   onKeepMine: () => void
   onUseTheirs: () => void
 }) {
@@ -56,14 +59,18 @@ export function ConflictDialog({
           time: timeFormat.format(new Date(conflict.savedAt)),
         })}
       </p>
+      {canKeepMine ? (
+        <div className="flex flex-col gap-1">
+          <Button variant="primary" size="lg" disabled={busy} onClick={onKeepMine}>
+            {t('editor.conflict.keepMine')}
+          </Button>
+          <span className="text-xs text-muted">{t('editor.conflict.keepMineHelp')}</span>
+        </div>
+      ) : (
+        <p className="m-0 text-[13px]">{t('editor.conflict.movedVersion')}</p>
+      )}
       <div className="flex flex-col gap-1">
-        <Button variant="primary" size="lg" disabled={busy} onClick={onKeepMine}>
-          {t('editor.conflict.keepMine')}
-        </Button>
-        <span className="text-xs text-muted">{t('editor.conflict.keepMineHelp')}</span>
-      </div>
-      <div className="flex flex-col gap-1">
-        <Button size="lg" disabled={busy} onClick={onUseTheirs}>
+        <Button variant={canKeepMine ? 'secondary' : 'primary'} size="lg" disabled={busy} onClick={onUseTheirs}>
           {t('editor.conflict.useTheirs')}
         </Button>
         <span className="text-xs text-muted">
@@ -155,6 +162,49 @@ export function AccessDialog({ event, clubMembers, onClose }: { event: EventDeta
       <Button className="self-end" onClick={onClose}>
         {t('editor.access.close')}
       </Button>
+    </Modal>
+  )
+}
+
+/** Move every course to a newer version of the map, after a look at what falls outside it. */
+export function MoveDialog({
+  number,
+  outside,
+  waitingForSave,
+  busy,
+  error,
+  onMove,
+  onCancel,
+}: {
+  number: number
+  /** Names of controls that end up outside the new map. */
+  outside: string[]
+  waitingForSave: boolean
+  busy: boolean
+  error: string | null
+  onMove: () => void
+  onCancel: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Modal titleId="move-heading" onClose={onCancel}>
+      <h2 id="move-heading" className="m-0 text-base font-semibold">
+        {t('editor.newVersion.heading', { number })}
+      </h2>
+      <p className="m-0">{t('editor.newVersion.body', { number })}</p>
+      {outside.length > 0 && (
+        <p role="alert" className="m-0 text-[13px] text-danger">
+          {t('editor.newVersion.outside', { count: outside.length, names: outside.join(', ') })}
+        </p>
+      )}
+      {waitingForSave && <p className="m-0 text-[13px] text-muted">{t('editor.newVersion.waitForSave')}</p>}
+      {error && <ErrorMessage>{error}</ErrorMessage>}
+      <span className="flex justify-end gap-2">
+        <Button onClick={onCancel}>{t('editor.newVersion.cancel')}</Button>
+        <Button variant="primary" disabled={waitingForSave || busy} onClick={onMove}>
+          {t('editor.newVersion.confirm')}
+        </Button>
+      </span>
     </Modal>
   )
 }
