@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type Locator, type Page, test } from '@playwright/test'
-import { admin, clubWithMap, createUser, deleteUsers, pageFor, removeClub, type TestUser } from './users.ts'
+import { admin, clubWithMap, createUser, deleteUsers, pageFor, removeClub, type TestUser, uploadNewVersion } from './users.ts'
 
 const fixture = fileURLToPath(new URL('../../worker/test/fixtures/ocad/basic-1.ocd', import.meta.url))
 const users: TestUser[] = []
@@ -183,4 +183,45 @@ test('two people editing at once: the second save gets the conflict and nothing 
   // The copy holds Ivan's control, which never reached the original.
   const copy = events?.[1]?.doc as { controls: unknown[] } | undefined
   expect(copy?.controls).toHaveLength(1)
+})
+
+test('an event moves to a newer version of its map and keeps its course', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId, mapVersionId } = await clubWithMap(ada, `E2E move ${randomUUID().slice(0, 8)}`, fixture)
+  clubs.push(clubId)
+
+  const page = await pageFor(browser, ada)
+  await page.goto(`/clubs/${clubId}/events`)
+  await page.getByLabel('Name').fill('Moving training')
+  await page.getByRole('button', { name: 'Create event' }).click()
+  await expect(page.getByText('Test forest · Version 1')).toBeVisible()
+  await newCourse(page, 'H21')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.3, 0.5)
+  await tool(page, 'Control').click()
+  await clickMap(page, 0.5, 0.45)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.7, 0.55)
+  const length = await lengthOf(page)
+  await waitSaved(page)
+
+  // A new version of the map is uploaded meanwhile (the same OCAD file: it lines up as unchanged).
+  const { data: v1 } = await admin.from('map_versions').select('map_id').eq('id', mapVersionId).single()
+  await uploadNewVersion(ada, clubId, v1?.map_id ?? '', fixture)
+  await page.reload()
+  await expect(page.getByText('Version 2 of the map is available.')).toBeVisible()
+  await page.getByRole('button', { name: 'Move to version 2' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText(/Every control and bend moves to the same place on the terrain on version 2/)).toBeVisible()
+  await dialog.getByRole('button', { name: 'Move' }).click()
+
+  // The editor reopens on version 2 with the same course.
+  await expect(page.getByText('Test forest · Version 2')).toBeVisible()
+  await expect(page.getByText('Version 2 of the map is available.')).toHaveCount(0)
+  await expect(courseList(page, 'H21').getByRole('listitem')).toHaveCount(3)
+  await expect(page.getByTestId('course-length')).toHaveText(length)
+  const { data: event } = await admin.from('events').select('map_version_id').eq('club_id', clubId).single()
+  expect(event?.map_version_id).not.toBe(mapVersionId)
 })

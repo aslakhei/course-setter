@@ -1,7 +1,7 @@
 // Data access for maps and map versions. Admins see every version (also while uploading, processing or
 // failed); members only ready ones. Uploads go straight from the browser to Storage, framed by the
 // start_map_upload / finish_map_upload functions (see migration create_maps).
-import type { Similarity, TileGrid } from '@course-setter/core'
+import type { Similarity, TileGrid, VersionLink } from '@course-setter/core'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ApiError } from './api.ts'
 import type { Database } from './database.types.ts'
@@ -41,7 +41,10 @@ export const COMMON_SCALES = [4000, 5000, 7500, 10000, 15000] as const
 
 const SIGNED_URL_SECONDS = 60 * 60
 
+export type VersionWithLink = VersionLink & { version: number; status: VersionStatus; tiles: TileGrid | null }
+
 export const mapKeys = {
+  links: (mapId: string) => ['map-links', mapId] as const,
   maps: (clubId: string) => ['maps', clubId] as const,
   version: (versionId: string) => ['map-version', versionId] as const,
   tilesUrl: (path: string) => ['tiles-url', path] as const,
@@ -235,5 +238,28 @@ export function useSaveAlignment(clubId: string) {
         queryClient.invalidateQueries({ queryKey: mapKeys.maps(clubId) }),
         queryClient.invalidateQueries({ queryKey: mapKeys.version(versionId) }),
       ]),
+  })
+}
+
+/** Every version of a map with how it was lined up with the one before (for moving events). */
+export function useVersionLinks(mapId: string | undefined) {
+  return useQuery({
+    queryKey: mapKeys.links(mapId ?? ''),
+    enabled: Boolean(mapId),
+    queryFn: async (): Promise<VersionWithLink[]> => {
+      const { data, error } = await supabase
+        .from('map_versions')
+        .select('id, version, status, previous_version_id, transform_from_previous, tiles')
+        .eq('map_id', mapId ?? '')
+      if (error) throw new ApiError(error)
+      return (data ?? []).map(v => ({
+        id: v.id,
+        version: v.version,
+        status: v.status,
+        previousVersionId: v.previous_version_id,
+        transform: v.transform_from_previous as Similarity | null,
+        tiles: v.tiles as TileGrid | null,
+      }))
+    },
   })
 }

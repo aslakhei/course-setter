@@ -308,7 +308,8 @@
       "keepMineHelp": "Saves your version. Theirs stays in the event's history.",
       "useTheirs": "Use theirs",
       "useTheirsHelp": "Saves your version as a copy of the event ({{copy}}), then opens theirs.",
-      "copyName": "{{name}} (my copy)"
+      "copyName": "{{name}} (my copy)",
+      "movedVersion": "They also moved the event to another version of the map, so your changes cannot replace theirs. Use theirs: your version is kept as a copy on this map version."
     },
     "access": {
       "heading": "Who can see and edit {{event}}",
@@ -325,6 +326,19 @@
       "close": "Close"
     },
     "outsideMap": "This point is outside the map.",
-    "mapLabel": "Map: click to place or select, drag a selected control to move it"
+    "mapLabel": "Map: click to place or select, drag a selected control to move it",
+    "newVersion": {
+      "available": "Version {{number}} of the map is available.",
+      "move": "Move to version {{number}}",
+      "notLinedUp": "Version {{number}} of the map is available, but it is not lined up with this one yet, so the courses cannot be moved to it.",
+      "heading": "Move the courses to version {{number}}",
+      "body": "Every control and bend moves to the same place on the terrain on version {{number}}, using how that version was lined up. The event then uses version {{number}}.",
+      "outside_one": "This control ends up outside the new map: {{names}}. Check it after moving.",
+      "outside_other": "These controls end up outside the new map: {{names}}. Check them after moving.",
+      "waitForSave": "Saving your changes first…",
+      "confirm": "Move",
+      "cancel": "Cancel",
+      "conflict": "Someone else saved this event meanwhile. Close this and try again once their changes have loaded."
+    }
   }
 }

@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
+    "@course-setter/core": "workspace:*",
     "@supabase/supabase-js": "^2.119.0",
     "@types/node": "^26.6.6",
     "pdf-lib": "^1.17.1",

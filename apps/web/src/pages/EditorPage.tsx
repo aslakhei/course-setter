@@ -3,26 +3,29 @@ import {
   deleteControl,
   type EventDoc,
   moveControl,
+  moveDocToVersion,
   type Point,
   parseDoc,
   removeCourseControl,
   setNumberPosition,
+  transformBetween,
 } from '@course-setter/core'
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Button, ErrorMessage, Loading } from '../components/ui.tsx'
 import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
-import { AccessDialog, ConflictDialog } from '../editor/Dialogs.tsx'
+import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
 import { addBend, clickAction, currentCourse, initialState, moveBend, reducer, removeBend } from '../editor/state.ts'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
 import { type Member, useMembers } from '../lib/api.ts'
-import { type EventDetail, fetchEvent, saveAsCopy, useEvent } from '../lib/events.ts'
+import { type EventDetail, eventKeys, fetchEvent, moveEvent, SaveConflict, saveAsCopy, useEvent } from '../lib/events.ts'
 import { formatScale } from '../lib/format.ts'
-import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl } from '../lib/maps.ts'
+import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl, useVersionLinks } from '../lib/maps.ts'
 
 /** /clubs/:clubId/events/:eventId: the course editor (full window, below the app's top bar). */
 export function EditorPage() {
@@ -49,7 +52,16 @@ export function EditorPage() {
     )
   }
   if (!event.data || !version.data?.tiles || !tilesUrl.data || !members.data) return <Loading label={t('common.loading')} />
-  return <Editor key={event.data.id} event={event.data} version={version.data} tilesUrl={tilesUrl.data} members={members.data} />
+  // A move to another map version starts the editor afresh on that version.
+  return (
+    <Editor
+      key={`${event.data.id}:${event.data.mapVersionId}`}
+      event={event.data}
+      version={version.data}
+      tilesUrl={tilesUrl.data}
+      members={members.data}
+    />
+  )
 }
 
 function Editor({
@@ -77,6 +89,30 @@ function Editor({
   const [hover, setHover] = useState<Hover | null>(null)
   const maps = useMaps(event.clubId)
   const mapName = maps.data?.find(m => m.id === version.mapId)?.name ?? ''
+  const queryClient = useQueryClient()
+
+  // A newer ready version of the map, and whether the courses can be moved to it.
+  const links = useVersionLinks(version.mapId)
+  const newer = (links.data ?? []).filter(v => v.status === 'ready' && v.version > version.version).sort((a, b) => b.version - a.version)[0]
+  const toNewer = newer && links.data ? transformBetween(links.data, version.id, newer.id) : null
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [moving, setMoving] = useState(false)
+  const [moveError, setMoveError] = useState<string | null>(null)
+  const moved = useMemo(() => (toNewer && newer?.tiles ? moveDocToVersion(doc, toNewer, newer.tiles.extent) : null), [doc, toNewer, newer])
+
+  const moveToNewer = async () => {
+    if (!moved || !newer) return
+    setMoving(true)
+    setMoveError(null)
+    try {
+      await moveEvent(event.id, newer.id, moved.doc, autosave.revision())
+      // The editor reopens on the new version (its key includes the map version).
+      await queryClient.invalidateQueries({ queryKey: eventKeys.detail(event.id) })
+    } catch (err) {
+      setMoveError(err instanceof SaveConflict ? t('editor.newVersion.conflict') : t('common.error'))
+      setMoving(false)
+    }
+  }
 
   const edit = useCallback((next: EventDoc, select?: string | null) => dispatch({ type: 'edit', doc: next, select }), [])
 
@@ -136,6 +172,11 @@ function Editor({
       await saveAsCopy(event, t('editor.conflict.copyName', { name: event.name }), doc)
       const theirs = await fetchEvent(event.id)
       if (!theirs) return navigate(`/clubs/${event.clubId}/events`)
+      if (theirs.mapVersionId !== event.mapVersionId) {
+        // They moved the event to another map version: reopen the editor there.
+        queryClient.setQueryData(eventKeys.detail(event.id), theirs)
+        return
+      }
       const theirDoc = parseDoc(theirs.doc, mapScale)
       dispatch({ type: 'load', doc: theirDoc })
       autosave.reset(theirDoc, theirs.revision)
@@ -167,6 +208,17 @@ function Editor({
           <span className="text-[13px] text-muted">
             {mapName} · {t('maps.version', { number: version.version })} · {formatScale(mapScale)}
           </span>
+          {newer &&
+            (toNewer ? (
+              <span className="flex items-center gap-2 rounded bg-brand-50 px-2 py-1 text-[13px]">
+                {t('editor.newVersion.available', { number: newer.version })}
+                <Button size="sm" variant="primary" onClick={() => setMoveOpen(true)}>
+                  {t('editor.newVersion.move', { number: newer.version })}
+                </Button>
+              </span>
+            ) : (
+              <span className="text-[13px] text-muted">{t('editor.newVersion.notLinedUp', { number: newer.version })}</span>
+            ))}
           <span className="grow" />
           <SaveState status={autosave.status} savedAt={autosave.savedAt} />
           <Button onClick={() => setAccessOpen(true)}>{t('editor.invite')}</Button>
@@ -215,10 +267,25 @@ function Editor({
       {autosave.conflict && (
         <ConflictDialog
           conflict={autosave.conflict}
+          canKeepMine={!autosave.conflict.mapVersionId || autosave.conflict.mapVersionId === event.mapVersionId}
           eventName={event.name}
           busy={resolving}
           onKeepMine={autosave.keepMine}
           onUseTheirs={() => void takeTheirs()}
+        />
+      )}
+      {moveOpen && newer && moved && (
+        <MoveDialog
+          number={newer.version}
+          outside={moved.outside.map(id => {
+            const control = doc.controls.find(c => c.id === id)
+            return control ? stopName(control, t) : id
+          })}
+          waitingForSave={autosave.status !== 'saved'}
+          busy={moving}
+          error={moveError}
+          onMove={() => void moveToNewer()}
+          onCancel={() => setMoveOpen(false)}
         />
       )}
       {accessOpen && <AccessDialog event={event} clubMembers={members} onClose={() => setAccessOpen(false)} />}

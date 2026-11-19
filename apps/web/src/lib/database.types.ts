@@ -99,14 +99,14 @@ isOneToOne: false
                   ]
                 },"event_revisions": {
                   Row: {
-                    "doc": NonNullable<Json>,"event_id": string,"revision": number,"saved_at": string,"saved_by": string | null
+                    "doc": NonNullable<Json>,"event_id": string,"map_version_id": string | null,"revision": number,"saved_at": string,"saved_by": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "doc": NonNullable<Json>,"event_id": string,"revision": number,"saved_at"?: string,"saved_by"?: string | null
+                    "doc": NonNullable<Json>,"event_id": string,"map_version_id"?: string | null,"revision": number,"saved_at"?: string,"saved_by"?: string | null
                   }
                   Update: {
-                    "doc"?: NonNullable<Json>,"event_id"?: string,"revision"?: number,"saved_at"?: string,"saved_by"?: string | null
+                    "doc"?: NonNullable<Json>,"event_id"?: string,"map_version_id"?: string | null,"revision"?: number,"saved_at"?: string,"saved_by"?: string | null
                   }
                   Relationships: [
                     {
@@ -114,6 +114,12 @@ isOneToOne: false
       columns: ["event_id"]
 isOneToOne: false
       referencedRelation: "events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "event_revisions_map_version_id_fkey"
+      columns: ["map_version_id"]
+isOneToOne: false
+      referencedRelation: "map_versions"
       referencedColumns: ["id"]
     },{
       foreignKeyName: "event_revisions_saved_by_fkey"
@@ -301,6 +307,9 @@ isOneToOne: false
 { Args: { "invite_token": string }; Returns: {
               "already_member": boolean,"club_id": string,"club_name": string,"status": string
             }[]
+                           },
+"move_event_to_version":
+{ Args: { "doc": Json,"event": string,"expected_revision": number,"map_version": string }; Returns: number
                            },
 "save_event":
 { Args: { "doc": Json,"event": string,"expected_revision": number }; Returns: number

@@ -35,11 +35,14 @@ export class SaveConflict extends Error {
   readonly revision: number
   readonly savedBy: string | null
   readonly savedAt: string
-  constructor(details: { revision: number; savedBy: string | null; savedAt: string }) {
+  /** The map version the event is on now (someone may have moved it). */
+  readonly mapVersionId: string | null
+  constructor(details: { revision: number; savedBy: string | null; savedAt: string; mapVersionId?: string | null }) {
     super('someone else saved this event')
     this.revision = details.revision
     this.savedBy = details.savedBy
     this.savedAt = details.savedAt
+    this.mapVersionId = details.mapVersionId ?? null
   }
 }
 
@@ -146,7 +149,12 @@ export function useRenameEvent(clubId: string, eventId: string) {
 function conflictFrom(error: PostgrestError): SaveConflict | null {
   if (error.hint !== 'conflict') return null
   try {
-    const details = JSON.parse(error.details ?? '{}') as { revision: number; savedBy: string | null; savedAt: string }
+    const details = JSON.parse(error.details ?? '{}') as {
+      revision: number
+      savedBy: string | null
+      savedAt: string
+      mapVersionId?: string
+    }
     return new SaveConflict(details)
   } catch {
     return new SaveConflict({ revision: Number.NaN, savedBy: null, savedAt: new Date().toISOString() })
@@ -156,6 +164,18 @@ function conflictFrom(error: PostgrestError): SaveConflict | null {
 /** Save the document; returns the new revision, or throws SaveConflict when someone else saved first. */
 export async function saveEvent(eventId: string, doc: EventDoc, expectedRevision: number): Promise<number> {
   const { data, error } = await supabase.rpc('save_event', { event: eventId, doc, expected_revision: expectedRevision })
+  if (error) throw conflictFrom(error) ?? new ApiError(error)
+  return data
+}
+
+/** Move the event to a newer version of its map, with its document moved to that version's frame. Returns the new revision. */
+export async function moveEvent(eventId: string, mapVersionId: string, doc: EventDoc, expectedRevision: number): Promise<number> {
+  const { data, error } = await supabase.rpc('move_event_to_version', {
+    event: eventId,
+    map_version: mapVersionId,
+    doc,
+    expected_revision: expectedRevision,
+  })
   if (error) throw conflictFrom(error) ?? new ApiError(error)
   return data
 }
