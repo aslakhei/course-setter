@@ -36,6 +36,18 @@ describe('autosave', () => {
     expect(save).toHaveBeenLastCalledWith('e1', expect.anything(), 2)
   })
 
+  it('is saved again, without saving, when an edit is undone before it was saved', async () => {
+    const save = vi.fn(async (_id: string, _doc: EventDoc, rev: number) => rev + 1)
+    const { result, rerender } = setup(save)
+    rerender({ doc: edit(base, 1) })
+    expect(result.current.status).toBe('unsaved')
+    rerender({ doc: base })
+    expect(result.current.status).toBe('saved')
+    await act(() => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS * 2))
+    expect(save).not.toHaveBeenCalled()
+    expect(result.current.status).toBe('saved')
+  })
+
   it('stops on a conflict until the user keeps their version, then saves over the other revision', async () => {
     const save = vi
       .fn<(id: string, doc: EventDoc, rev: number) => Promise<number>>()

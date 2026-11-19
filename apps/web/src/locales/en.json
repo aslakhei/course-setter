@@ -232,14 +232,15 @@
     "undo": "Undo",
     "redo": "Redo",
     "hint": {
-      "select": "Click a control to select it; drag it, or its number, to move it.",
+      "select": "Click a control to select it, then drag it or its number to move it. Delete takes it out of {{course}}.",
       "start": "Click on the map to place the start{{inCourse}}.",
       "control": "Click on the map to add a control{{inCourse}}, or click an existing one to use it again.",
       "finish": "Click on the map to place the finish{{inCourse}}.",
       "crossingPoint": "Click on the map to add a mandatory crossing point{{inCourse}}.",
       "bend": "Click on a course line to bend it; drag a bend to move it, click it to remove it.",
       "inCourse": " in {{course}}",
-      "reuse": "Click to use {{name}} again in {{course}}."
+      "reuse": "Click to use {{name}} again in {{course}}.",
+      "selectAll": "Click a control to select it, then drag it to move it. Delete removes it from the event."
     },
     "status": {
       "saved": "Saved",
@@ -323,6 +324,7 @@
       "leaveConfirm": "Leave {{event}}? You need someone with access to invite you again.",
       "close": "Close"
     },
-    "outsideMap": "This point is outside the map."
+    "outsideMap": "This point is outside the map.",
+    "mapLabel": "Map: click to place or select, drag a selected control to move it"
   }
 }
