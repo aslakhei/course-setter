@@ -1,13 +1,17 @@
 // Course symbols as drawing primitives in paper millimetres, defined once and drawn by every backend
-// (Canvas in the editor, pdf-lib in the worker). Coordinates are "print paper mm": a map frame
+// (Canvas in the editor, pdf-lib for print, see ../render). Coordinates are "print paper mm": a map frame
 // position in metres × 1000 / printScale, y up, so one primitive list serves screen and paper.
 //
 // Sizes per ISOM 2017-2 section 3.7 (given at 1:15 000) and ISSprOM 2019-2 section 4.7 (given at
 // 1:4 000), enlarged in proportion when printed at a larger scale (150 % at 1:10 000, 300 % at 1:5 000;
-// 133 % at 1:3 000 for sprint). Values marked "to be checked" are not legible in the specifications'
-// drawings and are reviewed with the symbol snapshot tests.
+// 133 % at 1:3 000 for sprint). Where the specifications give no number (the crossing point's curve, how
+// far course lines stop short of a crossing point), the values are taken from the specifications'
+// drawings and match Purple Pen.
+import type { Primitive } from '../render/primitives.ts'
 import { type Course, controlById, type EventDoc, legKey, type Point, type Standard } from './doc.ts'
 import { courseStops } from './numbering.ts'
+
+export type { Primitive, PrimitiveRole } from '../render/primitives.ts'
 
 export type SymbolSizes = {
   /** Start triangle side (701). */
@@ -19,14 +23,24 @@ export type SymbolSizes = {
   finishOuter: number
   /** Line width of all course symbols and course lines (705). */
   lineWidth: number
-  /** Control number height (704, Arial). */
+  /** Height of the digits of a control number (704, "Arial 4.0 mm"). */
   numberHeight: number
-  /** Gap between a course line and the symbol it leads to (705: "there should be gaps"). To be checked. */
+  /** Gap between a control number and the outer edge of its circle. */
+  numberGap: number
+  /** Gap between a course line and the symbol it leads to (705: "there should be gaps"). */
   legGap: number
-  /** Crossing point (710): length of the two outward-curving lines, distance between them, their bulge. To be checked. */
-  crossingLength: number
-  crossingSpacing: number
-  crossingBulge: number
+  /**
+   * Crossing point (710), in (along the leg, across it) coordinates: each of the two lines is a bezier
+   * from (-crossingHalfLength, ±crossingEnd) to (+crossingHalfLength, ±crossingEnd) with its handles at
+   * (∓crossingHandle, ±crossingWaist), so the lines are closest in the middle, like an hourglass ")(".
+   * ISOM's drawing: 3.0 mm long, 0.6 mm clear between the lines at the waist.
+   */
+  crossingHalfLength: number
+  crossingEnd: number
+  crossingWaist: number
+  crossingHandle: number
+  /** How far from a crossing point's centre the course lines stop. */
+  crossingClearance: number
 }
 
 const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
@@ -39,10 +53,13 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       finishOuter: 6.0,
       lineWidth: 0.35,
       numberHeight: 4.0,
+      numberGap: 1.0,
       legGap: 0.6,
-      crossingLength: 4.0,
-      crossingSpacing: 1.2,
-      crossingBulge: 0.5,
+      crossingHalfLength: 1.5,
+      crossingEnd: 0.85,
+      crossingWaist: 0.35,
+      crossingHandle: 0.65,
+      crossingClearance: 2.5,
     },
   },
   issprom: {
@@ -54,10 +71,14 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       finishOuter: 7.0,
       lineWidth: 0.35,
       numberHeight: 4.0,
+      numberGap: 1.0,
       legGap: 0.6,
-      crossingLength: 4.0,
-      crossingSpacing: 1.2,
-      crossingBulge: 0.5,
+      // ISSprOM's crossing point is wider: 0.175 mm more on each side.
+      crossingHalfLength: 1.5,
+      crossingEnd: 1.025,
+      crossingWaist: 0.525,
+      crossingHandle: 0.65,
+      crossingClearance: 2.5,
     },
   },
 }
@@ -68,18 +89,6 @@ export function symbolSizes(standard: Standard, printScale: number): SymbolSizes
   const factor = Math.max(1, scale / printScale)
   return Object.fromEntries(Object.entries(sizes).map(([k, v]) => [k, v * factor])) as SymbolSizes
 }
-
-/**
- * What a primitive draws: a control's symbol, its number, or a course line. `owner` is the control it
- * belongs to (for highlighting and dragging in the editor); course lines have none.
- */
-export type PrimitiveRole = 'symbol' | 'number' | 'leg'
-type Tagged = { role: PrimitiveRole; owner?: string }
-
-export type Primitive =
-  | ({ type: 'circle'; center: Point; radius: number; lineWidth: number } & Tagged)
-  | ({ type: 'polyline'; points: Point[]; lineWidth: number; closed: boolean } & Tagged)
-  | ({ type: 'text'; at: Point; text: string; height: number } & Tagged)
 
 /** Map frame metres -> print paper mm at a print scale. */
 export const toPaperMm = ([x, y]: Point, printScale: number): Point => [(x * 1000) / printScale, (y * 1000) / printScale]
@@ -97,7 +106,7 @@ function clearance(kind: string, s: SymbolSizes): number {
   if (kind === 'start') return s.startSide / Math.sqrt(3) + s.legGap
   if (kind === 'finish') return s.finishOuter / 2 + s.legGap
   if (kind === 'control') return s.controlDiameter / 2 + s.legGap
-  return 0 // the course line runs through a crossing point
+  return s.crossingClearance
 }
 
 /** Equilateral triangle around `center`, one corner pointing along `dir`. */
@@ -116,20 +125,39 @@ function triangle(center: Point, dir: Point, side: number): Point[] {
  */
 function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string): Primitive[] {
   const normal: Point = [-dir[1], dir[0]]
-  const half = s.crossingLength / 2
+  // Local (along the leg, across it) -> paper mm.
+  const at = (u: number, v: number): [number, number] => {
+    const p = along(along(center, dir, u), normal, v)
+    return [p[0], p[1]]
+  }
   return [1, -1].map(side => {
-    const points: Point[] = []
-    for (let i = 0; i <= 12; i++) {
-      const t = -1 + i / 6 // -1 .. 1 along the line
-      const offset = s.crossingSpacing / 2 + s.crossingBulge * t * t // narrowest at the middle, opening towards the ends
-      points.push(along(along(center, dir, t * half), normal, side * offset))
-    }
-    return { type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'symbol', owner } as const
+    const h = s.crossingHalfLength
+    return {
+      type: 'path',
+      commands: [
+        ['M', ...at(-h, side * s.crossingEnd)],
+        [
+          'C',
+          ...at(-s.crossingHandle, side * s.crossingWaist),
+          ...at(s.crossingHandle, side * s.crossingWaist),
+          ...at(h, side * s.crossingEnd),
+        ],
+      ],
+      lineWidth: s.lineWidth,
+      role: 'symbol',
+      owner,
+    } as const
   })
 }
 
-/** Where to put a control number automatically: the direction around the circle farthest from the course lines. */
-function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes): Point {
+/** Width of a number's digits relative to their height (Arial digits advance 0.556 em, digits are 0.719 em high). */
+const DIGIT_WIDTH = 0.556 / 0.719
+
+/**
+ * Where to put a control number automatically: in the direction around the circle farthest from the
+ * course lines, with the digits' box `numberGap` from the circle's outer edge.
+ */
+function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes, text: string): Point {
   let best: Point = [Math.SQRT1_2, Math.SQRT1_2]
   let bestGap = -1
   for (let i = 0; i < 16; i++) {
@@ -141,7 +169,10 @@ function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes): 
       best = dir
     }
   }
-  return along(center, best, s.controlDiameter / 2 + s.numberHeight * 0.7)
+  const halfWidth = (s.numberHeight * DIGIT_WIDTH * text.length) / 2
+  const halfHeight = s.numberHeight / 2
+  const reach = Math.abs(best[0]) * halfWidth + Math.abs(best[1]) * halfHeight // the box's extent towards the circle
+  return along(center, best, s.controlDiameter / 2 + s.lineWidth / 2 + s.numberGap + reach)
 }
 
 /** All symbols of one course, in print paper mm at the course's print scale. */
@@ -198,7 +229,7 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
       const legs = [next, prev].filter((q): q is Point => q !== undefined).map(q => unit(sub(q, p)))
       // A number the setter moved keeps its place relative to the control (in paper mm).
       const moved = course.numberPositions[owner]
-      const numberAt = moved ? ([p[0] + moved[0], p[1] + moved[1]] as Point) : numberPosition(p, legs, s)
+      const numberAt = moved ? ([p[0] + moved[0], p[1] + moved[1]] as Point) : numberPosition(p, legs, s, String(stop.number))
       out.push({ type: 'text', at: numberAt, text: String(stop.number), height: s.numberHeight, role: 'number', owner })
     }
   })
@@ -222,7 +253,14 @@ export function allControlsDrawing(doc: EventDoc, printScale: number): Primitive
     if (c.kind === 'crossingPoint') return crossing(p, [0, 1], s, c.id)
     return [
       { type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth, ...tag },
-      { type: 'text', at: numberPosition(p, [], s), text: String(c.code), height: s.numberHeight, role: 'number', owner: c.id },
+      {
+        type: 'text',
+        at: numberPosition(p, [], s, String(c.code)),
+        text: String(c.code),
+        height: s.numberHeight,
+        role: 'number',
+        owner: c.id,
+      },
     ]
   })
 }

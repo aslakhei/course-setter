@@ -33,7 +33,7 @@ import View from 'ol/View.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
-import { COURSE_PURPLE, primitiveFeatures, replaceFeatures } from './courseLayer.ts'
+import { COURSE_PURPLE, type Drawing, primitiveLayer } from './courseLayer.ts'
 import { legAt, type Tool } from './state.ts'
 
 /** The selected control (and a control a click would reuse) is drawn in this colour instead of purple. */
@@ -81,7 +81,14 @@ export function EditorMap(props: Props) {
   const { versionId, grid, tilesUrl, mapScale, doc, course, selected, tool } = props
   const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
-  const sources = useRef({ pool: new VectorSource(), course: new VectorSource(), overlay: new VectorSource() })
+  // Course symbols are drawn by primitive layers (the faint pool, the course, the highlighted control and
+  // the preview); the crosshair and bend handles are ordinary OpenLayers features on top.
+  const [layers] = useState(() => ({
+    pool: primitiveLayer('course-layer', 0.4),
+    course: primitiveLayer('course-layer'),
+    marks: primitiveLayer(),
+    overlay: new VectorSource(),
+  }))
   const [drag, setDrag] = useState<Drag | null>(null)
   const [hover, setHover] = useState<Hover | null>(null)
   const latest = useRef(props)
@@ -119,9 +126,10 @@ export function EditorMap(props: Props) {
       target: target.current,
       layers: [
         new TileLayer({ source: tileSource(grid, tilesUrl, projection) }),
-        new VectorLayer({ source: sources.current.pool, className: 'course-layer', opacity: 0.4, updateWhileInteracting: true }),
-        new VectorLayer({ source: sources.current.course, className: 'course-layer', updateWhileInteracting: true }),
-        new VectorLayer({ source: sources.current.overlay, updateWhileInteracting: true }),
+        layers.pool.layer,
+        layers.course.layer,
+        layers.marks.layer,
+        new VectorLayer({ source: layers.overlay, updateWhileInteracting: true }),
       ],
       view: new View({
         projection,
@@ -265,7 +273,7 @@ export function EditorMap(props: Props) {
       element.removeEventListener('pointerleave', leave)
       map.setTarget(undefined)
     }
-  }, [versionId, grid, tilesUrl])
+  }, [layers, versionId, grid, tilesUrl])
 
   // No preview once the tool is not placing anything.
   useEffect(() => {
@@ -274,7 +282,6 @@ export function EditorMap(props: Props) {
 
   // Course symbols, the faint pool, the highlighted control, the preview and bend handles.
   useEffect(() => {
-    const { pool, course: courseSource, overlay } = sources.current
     const highlighted = new Set([selected, hover?.snapTo].filter((id): id is string => Boolean(id)))
     const isHighlighted = (p: Primitive) => p.owner !== undefined && highlighted.has(p.owner)
     const scale = shownCourse?.printScale ?? mapScale
@@ -282,37 +289,29 @@ export function EditorMap(props: Props) {
     const poolDrawing = shownCourse
       ? allControlsDrawing({ ...shown, controls: shown.controls.filter(c => !shownCourse.controls.includes(c.id)) }, scale)
       : []
-    replaceFeatures(
-      courseSource,
-      primitiveFeatures(
-        drawing.filter(p => !isHighlighted(p)),
-        scale,
-      ),
-    )
-    replaceFeatures(
-      pool,
-      primitiveFeatures(
-        poolDrawing.filter(p => !isHighlighted(p)),
-        scale,
-      ),
-    )
+    const purple = { color: COURSE_PURPLE }
+    layers.course.setDrawings([{ primitives: drawing.filter(p => !isHighlighted(p)), printScale: scale, paint: purple }])
+    layers.pool.setDrawings([{ primitives: poolDrawing.filter(p => !isHighlighted(p)), printScale: scale, paint: purple }])
 
     // The selected control and its number (and a control a click would reuse) in the highlight colour,
     // with a crosshair on the exact centre.
-    const marks: Feature[] = primitiveFeatures([...drawing, ...poolDrawing].filter(isHighlighted), scale, { color: HIGHLIGHT })
+    const marks: Drawing[] = [
+      { primitives: [...drawing, ...poolDrawing].filter(isHighlighted), printScale: scale, paint: { color: HIGHLIGHT } },
+    ]
+    const handles: Feature[] = []
     for (const id of highlighted) {
       const control = shown.controls.find(c => c.id === id)
       if (!control) continue
       const centre = new Feature(new OlPoint(control.position))
       centre.setStyle(crosshairStyles)
-      marks.push(centre)
+      handles.push(centre)
     }
 
     // A preview of the new symbol at the pointer, when the click would not reuse a control.
     if (hover && !hover.snapTo && placing(tool)) {
       const ghost = { id: 'preview', kind: tool, code: tool === 'control' ? nextFreeCode(shown) : null, position: hover.point }
       const preview = allControlsDrawing({ ...shown, controls: [ghost] }, scale)
-      marks.push(...primitiveFeatures(preview, scale, { color: COURSE_PURPLE, lineDash: [4, 3] }))
+      marks.push({ primitives: preview, printScale: scale, paint: { color: COURSE_PURPLE, lineDash: [4, 3] } })
     }
 
     if (tool === 'bend' && shownCourse) {
@@ -331,12 +330,14 @@ export function EditorMap(props: Props) {
               }),
             }),
           )
-          marks.push(handle)
+          handles.push(handle)
         }
       }
     }
-    replaceFeatures(overlay, marks)
-  }, [shown, shownCourse, selected, hover, tool, mapScale])
+    layers.marks.setDrawings(marks)
+    layers.overlay.clear(true)
+    layers.overlay.addFeatures(handles)
+  }, [layers, shown, shownCourse, selected, hover, tool, mapScale])
 
   return (
     <div
