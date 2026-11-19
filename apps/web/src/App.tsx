@@ -1,14 +1,21 @@
+import { lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, Route, Routes } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
+import { Loading } from './components/ui.tsx'
 import { ClubLayout } from './pages/ClubLayout.tsx'
+import { ClubMapsPage } from './pages/ClubMapsPage.tsx'
 import { ClubMembersPage } from './pages/ClubMembersPage.tsx'
 import { ClubOverviewPage } from './pages/ClubOverviewPage.tsx'
-import { ClubEventsPage, ClubMapsPage, ClubSettingsPage } from './pages/ClubSimplePages.tsx'
+import { ClubEventsPage, ClubSettingsPage } from './pages/ClubSimplePages.tsx'
 import { ClubsPage } from './pages/ClubsPage.tsx'
 import { InvitePage } from './pages/InvitePage.tsx'
 
+// The map page brings OpenLayers; load it only when a map is opened.
+const MapPage = lazy(() => import('./pages/MapPage.tsx').then(m => ({ default: m.MapPage })))
+
 export function App() {
+  const { t } = useTranslation()
   return (
     <Routes>
       <Route element={<AppShell />}>
@@ -16,6 +23,14 @@ export function App() {
         <Route path="clubs/:clubId" element={<ClubLayout />}>
           <Route index element={<ClubOverviewPage />} />
           <Route path="maps" element={<ClubMapsPage />} />
+          <Route
+            path="maps/:mapId"
+            element={
+              <Suspense fallback={<Loading label={t('common.loading')} />}>
+                <MapPage />
+              </Suspense>
+            }
+          />
           <Route path="events" element={<ClubEventsPage />} />
           <Route path="members" element={<ClubMembersPage />} />
           <Route path="settings" element={<ClubSettingsPage />} />

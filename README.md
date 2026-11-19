@@ -61,6 +61,7 @@ Everything users create belongs to a club, and row-level security limits it to t
 - Anyone signed in can create a club (`create_club()`) and becomes its first admin. A club always keeps at least one admin.
 - Admins invite people with links: a row in `club_invites` whose random token goes into `/invite/<token>`. Links last 14 days by default (at most 90), can be revoked and can be used by many people. `invite_info()` shows what a link leads to; `accept_invite()` joins as member.
 - Members see the club, the other members and their name and avatar (never email addresses). Admins also rename the club, change roles, remove members and manage invite links. Anyone can leave.
+- Maps: admins upload OCAD or PDF maps on the club's Maps tab (a PDF needs its scale); the worker processes them and members open them in the map viewer (OpenLayers in the map's own metre frame, with a scale bar and a measuring tool).
 - Map files live in two private Storage buckets, under `<club_id>/<map_id>/<version_id>/...`. `map-originals`: club admins upload, only the worker reads (users never download an original). `map-tiles`: only the worker writes, club members read (signed URLs for the editor).
 
 ## Worker
