@@ -72,6 +72,8 @@ An event (a training or race) belongs to a club and is set on one map version; i
 - `create_event()` starts an empty document on a ready map version. `save_event(event, doc, expected_revision)` saves only when nobody else saved since `expected_revision`; otherwise it fails with hint `conflict` and details `{revision, savedBy, savedAt}`. Every saved revision is kept in `event_revisions`.
 - A map version that events use cannot be deleted.
 
+The course model is in `packages/core/src/course/`: the document schema (zod), editing commands (pure functions that return a new document, which is what undo/redo builds on), control codes and course numbering, course length (straight legs through crossing points and bend points, in ground metres), course symbols as drawing primitives in paper mm sized per ISOM 2017-2 / ISSprOM 2019-2 for the print scale, and moving an event to a newer map version. `purple-pen.test.ts` compares our lengths with a Purple Pen event in `spikes/maps/` (local only, skipped when absent).
+
 ## Worker
 
 Background work (map processing, tiles, PDF export) goes through the `jobs` table. Inserting a job makes the database call the worker's `POST /jobs/run` (trigger + `pg_net`, with a shared secret in the `x-worker-secret` header); the worker claims due jobs one at a time, runs them and reports the result. Failed jobs are retried with backoff up to `max_attempts`, then marked `failed`. A `pg_cron` sweep every minute requeues jobs whose worker died and pokes the worker when retries are due. The `ping` job type checks the whole path (`{"fail": true}` makes it fail).
