@@ -1,4 +1,13 @@
-import { addCourse, deleteControl, type EventDoc, moveControl, type Point, parseDoc, removeCourseControl } from '@course-setter/core'
+import {
+  addCourse,
+  deleteControl,
+  type EventDoc,
+  moveControl,
+  type Point,
+  parseDoc,
+  removeCourseControl,
+  setNumberPosition,
+} from '@course-setter/core'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams } from 'react-router'
@@ -6,7 +15,7 @@ import { Button, ErrorMessage, Loading } from '../components/ui.tsx'
 import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
 import { AccessDialog, ConflictDialog } from '../editor/Dialogs.tsx'
-import { EditorMap } from '../editor/EditorMap.tsx'
+import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
 import { addBend, clickAction, currentCourse, initialState, moveBend, reducer, removeBend } from '../editor/state.ts'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
@@ -65,6 +74,7 @@ function Editor({
   const [accessOpen, setAccessOpen] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [hover, setHover] = useState<Hover | null>(null)
   const maps = useMaps(event.clubId)
   const mapName = maps.data?.find(m => m.id === version.mapId)?.name ?? ''
 
@@ -130,7 +140,12 @@ function Editor({
   }
 
   const inCourse = course ? t('editor.hint.inCourse', { course: course.name }) : ''
-  const hint = notice ?? t(`editor.hint.${state.tool}`, { inCourse })
+  const snapped = hover?.snapTo ? doc.controls.find(c => c.id === hover.snapTo) : undefined
+  const hint =
+    notice ??
+    (snapped && course
+      ? t('editor.hint.reuse', { name: stopName(snapped, t), course: course.name })
+      : t(`editor.hint.${state.tool}`, { inCourse }))
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col">
@@ -172,6 +187,8 @@ function Editor({
             onMoveControl={(id, point) => edit(moveControl(doc, id, point))}
             onMoveBend={(key, index, point) => course && edit(moveBend(doc, course, key, index, point))}
             onRemoveBend={(key, index) => course && edit(removeBend(doc, course, key, index))}
+            onMoveNumber={(id, offset) => course && edit(setNumberPosition(doc, course.id, id, offset))}
+            onHover={setHover}
           />
         </main>
         <CoursePanel

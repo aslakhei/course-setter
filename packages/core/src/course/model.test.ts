@@ -132,7 +132,7 @@ describe('course length', () => {
 
   it('is zero for an empty or one-stop course', () => {
     const doc = emptyDoc(15000)
-    expect(courseLength(doc, { id: 'x', name: 'x', controls: [], printScale: 15000, bends: {} })).toBe(0)
+    expect(courseLength(doc, { id: 'x', name: 'x', controls: [], printScale: 15000, bends: {}, numberPositions: {} })).toBe(0)
   })
 
   it('keys bends by the leg', () => {

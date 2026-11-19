@@ -225,18 +225,21 @@
       "control": "Control",
       "finish": "Finish",
       "crossingPoint": "Crossing point",
-      "bend": "Bend leg"
+      "bend": "Bend leg",
+      "special": "Special symbols",
+      "moreLater": "More symbols (map issue point, marked route, out of bounds, first aid, refreshments) come with special markings."
     },
     "undo": "Undo",
     "redo": "Redo",
     "hint": {
-      "select": "Click a control to select it; drag it to move it.",
+      "select": "Click a control to select it; drag it, or its number, to move it.",
       "start": "Click on the map to place the start{{inCourse}}.",
       "control": "Click on the map to add a control{{inCourse}}, or click an existing one to use it again.",
       "finish": "Click on the map to place the finish{{inCourse}}.",
       "crossingPoint": "Click on the map to add a mandatory crossing point{{inCourse}}.",
       "bend": "Click on a course line to bend it; drag a bend to move it, click it to remove it.",
-      "inCourse": " in {{course}}"
+      "inCourse": " in {{course}}",
+      "reuse": "Click to use {{name}} again in {{course}}."
     },
     "status": {
       "saved": "Saved",

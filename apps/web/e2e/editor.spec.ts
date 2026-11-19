@@ -77,6 +77,11 @@ test('set a course on the map, share a control with a second course, and keep it
   await tool(page, 'Start').click()
   await clickMap(page, 0.2, 0.55)
   await tool(page, 'Control').click()
+  // Hovering over control 32 previews the snap: the click will reuse it.
+  const mapBox = await page.getByTestId('editor-map').boundingBox()
+  if (!mapBox) throw new Error('no map')
+  await page.mouse.move(mapBox.x + mapBox.width * 0.55 + 3, mapBox.y + mapBox.height * 0.42 + 2)
+  await expect(page.getByRole('toolbar', { name: 'Tools' }).getByText('Click to use Code 32 again in D16.')).toBeVisible()
   await clickMap(page, 0.55, 0.42)
   await tool(page, 'Finish').click()
   await clickMap(page, 0.8, 0.58)
