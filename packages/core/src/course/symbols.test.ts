@@ -73,25 +73,53 @@ describe('courseDrawing', () => {
     expect(dy).toBeGreaterThan(0)
   })
 
-  it('draws a crossing point as two curved lines across which the course line runs', () => {
+  /** Course A with a crossing point x inserted between c and the finish, at (600, 0) m = (40, 0) mm. */
+  const withCrossing = () => {
     let d = testEvent()
     d = { ...d, controls: [...d.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 0] }] }
     d = insertCourseControl(d, 'A', 'x', 4)
-    const lines = of(courseDrawing(d, courseById(d, 'A')), 'polyline').filter(p => !p.closed)
-    // 5 legs + 2 crossing lines.
-    expect(lines).toHaveLength(7)
+    return courseDrawing(d, courseById(d, 'A'))
+  }
+
+  it('stops the course lines short of a crossing point (2.5 mm from its centre, as Purple Pen)', () => {
+    const drawing = withCrossing()
+    const legs = drawing.filter(p => p.role === 'leg')
+    expect(legs).toHaveLength(5)
+    const x = toPaperMm([600, 0], 15000)
+    const ends = of(legs, 'polyline').flatMap(l => [l.points[0], l.points.at(-1)] as Point[])
+    const nearX = ends.map(([px, py]) => Math.hypot(px - x[0], py - x[1])).filter(d => d < 5)
+    expect(nearX).toHaveLength(2)
+    for (const d of nearX) expect(d).toBeCloseTo(2.5, 9)
   })
 
-  it('draws the crossing point as an hourglass: the two lines are closest in the middle', () => {
-    let d = testEvent()
-    d = { ...d, controls: [...d.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 0] }] }
-    d = insertCourseControl(d, 'A', 'x', 4)
-    const lines = of(courseDrawing(d, courseById(d, 'A')), 'polyline').filter(p => p.owner === 'x')
+  it('draws the crossing point as an hourglass: 3.0 mm long, 0.6 mm clear between the lines at the waist', () => {
+    const lines = of(withCrossing(), 'path').filter(p => p.owner === 'x')
     expect(lines).toHaveLength(2)
-    const [left, right] = lines.map(l => l.points)
-    const gap = (i: number) => Math.hypot((left?.[i]?.[0] ?? 0) - (right?.[i]?.[0] ?? 0), (left?.[i]?.[1] ?? 0) - (right?.[i]?.[1] ?? 0))
-    expect(gap(6)).toBeCloseTo(1.2, 9) // middle: the spacing
-    expect(gap(0)).toBeGreaterThan(gap(6) + 0.9) // ends: wider by twice the bulge
+    // Each line is one bezier; its middle is at t = 0.5.
+    const middle = (p: (typeof lines)[number]): Point => {
+      const [m, c] = p.commands as [['M', number, number], ['C', number, number, number, number, number, number]]
+      return [(m[1] + 3 * c[1] + 3 * c[3] + c[5]) / 8, (m[2] + 3 * c[2] + 3 * c[4] + c[6]) / 8]
+    }
+    const end = (p: (typeof lines)[number]): Point => {
+      const c = p.commands[1] as ['C', number, number, number, number, number, number]
+      return [c[5], c[6]]
+    }
+    const start = (p: (typeof lines)[number]): Point => {
+      const m = p.commands[0] as ['M', number, number]
+      return [m[1], m[2]]
+    }
+    const [left, right] = lines as [(typeof lines)[number], (typeof lines)[number]]
+    const distance = (a: Point, b: Point) => Math.hypot(a[0] - b[0], a[1] - b[1])
+    expect(distance(middle(left), middle(right)) - 0.35).toBeCloseTo(0.6, 9) // clear space at the waist
+    expect(distance(end(left), end(right))).toBeCloseTo(1.7, 9) // wider at the ends
+    expect(distance(start(left), end(left))).toBeCloseTo(3.0, 9)
+  })
+
+  it('makes the sprint crossing point 0.175 mm wider on each side', () => {
+    const sprint = symbolSizes('issprom', 4000)
+    const forest = symbolSizes('isom', 15000)
+    expect(sprint.crossingWaist - forest.crossingWaist).toBeCloseTo(0.175, 9)
+    expect(sprint.crossingEnd - forest.crossingEnd).toBeCloseTo(0.175, 9)
   })
 
   it('tags every symbol and number with its control, and course lines as legs', () => {
@@ -116,6 +144,20 @@ describe('courseDrawing', () => {
   it('uses the course print scale: the 1:10 000 course gets 150 % symbols', () => {
     const short = courseDrawing(doc, courseById(doc, 'B'))
     expect(of(short, 'circle')[0]?.radius).toBeCloseTo(3.75, 9)
+  })
+
+  it('sizes numbers by their digit height and keeps their box 1 mm clear of the circle', () => {
+    const all = allControlsDrawing(doc, 15000)
+    const number = of(all, 'text').find(t => t.owner === 'a')
+    expect(number?.height).toBe(4) // ISOM "Arial 4.0 mm": the digits are 4 mm high
+    // No course lines: the number goes up-right at 45°. Its box (two digits, 0.774 × height wide each)
+    // touches a line 1 mm outside the circle's outer edge (radius 2.5 + half the 0.35 line width).
+    const a = toPaperMm([300, 400], 15000)
+    const [dx, dy] = [(number?.at[0] ?? 0) - a[0], (number?.at[1] ?? 0) - a[1]]
+    expect(Math.atan2(dy, dx)).toBeCloseTo(Math.PI / 4, 9)
+    const halfWidth = (4 * (0.556 / 0.719) * 2) / 2
+    const reach = Math.SQRT1_2 * halfWidth + Math.SQRT1_2 * 2
+    expect(Math.hypot(dx, dy) - reach).toBeCloseTo(2.5 + 0.175 + 1.0, 9)
   })
 
   it('shows every control with its code in the all-controls view', () => {

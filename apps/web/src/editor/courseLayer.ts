@@ -1,60 +1,68 @@
-// Draw course symbol primitives (paper mm, from @course-setter/core) on an OpenLayers vector layer.
-// Line widths and text sizes are paper sizes at the course's print scale, so they grow and shrink with
-// the zoom as they would on paper; the editor shows the course as it will be printed.
-import type { Primitive, TileGrid } from '@course-setter/core'
-import Feature from 'ol/Feature.js'
-import { Circle as CircleGeometry, LineString, Point, Polygon } from 'ol/geom.js'
-import type VectorSource from 'ol/source/Vector.js'
-import { Fill, Stroke, Style, Text } from 'ol/style.js'
+// An OpenLayers layer that draws course symbol primitives (paper mm, from @course-setter/core) with the
+// same Canvas 2D backend the print snapshots are checked against. Line widths and text sizes are paper
+// sizes at the course's print scale, so they grow and shrink with the zoom as they would on paper: the
+// editor shows the course as it will be printed.
+//
+// The layer draws into its own canvas with the frame's exact map -> pixel transform, so symbols stay in
+// place while panning and zooming and nothing is clipped when only part of a course is in view.
+import { type DeviceTransform, drawPrimitives, type Primitive, type TileGrid } from '@course-setter/core'
+import Layer from 'ol/layer/Layer.js'
 
 /** Course overprint purple (ISOM "purple", close to Pantone Purple C), drawn with Multiply. */
 export const COURSE_PURPLE = '#b5179e'
 
+/** Colour, and an optional dash pattern in CSS pixels that replaces the primitives' own (previews). */
 export type Paint = { color: string; lineDash?: number[] }
 
-const mmToMetres = (mm: number, printScale: number) => (mm * printScale) / 1000
+/** Primitives in paper mm at `printScale`, drawn in one colour. */
+export type Drawing = { primitives: Primitive[]; printScale: number; paint: Paint }
 
-/** Features for `primitives` (in paper mm at `printScale`), each styled for whatever zoom is shown. */
-export function primitiveFeatures(
-  primitives: Primitive[],
-  printScale: number,
-  paintOf: Paint | ((p: Primitive) => Paint) = { color: COURSE_PURPLE },
-): Feature[] {
-  const m = (mm: number) => mmToMetres(mm, printScale)
-  const point = ([x, y]: [number, number]): [number, number] => [m(x), m(y)]
-  return primitives.map(p => {
-    const paint = typeof paintOf === 'function' ? paintOf(p) : paintOf
-    const feature =
-      p.type === 'circle'
-        ? new Feature(new CircleGeometry(point(p.center), m(p.radius)))
-        : p.type === 'polyline'
-          ? new Feature(
-              p.closed
-                ? new Polygon([[...p.points.map(point), point(p.points[0] as [number, number])]])
-                : new LineString(p.points.map(point)),
-            )
-          : new Feature(new Point(point(p.at)))
-    const widthM = p.type === 'text' ? 0 : m(p.lineWidth)
-    const heightM = p.type === 'text' ? m(p.height) : 0
-    feature.setStyle((_f, resolution) =>
-      p.type === 'text'
-        ? new Style({
-            text: new Text({
-              text: p.text,
-              font: `${Math.max(1, heightM / resolution)}px Arial, sans-serif`,
-              fill: new Fill({ color: paint.color }),
-              textBaseline: 'middle',
-            }),
-          })
-        : new Style({ stroke: new Stroke({ color: paint.color, width: Math.max(1, widthM / resolution), lineDash: paint.lineDash }) }),
-    )
-    return feature
+export type PrimitiveLayer = { layer: Layer; setDrawings: (drawings: Drawing[]) => void }
+
+/** A layer showing whatever drawings were last set. `className` lets CSS blend it (Multiply for overprint). */
+export function primitiveLayer(className = '', opacity = 1): PrimitiveLayer {
+  const canvas = document.createElement('canvas')
+  canvas.className = className
+  Object.assign(canvas.style, { position: 'absolute', left: '0', top: '0', opacity: String(opacity), pointerEvents: 'none' })
+  let drawings: Drawing[] = []
+
+  const layer = new Layer({
+    render: frameState => {
+      const [width = 0, height = 0] = frameState.size
+      const ratio = frameState.pixelRatio
+      const [w, h] = [Math.round(width * ratio), Math.round(height * ratio)]
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w
+        canvas.height = h
+        canvas.style.width = `${width}px`
+        canvas.style.height = `${height}px`
+      }
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return canvas
+      ctx.clearRect(0, 0, w, h)
+      // Map metres -> CSS pixels for this frame, then paper mm -> metres and CSS -> device pixels.
+      const [a = 1, b = 0, c = 0, d = 1, e = 0, f = 0] = frameState.coordinateToPixelTransform
+      for (const drawing of drawings) {
+        const k = (drawing.printScale / 1000) * ratio
+        const transform: DeviceTransform = [a * k, b * k, c * k, d * k, e * ratio, f * ratio]
+        drawPrimitives(ctx, drawing.primitives, {
+          transform,
+          color: drawing.paint.color,
+          dashPx: drawing.paint.lineDash?.map(v => v * ratio),
+          minLineWidthPx: ratio,
+        })
+      }
+      return canvas
+    },
   })
-}
 
-export function replaceFeatures(source: VectorSource, features: Feature[]) {
-  source.clear(true)
-  source.addFeatures(features)
+  return {
+    layer,
+    setDrawings: next => {
+      drawings = next
+      layer.changed()
+    },
+  }
 }
 
 /** Whether a frame point lies on the map version. */
