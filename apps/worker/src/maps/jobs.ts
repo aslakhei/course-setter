@@ -86,7 +86,7 @@ export function mapJobHandlers(db: SupabaseClient): Record<string, JobHandler> {
     async process_map_version(job) {
       const v = await version(job)
       // Deleted (or already handled) since the job was queued.
-      if (!v || v.status !== 'processing') return { skipped: v?.status ?? 'missing' }
+      if (v?.status !== 'processing') return { skipped: v?.status ?? 'missing' }
       try {
         const download = await db.storage.from(ORIGINALS).download(v.original_path)
         if (download.error) throw new Error(`downloading ${v.original_path}: ${download.error.message}`)

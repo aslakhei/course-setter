@@ -97,8 +97,13 @@ function Editor({
   // Keyboard: undo/redo, delete the selection, Escape back to selecting.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Leave keys alone only while typing (a text field) or in a dialog; a focused button, drop-down or
+      // the map still gets the shortcuts.
       const target = e.target as HTMLElement
-      if (target.closest('input, select, textarea, [role="dialog"]')) return
+      const typing =
+        target.closest('textarea, [contenteditable="true"]') ||
+        (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
+      if (typing || target.closest('[role="dialog"]')) return
       const mod = e.ctrlKey || e.metaKey
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -145,7 +150,11 @@ function Editor({
     notice ??
     (snapped && course
       ? t('editor.hint.reuse', { name: stopName(snapped, t), course: course.name })
-      : t(`editor.hint.${state.tool}`, { inCourse }))
+      : state.tool === 'select'
+        ? course
+          ? t('editor.hint.select', { course: course.name })
+          : t('editor.hint.selectAll')
+        : t(`editor.hint.${state.tool}`, { inCourse }))
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col">

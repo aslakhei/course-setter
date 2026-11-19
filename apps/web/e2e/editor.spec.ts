@@ -99,6 +99,9 @@ test('set a course on the map, share a control with a second course, and keep it
   await tool(page, 'Select').click()
   const box = await page.getByTestId('editor-map').boundingBox()
   if (!box) throw new Error('no map')
+  // Dragging an unselected control pans the map instead; select it first.
+  await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.42)
+  await expect(page.getByText('Selected: Code 32')).toBeVisible()
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.42)
   await page.mouse.down()
   await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5, { steps: 8 })
@@ -110,6 +113,15 @@ test('set a course on the map, share a control with a second course, and keep it
   // Undo puts it back.
   await page.getByRole('button', { name: 'Undo' }).click()
   await expect.poll(() => lengthOf(page)).toBe(h21Before)
+  await waitSaved(page)
+
+  // Delete takes the selected control out of the course (it stays in the event); undo puts it back.
+  await courseList(page, 'H21').getByText('Code 33').click()
+  await page.keyboard.press('Delete')
+  await expect(courseList(page, 'H21').getByRole('listitem')).toHaveCount(4)
+  await expect(page.getByRole('combobox', { name: 'Course', exact: true }).locator('option').first()).toHaveText('All controls (5)')
+  await page.keyboard.press('Control+z')
+  await expect(courseList(page, 'H21').getByRole('listitem')).toHaveCount(5)
   await waitSaved(page)
 
   // Reload: the courses are still there.

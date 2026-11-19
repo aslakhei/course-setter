@@ -31,6 +31,7 @@ import VectorSource from 'ol/source/Vector.js'
 import { Fill, RegularShape, Stroke, Style } from 'ol/style.js'
 import View from 'ol/View.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
 import { COURSE_PURPLE, primitiveFeatures, replaceFeatures } from './courseLayer.ts'
 import { legAt, type Tool } from './state.ts'
@@ -78,6 +79,7 @@ const crosshairStyles = [
 
 export function EditorMap(props: Props) {
   const { versionId, grid, tilesUrl, mapScale, doc, course, selected, tool } = props
+  const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
   const sources = useRef({ pool: new VectorSource(), course: new VectorSource(), overlay: new VectorSource() })
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -183,14 +185,17 @@ export function EditorMap(props: Props) {
         const coordinate = e.coordinate as Point
         const { tool: t } = latest.current
         if (t === 'select') {
+          // Only the selected control (or its number) can be dragged; anything else pans the map, and a
+          // click selects it first. No accidental moves while panning.
+          const selectedId = latest.current.selected
+          if (!selectedId) return false
           const number = hitNumber(coordinate)
-          if (number) {
+          if (number && number.id === selectedId) {
             dragging = { kind: 'number', id: number.id, point: coordinate, from: coordinate, startMm: number.atMm }
             return true
           }
-          const id = hitControl(coordinate)
-          if (!id) return false
-          dragging = { kind: 'control', id, point: coordinate, from: coordinate }
+          if (hitControl(coordinate) !== selectedId) return false
+          dragging = { kind: 'control', id: selectedId, point: coordinate, from: coordinate }
           return true
         }
         if (t === 'bend') {
@@ -337,7 +342,12 @@ export function EditorMap(props: Props) {
     <div
       ref={target}
       data-testid="editor-map"
-      className={`absolute inset-0 bg-white ${placing(tool) || tool === 'bend' ? 'cursor-crosshair' : ''}`}
+      // A press on the map takes keyboard focus away from any form field, so shortcuts (Delete,
+      // Ctrl+Z) reach the editor instead of a drop-down or input that still had focus.
+      role="application"
+      aria-label={t('editor.mapLabel')}
+      onPointerDown={() => (document.activeElement as HTMLElement | null)?.blur()}
+      className={`absolute inset-0 bg-white focus:outline-none ${placing(tool) || tool === 'bend' ? 'cursor-crosshair' : ''}`}
     />
   )
 }

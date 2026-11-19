@@ -34,7 +34,11 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
 
   const run = useCallback(async () => {
     clearTimeout(timer.current)
-    if (saving.current || blocked.current || latest.current === savedDoc.current) return
+    if (saving.current || blocked.current) return
+    if (latest.current === savedDoc.current) {
+      setStatus('saved') // e.g. an edit was undone before it was saved
+      return
+    }
     saving.current = true
     setStatus('saving')
     const toSave = latest.current
@@ -60,7 +64,13 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
   }, [eventId, save])
 
   useEffect(() => {
-    if (doc === savedDoc.current || blocked.current) return
+    if (blocked.current) return
+    if (doc === savedDoc.current) {
+      // Back to what is saved (an edit undone before it was saved): nothing to save.
+      clearTimeout(timer.current)
+      setStatus(s => (s === 'saving' ? s : 'saved'))
+      return
+    }
     setStatus(s => (s === 'saving' ? s : 'unsaved'))
     clearTimeout(timer.current)
     timer.current = setTimeout(() => void run(), AUTOSAVE_DELAY_MS)
