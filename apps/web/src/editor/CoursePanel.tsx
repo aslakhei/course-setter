@@ -5,6 +5,7 @@ import {
   courseLength,
   courseStops,
   coursesUsing,
+  DEFAULT_CELL_SIZE,
   deleteControl,
   deleteCourse,
   type EventDoc,
@@ -18,6 +19,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, fieldClass } from '../components/ui.tsx'
 import { formatScale } from '../lib/format.ts'
+import { DescriptionsTab } from './DescriptionsTab.tsx'
 import { ALL_CONTROLS, type EditorState } from './state.ts'
 
 type Tab = 'controls' | 'descriptions' | 'settings'
@@ -26,13 +28,15 @@ export const formatKm = (metres: number) => (metres / 1000).toFixed(1)
 
 type Props = {
   state: EditorState
+  /** The event's name, the title of the description sheets. */
+  eventName: string
   onCourse: (courseId: string) => void
   onSelect: (controlId: string | null) => void
   onEdit: (doc: EventDoc, select?: string | null) => void
   onNewCourse: (name: string) => void
 }
 
-export function CoursePanel({ state, onCourse, onSelect, onEdit, onNewCourse }: Props) {
+export function CoursePanel({ state, eventName, onCourse, onSelect, onEdit, onNewCourse }: Props) {
   const { t } = useTranslation()
   const doc = state.history.present
   const course = state.courseId === ALL_CONTROLS ? null : (doc.courses.find(c => c.id === state.courseId) ?? null)
@@ -122,7 +126,7 @@ export function CoursePanel({ state, onCourse, onSelect, onEdit, onNewCourse }: 
       ) : tab === 'controls' ? (
         <StopList doc={doc} course={course} selected={state.selected} onSelect={onSelect} onEdit={onEdit} />
       ) : tab === 'descriptions' ? (
-        <p className="m-0 px-3 py-3 text-[13px] text-muted">{t('editor.descriptionsLater')}</p>
+        <DescriptionsTab doc={doc} course={course} title={eventName} selected={state.selected} onSelect={onSelect} onEdit={onEdit} />
       ) : (
         <CourseSettings doc={doc} course={course} onEdit={onEdit} onDeleted={() => onCourse(ALL_CONTROLS)} />
       )}
@@ -241,6 +245,7 @@ function PoolList({ doc, selected, onSelect }: { doc: EventDoc; selected: string
 }
 
 const PRINT_SCALES = [4000, 5000, 7500, 10000, 15000] as const
+const CELL_SIZES = [5, 5.5, 6, 6.5, 7] as const
 
 function CourseSettings({
   doc,
@@ -256,6 +261,8 @@ function CourseSettings({
   const { t } = useTranslation()
   const [name, setName] = useState(course.name)
   useEffect(() => setName(course.name), [course.name])
+  const [climb, setClimb] = useState(course.climb == null ? '' : String(course.climb))
+  useEffect(() => setClimb(course.climb == null ? '' : String(course.climb)), [course.climb])
   const scales = PRINT_SCALES.includes(course.printScale as (typeof PRINT_SCALES)[number])
     ? PRINT_SCALES
     : [...PRINT_SCALES, course.printScale]
@@ -288,6 +295,43 @@ function CourseSettings({
         ))}
       </select>
       <span className="text-xs text-muted">{t('editor.settings.printScaleHelp')}</span>
+      <label htmlFor="course-climb" className="mt-1 text-[13px] font-semibold">
+        {t('editor.settings.climb')}
+      </label>
+      <input
+        id="course-climb"
+        className={`${fieldClass} w-24`}
+        inputMode="numeric"
+        value={climb}
+        onChange={e => setClimb(e.target.value.replace(/\D/g, '').slice(0, 4))}
+        onBlur={() => {
+          const value = climb === '' ? null : Number(climb)
+          if (value !== (course.climb ?? null)) onEdit(updateCourse(doc, course.id, { climb: value }))
+        }}
+        aria-describedby="course-climb-help"
+      />
+      <span id="course-climb-help" className="text-xs text-muted">
+        {t('editor.settings.climbHelp')}
+      </span>
+      <label htmlFor="course-cell-size" className="mt-1 text-[13px] font-semibold">
+        {t('editor.settings.cellSize')}
+      </label>
+      <select
+        id="course-cell-size"
+        className={fieldClass}
+        value={course.descriptionCellSize ?? DEFAULT_CELL_SIZE}
+        onChange={e => onEdit(updateCourse(doc, course.id, { descriptionCellSize: Number(e.target.value) }))}
+        aria-describedby="course-cell-size-help"
+      >
+        {CELL_SIZES.map(s => (
+          <option key={s} value={s}>
+            {t('editor.settings.cellSizeOption', { size: s })}
+          </option>
+        ))}
+      </select>
+      <span id="course-cell-size-help" className="text-xs text-muted">
+        {t('editor.settings.cellSizeHelp')}
+      </span>
       <Button
         variant="danger"
         className="mt-2 self-start"

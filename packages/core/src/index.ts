@@ -1,6 +1,7 @@
 export {
   addControl,
   addCourse,
+  type CourseChange,
   deleteControl,
   deleteCourse,
   insertCourseControl,
@@ -8,6 +9,7 @@ export {
   moveCourseControl,
   removeCourseControl,
   setControlCode,
+  setDescription,
   setLegBends,
   setNumberPosition,
   setStandard,
@@ -21,6 +23,10 @@ export {
   CourseError,
   controlById,
   courseById,
+  DEFAULT_CELL_SIZE,
+  DESCRIPTION_COLUMNS,
+  type Description,
+  type DescriptionColumnKey,
   defaultStandard,
   type EventDoc,
   emptyDoc,
@@ -37,6 +43,17 @@ export { chainTransforms, type MovedDoc, moveDocToVersion, transformBetween, typ
 export { type CourseStop, courseStops, coursesUsing, FIRST_CODE, nextFreeCode } from './course/numbering.ts'
 export { allControlsDrawing, courseDrawing, type SymbolSizes, symbolSizes, toPaperMm } from './course/symbols.ts'
 export {
+  CROSSING_DIRECTIVE,
+  descriptionSheet,
+  drawDescriptionSheet,
+  FINISH_DIRECTIVE,
+  SHEET,
+  type SheetLine,
+  sheetCell,
+} from './descriptions/sheet.ts'
+export {
+  CELL_SYMBOL_COLUMNS,
+  cellSymbol,
   DESCRIPTION_SYMBOLS,
   type DescriptionColumn,
   type DescriptionShape,

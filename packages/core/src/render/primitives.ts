@@ -27,8 +27,9 @@ export type Primitive =
   /**
    * Text centred on `at`. `height` is the height of a digit (ISOM: "Arial, 4.0 mm" means 4.0 mm digits,
    * a font size of about 5.6 mm), so numbers have the specified size whatever font a backend uses.
+   * Text wider than `maxWidth` (mm) is drawn smaller, to 95 % of it, as Purple Pen does.
    */
-  | ({ type: 'text'; at: Point; text: string; height: number } & Tagged)
+  | ({ type: 'text'; at: Point; text: string; height: number; bold?: boolean; maxWidth?: number } & Tagged)
 
 /** Height of a digit in Arial as a fraction of the font size (glyph "1": 1472 of 2048 units). */
 export const ARIAL_DIGIT_HEIGHT = 1472 / 2048
@@ -66,8 +67,9 @@ export function primitivesBounds(primitives: Primitive[]): Bounds | null {
     else {
       // Text: a generous box, the font size is digit height / 0.72 and digits are about 0.56 of it wide.
       const size = p.height / ARIAL_DIGIT_HEIGHT
-      add([p.at[0] - (size * 0.6 * p.text.length) / 2, p.at[1] - size / 2], 0)
-      add([p.at[0] + (size * 0.6 * p.text.length) / 2, p.at[1] + size / 2], 0)
+      const half = Math.min(size * 0.6 * p.text.length, p.maxWidth ?? Number.POSITIVE_INFINITY) / 2
+      add([p.at[0] - half, p.at[1] - size / 2], 0)
+      add([p.at[0] + half, p.at[1] + size / 2], 0)
     }
   }
   return b
@@ -80,7 +82,8 @@ export function transformPrimitives(primitives: Primitive[], factor: number, [dx
   return primitives.map((p): Primitive => {
     if (p.type === 'circle') return { ...p, center: t(p.center), radius: p.radius * factor, lineWidth: p.lineWidth * factor }
     if (p.type === 'polyline') return { ...p, points: p.points.map(t), lineWidth: p.lineWidth * factor, ...dash(p.dash) }
-    if (p.type === 'text') return { ...p, at: t(p.at), height: p.height * factor }
+    if (p.type === 'text')
+      return { ...p, at: t(p.at), height: p.height * factor, ...(p.maxWidth !== undefined ? { maxWidth: p.maxWidth * factor } : {}) }
     const commands = p.commands.map((c): PathCommand => {
       if (c[0] === 'Z') return c
       if (c[0] === 'C') {

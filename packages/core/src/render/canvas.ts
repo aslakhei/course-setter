@@ -19,6 +19,7 @@ export interface CanvasTarget {
   translate(x: number, y: number): void
   rotate(angle: number): void
   fillText(text: string, x: number, y: number): void
+  measureText(text: string): { width: number }
   setLineDash(segments: number[]): void
   lineWidth: number
   lineCap: string
@@ -103,12 +104,21 @@ export function drawPrimitives(ctx: CanvasTarget, primitives: Primitive[], optio
       else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     } else {
       // Centred on the middle of the digits: the baseline lies half a digit height below `at`.
-      const digitPx = Math.max(minWidth, p.height * scale)
-      const sizePx = digitPx / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT)
+      let digitPx = Math.max(minWidth, p.height * scale)
+      const family = options.font ?? 'Arial, "Liberation Sans", sans-serif'
+      const font = (px: number) => `${p.bold ? 'bold ' : ''}${px}px ${family}`
       ctx.save()
       ctx.translate(...at(p.at[0], p.at[1]))
       ctx.rotate(angle)
-      ctx.font = `${sizePx}px ${options.font ?? 'Arial, "Liberation Sans", sans-serif'}`
+      ctx.font = font(digitPx / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT))
+      if (p.maxWidth !== undefined) {
+        const width = ctx.measureText(p.text).width
+        const max = p.maxWidth * scale
+        if (width > max) {
+          digitPx *= (max / width) * 0.95
+          ctx.font = font(digitPx / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT))
+        }
+      }
       ctx.textAlign = 'center'
       ctx.textBaseline = 'alphabetic'
       ctx.fillText(p.text, 0, digitPx / 2)

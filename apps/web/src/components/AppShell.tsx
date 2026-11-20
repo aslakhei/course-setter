@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, Outlet, useParams } from 'react-router'
 import { signOut, useSession } from '../auth/useSession.ts'
 import { useMyClubs } from '../lib/api.ts'
+import { NOTICES_URL } from '../lib/links.ts'
 import { SignedOutPage } from '../pages/SignedOutPage.tsx'
 import { BrandMark } from './BrandMark.tsx'
 import { Menu, menuItemClass } from './Menu.tsx'
@@ -54,6 +55,9 @@ export function AppShell() {
                   <div className="font-semibold">{name}</div>
                   {user.email && <div className="text-[13px] text-muted">{user.email}</div>}
                 </div>
+                <a href={NOTICES_URL} target="_blank" rel="noreferrer" className={menuItemClass}>
+                  {t('nav.licences')}
+                </a>
                 <button type="button" className={menuItemClass} onClick={() => void signOut()}>
                   {t('auth.signOut')}
                 </button>
