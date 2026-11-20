@@ -1,4 +1,4 @@
-﻿// The editor's map: the map version's tiles, the course being edited (or all controls), the rest of
+// The editor's map: the map version's tiles, the course being edited (or all controls), the rest of
 // the control pool faintly (to reuse), the selection, a preview of what a click will place, and pointer
 // handling for the tools.
 import 'ol/ol.css'
