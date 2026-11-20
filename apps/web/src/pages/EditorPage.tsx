@@ -1,14 +1,19 @@
 import {
   addCourse,
+  type Course,
+  changePaper,
   deleteControl,
   deleteSpecial,
   type EventDoc,
   moveControl,
   moveDocToVersion,
   type Point,
+  type PrintSettings,
   parseDoc,
+  printSettingsOf,
   removeCourseControl,
   setNumberPosition,
+  setPrintSettings,
   setRoute,
   setSpecialPoints,
   transformBetween,
@@ -16,12 +21,14 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Button, ErrorMessage, Loading } from '../components/ui.tsx'
 import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
 import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
+import { PrintMap } from '../editor/PrintMap.tsx'
+import { PrintPanel, PrintToolbar } from '../editor/PrintView.tsx'
 import {
   addBend,
   clickAction,
@@ -106,6 +113,29 @@ function Editor({
   const mapName = maps.data?.find(m => m.id === version.mapId)?.name ?? ''
   const queryClient = useQueryClient()
 
+  // The print view (?view=print): a course's page on the map, and making PDFs. It shows the course being
+  // edited, or the first one.
+  const [params, setParams] = useSearchParams()
+  const printCourse = course ?? doc.courses[0] ?? null
+  const grid = version.tiles as NonNullable<typeof version.tiles>
+  // An empty course's page is centred on the map, as the worker does.
+  const settingsOf = useCallback(
+    (c: Course) => {
+      const centre: Point = [(grid.extent.minX + grid.extent.maxX) / 2, (grid.extent.minY + grid.extent.maxY) / 2]
+      return printSettingsOf(doc, c, event.name, centre)
+    },
+    [doc, event.name, grid],
+  )
+  // Worked out once per change: the defaults of a course without its own settings are a new object each time.
+  const printSettings = useMemo(() => (printCourse ? settingsOf(printCourse) : null), [printCourse, settingsOf])
+  const printing = params.get('view') === 'print' && printCourse !== null && printSettings !== null
+  const setPrint = (c: Course, settings: PrintSettings | null) => edit(setPrintSettings(doc, c.id, settings))
+  const openPrint = () => {
+    dispatch({ type: 'tool', tool: 'select' })
+    if (!course && printCourse) dispatch({ type: 'course', courseId: printCourse.id })
+    setParams({ view: 'print' })
+  }
+
   // A newer ready version of the map, and whether the courses can be moved to it.
   const links = useVersionLinks(version.mapId)
   const newer = (links.data ?? []).filter(v => v.status === 'ready' && v.version > version.version).sort((a, b) => b.version - a.version)[0]
@@ -156,6 +186,8 @@ function Editor({
         (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
       if (typing || target.closest('[role="dialog"]')) return
       const mod = e.ctrlKey || e.metaKey
+      // The print view has nothing to delete or draw: only undo and redo.
+      if (printing && !mod) return
       // Drawing a line or area: Enter finishes it, Backspace takes back the last point, Escape drops it.
       if (state.draft.length > 0) {
         if (e.key === 'Enter') {
@@ -198,7 +230,7 @@ function Editor({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [state, course, doc, edit, t])
+  }, [state, course, doc, edit, t, printing])
 
   const takeTheirs = async () => {
     setResolving(true)
@@ -262,54 +294,97 @@ function Editor({
             ))}
           <span className="grow" />
           <SaveState status={autosave.status} savedAt={autosave.savedAt} />
+          {!printing && (
+            <Button onClick={openPrint} disabled={doc.courses.length === 0}>
+              {t('print.open')}
+            </Button>
+          )}
           <Button onClick={() => setAccessOpen(true)}>{t('editor.invite')}</Button>
         </div>
-        <Toolbar
-          standard={doc.standard}
-          tool={state.tool}
-          onTool={tool => dispatch({ type: 'tool', tool })}
-          canUndo={state.history.past.length > 0}
-          canRedo={state.history.future.length > 0}
-          onUndo={() => dispatch({ type: 'undo' })}
-          onRedo={() => dispatch({ type: 'redo' })}
-          hint={hint}
-        />
+        {printing ? (
+          <PrintToolbar
+            doc={doc}
+            course={printCourse}
+            settings={printSettings}
+            onCourse={courseId => dispatch({ type: 'course', courseId })}
+            onPaper={(paper, orientation) =>
+              setPrint(printCourse, changePaper(doc, printCourse, event.name, printSettings, paper, orientation))
+            }
+            onReset={() => setPrint(printCourse, null)}
+            onBack={() => setParams({})}
+          />
+        ) : (
+          <Toolbar
+            standard={doc.standard}
+            tool={state.tool}
+            onTool={tool => dispatch({ type: 'tool', tool })}
+            canUndo={state.history.past.length > 0}
+            canRedo={state.history.future.length > 0}
+            onUndo={() => dispatch({ type: 'undo' })}
+            onRedo={() => dispatch({ type: 'redo' })}
+            hint={hint}
+          />
+        )}
       </header>
       <div className="flex min-h-0 grow flex-wrap border-t border-line">
         <main className="relative min-h-[360px] min-w-0 flex-[999_1_560px]">
-          <EditorMap
-            versionId={version.id}
-            grid={version.tiles as NonNullable<typeof version.tiles>}
-            tilesUrl={tilesUrl}
-            mapScale={mapScale}
-            doc={doc}
-            course={course}
-            selected={state.selected}
-            tool={state.tool}
-            draft={state.draft}
-            onClick={onClick}
-            onMoveShape={(id, points) =>
-              edit(doc.specials.some(s => s.id === id) ? setSpecialPoints(doc, id, points) : setRoute(doc, id, points))
-            }
-            onMoveControl={(id, point) => edit(moveControl(doc, id, point))}
-            onMoveBend={(key, index, point) => course && edit(moveBend(doc, course, key, index, point))}
-            onRemoveBend={(key, index) => course && edit(removeBend(doc, course, key, index))}
-            onMoveNumber={(id, offset) => course && edit(setNumberPosition(doc, course.id, id, offset))}
-            onHover={setHover}
-          />
+          {printing ? (
+            <PrintMap
+              versionId={version.id}
+              grid={grid}
+              tilesUrl={tilesUrl}
+              doc={doc}
+              course={printCourse}
+              title={event.name}
+              settings={printSettings}
+              onChange={settings => setPrint(printCourse, settings)}
+            />
+          ) : (
+            <EditorMap
+              versionId={version.id}
+              grid={version.tiles as NonNullable<typeof version.tiles>}
+              tilesUrl={tilesUrl}
+              mapScale={mapScale}
+              doc={doc}
+              course={course}
+              selected={state.selected}
+              tool={state.tool}
+              draft={state.draft}
+              onClick={onClick}
+              onMoveShape={(id, points) =>
+                edit(doc.specials.some(s => s.id === id) ? setSpecialPoints(doc, id, points) : setRoute(doc, id, points))
+              }
+              onMoveControl={(id, point) => edit(moveControl(doc, id, point))}
+              onMoveBend={(key, index, point) => course && edit(moveBend(doc, course, key, index, point))}
+              onRemoveBend={(key, index) => course && edit(removeBend(doc, course, key, index))}
+              onMoveNumber={(id, offset) => course && edit(setNumberPosition(doc, course.id, id, offset))}
+              onHover={setHover}
+            />
+          )}
         </main>
-        <CoursePanel
-          state={state}
-          eventName={event.name}
-          onCourse={courseId => dispatch({ type: 'course', courseId })}
-          onSelect={controlId => dispatch({ type: 'select', controlId })}
-          onEdit={edit}
-          onNewCourse={name => {
-            const id = crypto.randomUUID()
-            edit(addCourse(doc, { id, name, printScale: mapScale }))
-            dispatch({ type: 'course', courseId: id })
-          }}
-        />
+        {printing ? (
+          <PrintPanel
+            eventId={event.id}
+            doc={doc}
+            shown={printCourse}
+            saveStatus={autosave.status}
+            settingsOf={settingsOf}
+            onShow={courseId => dispatch({ type: 'course', courseId })}
+          />
+        ) : (
+          <CoursePanel
+            state={state}
+            eventName={event.name}
+            onCourse={courseId => dispatch({ type: 'course', courseId })}
+            onSelect={controlId => dispatch({ type: 'select', controlId })}
+            onEdit={edit}
+            onNewCourse={name => {
+              const id = crypto.randomUUID()
+              edit(addCourse(doc, { id, name, printScale: mapScale }))
+              dispatch({ type: 'course', courseId: id })
+            }}
+          />
+        )}
       </div>
       {autosave.conflict && (
         <ConflictDialog

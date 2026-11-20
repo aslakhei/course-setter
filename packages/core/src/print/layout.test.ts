@@ -3,7 +3,16 @@ import { addControl, addCourse, insertCourseControl, setPrintSettings } from '..
 import { CourseError, courseById, type EventDoc, emptyDoc, eventDocSchema, type Point, type PrintSettings } from '../course/doc.ts'
 import { testEvent } from '../course/test-doc.ts'
 import type { Primitive } from '../render/primitives.ts'
-import { defaultPrintSettings, pagePosition, pageSize, printPage } from './layout.ts'
+import {
+  changePaper,
+  defaultPrintSettings,
+  pageGroundArea,
+  pagePosition,
+  pageSize,
+  pageToPaperOffset,
+  placeDescriptions,
+  printPage,
+} from './layout.ts'
 
 /** A course at 1:10 000 with two controls 1 km apart, east-west. */
 function kilometre(): EventDoc {
@@ -106,6 +115,73 @@ describe('defaultPrintSettings', () => {
     let doc = emptyDoc(15000)
     doc = addCourse(doc, { id: 'E', name: 'Empty', printScale: 15000 })
     expect(defaultPrintSettings(doc, courseById(doc, 'E'), 'Test', [123, 456]).center).toEqual([123, 456])
+  })
+})
+
+describe('pageGroundArea and pageToPaperOffset', () => {
+  it('give the whole sheet on the ground and move page primitives onto the course drawing', () => {
+    const doc = kilometre()
+    const course = courseById(doc, 'K')
+    // A4 portrait at 1:10 000 is 2100 × 2970 m round the centre.
+    expect(pageGroundArea(course, settings())).toEqual({ minX: 450, maxX: 2550, minY: 2000 - 1485, maxY: 2000 + 1485 })
+    // A control circle on the page, moved by the offset, is where the course drawing has it (paper mm
+    // from the map frame's origin: ground metres / 10 at 1:10 000).
+    const page = printPage(doc, course, 'Test', settings())
+    const [dx, dy] = pageToPaperOffset(course, settings())
+    const [a] = circles(page.course)
+    expect((a?.center[0] ?? 0) + dx).toBeCloseTo(100, 9)
+    expect((a?.center[1] ?? 0) + dy).toBeCloseTo(200, 9)
+  })
+})
+
+describe('placeDescriptions', () => {
+  // Course K's sheet: 8 × 6 mm wide, 4 rows of 6 mm, and the thick outer line reaches 0.15 mm beyond.
+  const pad = 0.15
+  const place = (at: Point, over: Partial<PrintSettings> = {}) => {
+    const doc = kilometre()
+    return placeDescriptions(doc, courseById(doc, 'K'), 'Test', settings(over), at).layout
+  }
+
+  it('puts the sheet where it is dropped', () => {
+    expect(place([40, 60])).toEqual([{ kind: 'descriptions', at: [40, 60] }])
+  })
+
+  it('keeps it inside the map area', () => {
+    expect(place([-50, -50])).toEqual([{ kind: 'descriptions', at: [5 + pad, 5 + pad] }])
+    const [element] = place([500, 500])
+    expect(element?.at[0]).toBeCloseTo(205 - pad - 48, 9)
+    expect(element?.at[1]).toBeCloseTo(292 - pad - 24, 9)
+  })
+
+  it('replaces the sheet and keeps other elements', () => {
+    const layout = place([40, 60], { layout: [{ kind: 'descriptions', at: [10, 10] }] })
+    expect(layout).toEqual([{ kind: 'descriptions', at: [40, 60] }])
+  })
+})
+
+describe('changePaper', () => {
+  const change = (at: Point, paper: 'A4' | 'A3', orientation: 'portrait' | 'landscape') => {
+    const doc = kilometre()
+    const s = settings({ layout: [{ kind: 'descriptions', at }] })
+    return changePaper(doc, courseById(doc, 'K'), 'Test', s, paper, orientation)
+  }
+
+  it('keeps the centre and the paper choice', () => {
+    expect(change([20, 20], 'A3', 'landscape')).toMatchObject({ paper: 'A3', orientation: 'landscape', center: [1500, 2000] })
+  })
+
+  it('keeps a sheet in the bottom-right corner in that corner', () => {
+    // 2 mm in from the bottom-right corner of the A4 portrait map area ...
+    const right = 205 - 0.15 - 48 - 2
+    const bottom = 292 - 0.15 - 24 - 2
+    const [element] = change([right, bottom], 'A4', 'landscape').layout
+    // ... and 2 mm in from the bottom-right corner of the landscape one (292 × 205).
+    expect(element?.at[0]).toBeCloseTo(292 - 0.15 - 48 - 2, 9)
+    expect(element?.at[1]).toBeCloseTo(205 - 0.15 - 24 - 2, 9)
+  })
+
+  it('keeps a sheet near the top-left where it was', () => {
+    expect(change([30, 40], 'A3', 'portrait').layout).toEqual([{ kind: 'descriptions', at: [30, 40] }])
   })
 })
 

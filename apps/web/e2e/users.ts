@@ -47,16 +47,35 @@ export async function clientFor(user: TestUser) {
 
 /** A club with `admin` as admin and one processed OCAD map (the worker must be running: see global-setup.ts). */
 export async function clubWithMap(admin_: TestUser, clubName: string, ocdFile: string): Promise<{ clubId: string; mapVersionId: string }> {
+  const { readFileSync } = await import('node:fs')
+  return clubWithMapFile(admin_, clubName, { kind: 'ocad', bytes: readFileSync(ocdFile) })
+}
+
+/** A club with `admin` as admin and one processed PDF map at `scale`: quick to print, as it stays vector. */
+export async function clubWithPdfMap(admin_: TestUser, clubName: string, pdf: Uint8Array, scale: number) {
+  return clubWithMapFile(admin_, clubName, { kind: 'pdf', bytes: pdf, scale })
+}
+
+async function clubWithMapFile(
+  admin_: TestUser,
+  clubName: string,
+  map: { kind: 'ocad' | 'pdf'; bytes: Uint8Array; scale?: number },
+): Promise<{ clubId: string; mapVersionId: string }> {
   const client = await clientFor(admin_)
   const club = await client.rpc('create_club', { club_name: clubName })
   if (club.error) throw club.error
-  const started = await client.rpc('start_map_upload', { club: club.data, file_name: 'map.ocd', kind: 'ocad', map_name: 'Test forest' })
+  const started = await client.rpc('start_map_upload', {
+    club: club.data,
+    file_name: map.kind === 'pdf' ? 'map.pdf' : 'map.ocd',
+    kind: map.kind,
+    map_name: 'Test forest',
+    ...(map.scale ? { scale: map.scale } : {}),
+  })
   if (started.error) throw started.error
   const { version_id, upload_path } = started.data[0]
-  const { readFileSync } = await import('node:fs')
   const put = await client.storage
     .from('map-originals')
-    .upload(upload_path, readFileSync(ocdFile), { contentType: 'application/octet-stream' })
+    .upload(upload_path, map.bytes, { contentType: map.kind === 'pdf' ? 'application/pdf' : 'application/octet-stream' })
   if (put.error) throw put.error
   const finished = await client.rpc('finish_map_upload', { map_version_id: version_id })
   if (finished.error) throw finished.error
@@ -69,8 +88,43 @@ export async function clubWithMap(admin_: TestUser, clubName: string, ocdFile: s
   throw new Error('test map was not processed in time')
 }
 
-/** Remove a club with its map files. */
+/**
+ * A plain PDF map, `widthMm` × `heightMm`: a pale ground with a dark 20 mm grid, written by hand (a
+ * catalog, the page tree, one page and its drawing) so the tests need no PDF library.
+ */
+export function pdfMap(widthMm: number, heightMm: number): Uint8Array {
+  const pt = (mm: number) => +((mm * 72) / 25.4).toFixed(2)
+  const [w, h] = [pt(widthMm), pt(heightMm)]
+  const drawing = ['1 0.96 0.85 rg', `0 0 ${w} ${h} re f`, '0.25 0.25 0.25 RG', '0.6 w']
+  for (let x = 20; x < widthMm; x += 20) drawing.push(`${pt(x)} 0 m ${pt(x)} ${h} l`)
+  for (let y = 20; y < heightMm; y += 20) drawing.push(`0 ${pt(y)} m ${w} ${pt(y)} l`)
+  drawing.push('S')
+  const content = drawing.join('\n')
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << >> /Contents 4 0 R >>`,
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+  ]
+  // Every character is ASCII, so string lengths are byte offsets.
+  let out = '%PDF-1.4\n'
+  const offsets: number[] = []
+  objects.forEach((o, i) => {
+    offsets.push(out.length)
+    out += `${i + 1} 0 obj\n${o}\nendobj\n`
+  })
+  const xref = out.length
+  out += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`
+  out += offsets.map(o => `${String(o).padStart(10, '0')} 00000 n \n`).join('')
+  out += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
+  return new TextEncoder().encode(out)
+}
+
+/** Remove a club with its map files and PDF exports. */
 export async function removeClub(clubId: string) {
+  const { data: exports } = await admin.from('exports').select('path').eq('club_id', clubId)
+  const exportPaths = (exports ?? []).map(x => x.path).filter((p): p is string => Boolean(p))
+  if (exportPaths.length) await admin.storage.from('exports').remove(exportPaths)
   const { data: versions } = await admin.from('map_versions').select('original_path, tiles_path').eq('club_id', clubId)
   for (const v of versions ?? []) {
     await admin.storage.from('map-originals').remove([v.original_path])
