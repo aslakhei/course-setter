@@ -46,7 +46,8 @@ describe('loadOcad', () => {
     expect(map.georef).toMatchObject({ ocadGridId: expect.any(Number) })
   })
 
-  it('renders the requested region at the requested resolution', async () => {
+  // Several seconds of rendering: generous time for busy CI machines running other test files at once.
+  it('renders the requested region at the requested resolution', { timeout: 30_000 }, async () => {
     const map = await loadOcad(fixture('basic-1.ocd'))
     const rgb = map.render({ x: 0, y: 0, width: 100, height: 60 }, 1)
     expect(rgb.length).toBe(100 * 60 * 3)

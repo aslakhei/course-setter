@@ -27,8 +27,8 @@ import { drawPrimitivesOnPage, PT_PER_MM } from './pdf.ts'
 import { type Primitive, primitivesBounds, transformPrimitives } from './primitives.ts'
 
 const SNAPSHOTS = fileURLToPath(new URL('./__snapshots__/', import.meta.url))
-const FONT_FILE = fileURLToPath(new URL('../../test/fonts/LiberationSans-Regular.ttf', import.meta.url))
-const BOLD_FONT_FILE = fileURLToPath(new URL('../../test/fonts/LiberationSans-Bold.ttf', import.meta.url))
+const FONT_FILE = fileURLToPath(new URL('../../fonts/LiberationSans-Regular.ttf', import.meta.url))
+const BOLD_FONT_FILE = fileURLToPath(new URL('../../fonts/LiberationSans-Bold.ttf', import.meta.url))
 const FONT_FAMILY = 'Snapshot Sans'
 /** Liberation Sans digits are 1409 of 2048 units high (Arial's are 1472). */
 const DIGIT_HEIGHT = 1409 / 2048

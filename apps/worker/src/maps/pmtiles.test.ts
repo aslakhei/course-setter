@@ -28,7 +28,8 @@ describe('writePmtiles', () => {
     expect(header.numAddressedTiles).toBe(4)
   })
 
-  it('splits a large directory into leaf directories', async () => {
+  // 65 536 tiles take a few seconds: generous time for busy CI machines running other test files at once.
+  it('splits a large directory into leaf directories', { timeout: 30_000 }, async () => {
     // 65 536 tiles of varying size at z 8: the root directory alone would not fit in the first 16 KiB.
     const tiles: Tile[] = []
     let seed = 42

@@ -284,6 +284,9 @@ importers:
       '@course-setter/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@pdf-lib/fontkit':
+        specifier: ^1.1.1
+        version: 1.1.1
       '@resvg/resvg-js':
         specifier: ^2.6.2
         version: 2.6.2
@@ -293,12 +296,18 @@ importers:
       '@xmldom/xmldom':
         specifier: ^0.9.12
         version: 0.9.12
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       mupdf:
         specifier: ^1.28.6
         version: 1.28.6
       ocad2geojson:
         specifier: ^2.1.23
         version: 2.1.23
+      pdf-lib:
+        specifier: ^1.17.1
+        version: 1.17.1
       pmtiles:
         specifier: ^4.5.0
         version: 4.5.0
@@ -309,9 +318,6 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
-      pdf-lib:
-        specifier: ^1.17.1
-        version: 1.17.1
 
   packages/core:
     dependencies:
@@ -3514,6 +3520,7 @@ snapshots:
       '@napi-rs/canvas': 1.1.1
     transitivePeerDependencies:
       - '@noble/hashes'
+    optional: true
 
   jsdom@31.0.1(@noble/hashes@1.8.0):
     dependencies:
@@ -4040,6 +4047,7 @@ snapshots:
       jsdom: 31.0.1(@noble/hashes@1.8.0)
     transitivePeerDependencies:
       - msw
+    optional: true
 
   vt-pbf@3.1.3:
     dependencies:

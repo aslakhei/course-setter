@@ -37,8 +37,9 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-## Liberation Sans (tests only)
+## Liberation Sans
 
-`packages/core/test/fonts/LiberationSans-Regular.ttf` and `LiberationSans-Bold.ttf` (Liberation Fonts
-2.1.5, metric-compatible with Arial) are used by the symbol snapshot tests so they draw the same text on every platform. It is licensed
-under the SIL Open Font License 1.1, see `packages/core/test/fonts/LICENSE-LiberationSans.txt`.
+`packages/core/fonts/LiberationSans-Regular.ttf` and `LiberationSans-Bold.ttf` (Liberation Fonts
+2.1.5, metric-compatible with Arial) are embedded in exported PDFs for control numbers and description
+sheets, and used by the snapshot tests so they draw the same text on every platform. They are licensed
+under the SIL Open Font License 1.1, see `packages/core/fonts/LICENSE-LiberationSans.txt`.
