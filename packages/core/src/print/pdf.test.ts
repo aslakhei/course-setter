@@ -13,8 +13,8 @@ import { PT_PER_MM } from '../render/pdf.ts'
 import { printPage } from './layout.ts'
 import { addPrintPage } from './pdf.ts'
 
-const FONT = fileURLToPath(new URL('../../test/fonts/LiberationSans-Regular.ttf', import.meta.url))
-const BOLD = fileURLToPath(new URL('../../test/fonts/LiberationSans-Bold.ttf', import.meta.url))
+const FONT = fileURLToPath(new URL('../../fonts/LiberationSans-Regular.ttf', import.meta.url))
+const BOLD = fileURLToPath(new URL('../../fonts/LiberationSans-Bold.ttf', import.meta.url))
 const PX_PER_MM = 10
 const GREY = 128
 
