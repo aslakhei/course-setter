@@ -218,7 +218,7 @@ test('control descriptions show in every course that uses the control and surviv
   await expect(sheet.getByRole('button', { name: 'Code 31, Feature: empty' })).toBeVisible()
 })
 
-test('special symbols and marked routes: draw, limit to a course, keep after reload, delete', async ({ browser }) => {
+test('special symbols and course objects: draw, limit to a course, keep after reload, delete', async ({ browser }) => {
   test.setTimeout(240_000)
   const ada = await createUser('Ada Admin')
   users.push(ada)
@@ -275,28 +275,53 @@ test('special symbols and marked routes: draw, limit to a course, keep after rel
   await page.getByRole('checkbox', { name: 'D16' }).uncheck()
   await expect(page.getByRole('checkbox', { name: 'H21' })).toBeChecked()
 
-  // The leg 31 -> 32 of H21 is a marked route.
+  // A voluntary crossing point: where, then the way through. Not part of any course.
+  await special('Crossing point (voluntary)')
+  await clickMap(page, 0.55, 0.58)
+  await clickMap(page, 0.55, 0.5)
+  await expect(page.getByText('Selected: Crossing point (voluntary)')).toBeVisible()
+
+  // In H21: a map issue point before the start, and a marked route after control 31 (selected first).
   await tool(page, 'Select').click()
   const course = page.getByRole('combobox', { name: 'Course', exact: true })
   await course.selectOption({ label: (await course.locator('option', { hasText: 'H21' }).textContent()) ?? '' })
-  const toggle = page.getByRole('button', { name: 'Marked route from Code 31 to Code 32' })
-  await toggle.click()
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  const lengthBefore = await lengthOf(page)
+  await special('Map issue point')
+  await clickMap(page, 0.12, 0.55)
+  await courseList(page, 'H21').getByText('Code 31').click()
+  await special('Marked route')
+  await clickMap(page, 0.38, 0.45)
+  await clickMap(page, 0.42, 0.4)
+  await clickMap(page, 0.47, 0.45)
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Selected: Marked route')).toBeVisible()
+  await expect(courseList(page, 'H21').getByRole('listitem')).toHaveText([
+    /Map issue point/,
+    /Start/,
+    /Code 31/,
+    /Marked route/,
+    /Code 32/,
+    /Finish/,
+  ])
+  await expect.poll(() => lengthOf(page)).not.toBe(lengthBefore) // longer: from the map issue point, around the bend
   await waitSaved(page)
 
-  // Saved: both specials, the edge and the course list, the marked leg.
+  // Saved: the specials with their edge and course list, and the course objects in H21.
   await page.reload()
-  await expect(page.getByRole('button', { name: 'Marked route from Code 31 to Code 32' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(courseList(page, 'H21').getByRole('listitem')).toHaveCount(6)
   const { data: event } = await admin.from('events').select('doc').eq('club_id', clubId).single()
   const doc = event?.doc as {
     specials: { id: string; kind: string; courses?: string[]; boundary?: string }[]
-    courses: { id: string; name: string; markedRoutes?: string[] }[]
+    controls: { id: string; kind: string; route?: unknown[] }[]
+    courses: { id: string; name: string; controls: string[] }[]
   }
   const h21 = doc.courses.find(c => c.name === 'H21')
-  expect(doc.specials.map(s => s.kind)).toEqual(['firstAid', 'oobArea'])
+  expect(doc.specials.map(s => s.kind)).toEqual(['firstAid', 'oobArea', 'optionalCrossing'])
   expect(doc.specials[1]).toMatchObject({ boundary: 'dashed', courses: [h21?.id] })
   expect((doc.specials[1] as unknown as { points: unknown[] }).points).toHaveLength(4)
-  expect(h21?.markedRoutes).toHaveLength(1)
+  const kinds = h21?.controls.map(id => doc.controls.find(c => c.id === id)?.kind)
+  expect(kinds).toEqual(['mapIssue', 'start', 'control', 'markedRoute', 'control', 'finish'])
+  expect(doc.controls.find(c => c.kind === 'markedRoute')?.route).toHaveLength(3)
 
   // Click the first aid post on the map to select it; Delete removes it.
   await clickMap(page, 0.3, 0.6)
@@ -306,7 +331,7 @@ test('special symbols and marked routes: draw, limit to a course, keep after rel
   await waitSaved(page)
   const { data: after } = await admin.from('events').select('doc').eq('club_id', clubId).single()
   const remaining = (after?.doc as { specials: { kind: string }[] } | undefined)?.specials ?? []
-  expect(remaining.map(s => s.kind)).toEqual(['oobArea'])
+  expect(remaining.map(s => s.kind)).toEqual(['oobArea', 'optionalCrossing'])
 })
 
 test('a bend is removed by clicking it', async ({ browser }) => {

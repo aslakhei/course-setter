@@ -22,7 +22,7 @@ export type MovedDoc = {
 export function moveDocToVersion(doc: EventDoc, transform: Similarity, newExtent: Extent): MovedDoc {
   const move = (p: Point): Point => apply(transform, p)
   const inside = ([x, y]: Point) => x >= newExtent.minX && x <= newExtent.maxX && y >= newExtent.minY && y <= newExtent.maxY
-  const controls = doc.controls.map(c => ({ ...c, position: move(c.position) }))
+  const controls = doc.controls.map(c => ({ ...c, position: move(c.position), ...(c.route ? { route: c.route.map(move) } : {}) }))
   return {
     doc: {
       ...doc,

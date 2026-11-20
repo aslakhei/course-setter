@@ -4,17 +4,10 @@
 // refreshment cup's curves, the first aid cross), the shapes follow Purple Pen's (BSD licence, see
 // THIRD-PARTY-NOTICES.md).
 import type { PathCommand, Primitive } from '../render/primitives.ts'
-import { type EventDoc, type Point, type Special, type SpecialKind, type Standard, specialShownOn } from './doc.ts'
-import { fittedDash, polylineLength, toPaperMm } from './symbols.ts'
+import { type EventDoc, type Point, type Special, type Standard, specialShownOn } from './doc.ts'
+import { crossing, fittedDash, polylineLength, symbolSizes, toPaperMm } from './symbols.ts'
 
 export type SpecialSizes = {
-  /** Map issue point (702): a bar across the way to the start. */
-  mapIssueLength: number
-  mapIssueWidth: number
-  /** Marked route (707): dashes and gaps along a line. */
-  markedRouteWidth: number
-  markedRouteDash: number
-  markedRouteGap: number
   /** Out-of-bounds boundary (708). */
   oobBoundaryWidth: number
   /** Out-of-bounds area (709): lines at 45° and 135°, and the optional boundary line. */
@@ -43,11 +36,6 @@ export type SpecialSizes = {
 }
 
 const COMMON = {
-  mapIssueLength: 2.5,
-  mapIssueWidth: 0.6,
-  markedRouteWidth: 0.35,
-  markedRouteDash: 2.0,
-  markedRouteGap: 0.5,
   hatchWidth: 0.2,
   hatchSpacing: 1.2,
   areaEdgeDash: 3.0,
@@ -198,10 +186,7 @@ function placed(commands: PathCommand[], at: Point, k: number): PathCommand[] {
   })
 }
 
-/**
- * One special symbol in print paper mm at `printScale`. The map issue point's bar lies across the way
- * to the nearest start (the marked route to the start begins there).
- */
+/** One special symbol in print paper mm at `printScale`. */
 export function specialDrawing(doc: EventDoc, special: Special, printScale: number): Primitive[] {
   const s = specialSizes(doc.standard, printScale)
   const pts = special.points.map(p => toPaperMm(p, printScale))
@@ -217,15 +202,11 @@ export function specialDrawing(doc: EventDoc, special: Special, printScale: numb
   })
 
   switch (special.kind) {
-    case 'mapIssue': {
-      const starts = doc.controls.filter(c => c.kind === 'start').map(c => toPaperMm(c.position, printScale))
-      const nearest = starts.sort((a, b) => len(sub(a, first)) - len(sub(b, first)))[0]
-      const across = normal(nearest ? unit(sub(nearest, first)) : [0, 1])
-      const half = scale(across, s.mapIssueLength / 2)
-      return [line([sub(first, half), add(first, half)], s.mapIssueWidth)]
+    case 'optionalCrossing': {
+      // The crossing point symbol, along the way through it (from its point towards the second).
+      const dir = unit(sub(pts[1] as Point, first))
+      return crossing(first, dir, symbolSizes(doc.standard, printScale), special.id, 'special')
     }
-    case 'markedRoute':
-      return [line(pts, s.markedRouteWidth, fittedDash(polylineLength(pts), s.markedRouteDash, s.markedRouteGap))]
     case 'oobBoundary':
       return [line(pts, s.oobBoundaryWidth)]
     case 'oobArea': {
@@ -337,6 +318,3 @@ export function specialDrawing(doc: EventDoc, special: Special, printScale: numb
 export function specialsDrawing(doc: EventDoc, courseId: string | null, printScale: number): Primitive[] {
   return doc.specials.filter(s => specialShownOn(s, courseId)).flatMap(s => specialDrawing(doc, s, printScale))
 }
-
-/** Kinds whose symbol is a single point. */
-export const isPointKind = (kind: SpecialKind) => kind === 'mapIssue' || kind === 'firstAid' || kind === 'refreshment'

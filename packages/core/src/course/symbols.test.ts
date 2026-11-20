@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertCourseControl, setMarkedRoute, setNumberPosition } from './commands.ts'
+import { insertCourseControl, setNumberPosition } from './commands.ts'
 import { courseById, type Point } from './doc.ts'
 import { allControlsDrawing, courseDrawing, type Primitive, symbolSizes, toPaperMm } from './symbols.ts'
 import { testEvent } from './test-doc.ts'
@@ -123,19 +123,6 @@ describe('courseDrawing', () => {
     const middle = (s.crossingEnd + 3 * s.crossingWaist) / 4
     expect(2 * middle - s.crossingLineWidth).toBeCloseTo(1.0, 9)
     expect(s.crossingEnd).toBeGreaterThan(middle) // curving outwards
-  })
-
-  it('draws a marked-route leg dashed, starting and ending with a whole 2.0 mm dash', () => {
-    const marked = setMarkedRoute(testEvent(), 'A', 'b', 'c', true)
-    const legs = of(courseDrawing(marked, courseById(marked, 'A')), 'polyline').filter(p => p.role === 'leg')
-    expect(legs.filter(l => l.dash)).toHaveLength(1)
-    const leg = legs.find(l => l.dash) as (typeof legs)[number]
-    const [dash = 0, gap = 0] = leg.dash ?? []
-    const length = Math.hypot((leg.points[1]?.[0] ?? 0) - (leg.points[0]?.[0] ?? 0), (leg.points[1]?.[1] ?? 0) - (leg.points[0]?.[1] ?? 0))
-    const n = Math.round((length + gap) / (dash + gap))
-    expect(n * dash + (n - 1) * gap).toBeCloseTo(length, 9)
-    expect(dash).toBeCloseTo(2.0, 0)
-    expect(dash / gap).toBeCloseTo(4, 9)
   })
 
   it('tags every symbol and number with its control, and course lines as legs', () => {

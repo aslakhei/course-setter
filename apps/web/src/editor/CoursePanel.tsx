@@ -12,12 +12,11 @@ import {
   deleteCourse,
   deleteSpecial,
   type EventDoc,
-  legKey,
   legLengths,
   moveCourseControl,
   removeCourseControl,
+  routeLength,
   setControlCode,
-  setMarkedRoute,
   setSpecialBoundary,
   setSpecialCourses,
   updateCourse,
@@ -178,10 +177,7 @@ function StopList({
         const control = doc.controls.find(c => c.id === stop.controlId) as Control
         const name = stopName(control, t)
         const isSelected = selected === stop.controlId
-        // The leg arriving here: a marked route (707) or a normal course line.
-        const from = i > 0 ? (course.controls[i - 1] as string) : null
-        const prevName = from ? stopName(doc.controls.find(c => c.id === from) as Control, t) : ''
-        const marked = from !== null && (course.markedRoutes ?? []).includes(legKey(from, stop.controlId))
+        const taped = control.route ? Math.round(routeLength(doc, control.id)) : null
         return (
           <li
             key={`${stop.controlId}-${visit[i]}`}
@@ -189,23 +185,14 @@ function StopList({
           >
             <button type="button" onClick={() => onSelect(stop.controlId)} className="flex grow items-center gap-2 py-0.5 text-left">
               <span className={`w-7 ${stop.number ? 'font-semibold' : 'text-muted'}`}>{stop.number ?? ''}</span>
-              <span className={`grow ${isSelected ? 'font-semibold' : ''}`}>{name}</span>
+              <span className={`grow ${isSelected ? 'font-semibold' : ''}`}>
+                {name}
+                {taped !== null && (
+                  <span className="ml-1.5 text-xs font-normal text-muted">{t('editor.routeLength', { metres: taped })}</span>
+                )}
+              </span>
               {i > 0 && <span className="text-muted">{Math.round(legs[i - 1] ?? 0)} m</span>}
             </button>
-            {from !== null && (
-              <button
-                type="button"
-                aria-pressed={marked}
-                aria-label={t('editor.markedRoute', { from: prevName, to: name })}
-                title={t('editor.markedRoute', { from: prevName, to: name })}
-                onClick={() => onEdit(setMarkedRoute(doc, course.id, from, stop.controlId, !marked))}
-                className={`flex h-6 w-7 items-center justify-center rounded ${marked ? 'bg-brand-50 text-brand-600 opacity-100' : 'text-body opacity-60 hover:bg-subtle group-hover:opacity-100'}`}
-              >
-                <svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M1 5h16" strokeDasharray="4 2" />
-                </svg>
-              </button>
-            )}
             <span className="flex opacity-60 group-hover:opacity-100">
               <IconButton
                 label={t('editor.moveUp', { name })}
@@ -250,7 +237,7 @@ function IconButton({ label, onClick, disabled, children }: { label: string; onC
 function PoolList({ doc, selected, onSelect }: { doc: EventDoc; selected: string | null; onSelect: (id: string) => void }) {
   const { t } = useTranslation()
   if (doc.controls.length === 0) return <p className="m-0 px-3 py-3 text-[13px] text-muted">{t('editor.emptyPool')}</p>
-  const order = { start: 0, control: 1, crossingPoint: 2, finish: 3 } as const
+  const order = { mapIssue: 0, start: 1, control: 2, crossingPoint: 3, markedRoute: 4, finish: 5 } as const
   const sorted = [...doc.controls].sort((a, b) => order[a.kind] - order[b.kind] || (a.code ?? 0) - (b.code ?? 0))
   return (
     <ul className="m-0 list-none p-0 py-1 text-[13px]">

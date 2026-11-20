@@ -13,8 +13,8 @@ export {
   setControlCode,
   setDescription,
   setLegBends,
-  setMarkedRoute,
   setNumberPosition,
+  setRoute,
   setSpecialBoundary,
   setSpecialCourses,
   setSpecialPoints,
@@ -38,15 +38,19 @@ export {
   defaultStandard,
   type EventDoc,
   emptyDoc,
+  entryPoint,
   eventDocSchema,
+  exitPoint,
   legKey,
   MIN_POINTS,
   parseDoc,
+  pointsFit,
   SCHEMA_VERSION,
   SPECIAL_GEOMETRY,
   SPECIAL_KINDS,
   SPECIALS_BY_STANDARD,
   type Special,
+  type SpecialGeometry,
   type SpecialKind,
   STANDARDS,
   type Standard,
@@ -54,13 +58,15 @@ export {
   specialShownOn,
 } from './course/doc.ts'
 export { canRedo, canUndo, createHistory, HISTORY_LIMIT, type History, record, redo, undo } from './course/history.ts'
-export { courseLength, legLengths, legPath, pathLength } from './course/length.ts'
+export { courseLength, legLengths, legPath, pathLength, routeLength } from './course/length.ts'
 export { chainTransforms, type MovedDoc, moveDocToVersion, transformBetween, type VersionLink } from './course/move.ts'
 export { type CourseStop, courseStops, coursesUsing, FIRST_CODE, nextFreeCode } from './course/numbering.ts'
-export { hatchLines, isPointKind, type SpecialSizes, specialDrawing, specialSizes, specialsDrawing } from './course/specials.ts'
+export { hatchLines, type SpecialSizes, specialDrawing, specialSizes, specialsDrawing } from './course/specials.ts'
 export {
   allControlsDrawing,
+  clearance,
   courseDrawing,
+  crossing,
   fittedDash,
   polylineLength,
   type SymbolSizes,
@@ -72,11 +78,14 @@ export {
   descriptionSheet,
   drawDescriptionSheet,
   FINISH_DIRECTIVE,
+  FUNNEL_DIRECTIVE,
+  MAP_ISSUE_DIRECTIVE,
   MARKED_FINISH_DIRECTIVE,
   MARKED_ROUTE_DIRECTIVE,
   SHEET,
   type SheetLine,
   sheetCell,
+  TAPED_FROM_CONTROL_DIRECTIVE,
 } from './descriptions/sheet.ts'
 export {
   CELL_SYMBOL_COLUMNS,
