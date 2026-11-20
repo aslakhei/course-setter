@@ -19,6 +19,7 @@ export interface CanvasTarget {
   translate(x: number, y: number): void
   rotate(angle: number): void
   fillText(text: string, x: number, y: number): void
+  globalAlpha: number
   measureText(text: string): { width: number }
   setLineDash(segments: number[]): void
   lineWidth: number
@@ -100,8 +101,12 @@ export function drawPrimitives(ctx: CanvasTarget, primitives: Primitive[], optio
       strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     } else if (p.type === 'path') {
       trace(p.commands)
-      if (p.filled) ctx.fill('evenodd')
-      else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
+      if (p.filled) {
+        // A tint over white is the colour at that opacity (and with Multiply, the same over the map).
+        ctx.globalAlpha = p.tint ?? 1
+        ctx.fill('evenodd')
+        ctx.globalAlpha = 1
+      } else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     } else {
       // Centred on the middle of the digits: the baseline lies half a digit height below `at`.
       let digitPx = Math.max(minWidth, p.height * scale)

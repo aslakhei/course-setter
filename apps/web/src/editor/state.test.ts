@@ -1,6 +1,19 @@
-import { addCourse, courseById, courseLength, type EventDoc, emptyDoc, moveControl } from '@course-setter/core'
+﻿import { addCourse, courseById, courseLength, type EventDoc, emptyDoc, moveControl } from '@course-setter/core'
 import { describe, expect, it } from 'vitest'
-import { type Action, ALL_CONTROLS, addBend, clickAction, type EditorState, initialState, legAt, reducer, type Tool } from './state.ts'
+import {
+  type Action,
+  ALL_CONTROLS,
+  addBend,
+  clickAction,
+  type EditorState,
+  initialState,
+  legAt,
+  movedPoints,
+  reducer,
+  specialAt,
+  type Tool,
+  vertexAt,
+} from './state.ts'
 
 let counter = 0
 const newId = () => `n${++counter}`
@@ -144,5 +157,117 @@ describe('bends', () => {
     expect(legAt(present(s), course, [500, 300], 50)).toBeNull()
     const bent = addBend(present(s), course, 0, 0, [500, 300])
     expect(courseLength(bent, courseById(bent, 'A'))).toBeCloseTo(2 * Math.hypot(500, 300), 9)
+  })
+})
+
+describe('special symbols', () => {
+  /** Several clicks with one tool (choosing the tool again would drop an unfinished drawing). */
+  function clicks(state: EditorState, tool: Tool, points: [number, number][]): EditorState {
+    let s = reducer(state, { type: 'tool', tool })
+    for (const p of points) {
+      const action = clickAction(s, p, null, newId)
+      if (action) s = reducer(s, action)
+    }
+    return s
+  }
+
+  it('places a point symbol with one click and selects it', () => {
+    const s = clicks(withCourse(), 'firstAid', [[50, 50]])
+    expect(present(s).specials).toEqual([{ id: 'n1', kind: 'firstAid', points: [[50, 50]] }])
+    expect(s.selected).toBe('n1')
+  })
+
+  it('draws a line point by point; clicking the last point again (a double-click) finishes it', () => {
+    const s = clicks(withCourse(), 'oobBoundary', [
+      [0, 0],
+      [100, 0],
+      [100, 50],
+    ])
+    expect(present(s).specials).toEqual([])
+    expect(s.draft).toEqual([
+      [0, 0],
+      [100, 0],
+      [100, 50],
+    ])
+  })
+
+  it('finishes a line on the repeated point or with Enter, and adds it selected', () => {
+    let s = reducer(withCourse(), { type: 'tool', tool: 'oobBoundary' })
+    for (const point of [
+      [0, 0],
+      [100, 0],
+      [100, 50],
+      [100, 52], // within the 5 m tolerance of the last point
+    ] as [number, number][]) {
+      s = reducer(s, clickAction(s, point, null, newId, 5) as Action)
+    }
+    expect(s.draft).toEqual([])
+    expect(present(s).specials[0]).toMatchObject({
+      kind: 'oobBoundary',
+      points: [
+        [0, 0],
+        [100, 0],
+        [100, 50],
+      ],
+    })
+    expect(s.selected).toBe(present(s).specials[0]?.id)
+    // Two quick clicks at different places do not finish it; Enter does.
+    s = reducer(s, { type: 'tool', tool: 'markedRoute' })
+    s = reducer(s, clickAction(s, [0, 0], null, newId, 5) as Action)
+    s = reducer(s, clickAction(s, [50, 0], null, newId, 5) as Action)
+    expect(s.draft).toHaveLength(2)
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    expect(present(s).specials.map(x => x.kind)).toEqual(['oobBoundary', 'markedRoute'])
+  })
+
+  it('drops an area with too few points, and a drawing when the tool changes', () => {
+    let s = clicks(withCourse(), 'oobArea', [
+      [0, 0],
+      [100, 0],
+    ])
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    expect(present(s).specials).toEqual([])
+    expect(s.draft).toEqual([])
+    s = clicks(s, 'oobArea', [[0, 0]])
+    s = reducer(s, { type: 'tool', tool: 'select' })
+    expect(s.draft).toEqual([])
+  })
+
+  it('finds a special under the pointer: a point near it, a line near it, an area inside or near its edge', () => {
+    let s = clicks(withCourse(), 'refreshment', [[0, 0]])
+    s = clicks(s, 'oobBoundary', [
+      [100, 0],
+      [200, 0],
+    ])
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    s = clicks(s, 'oobArea', [
+      [300, 0],
+      [400, 0],
+      [400, 100],
+      [300, 100],
+    ])
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    const [cup, line, area] = present(s).specials.map(x => x.id)
+    const at = (p: [number, number]) => specialAt(present(s).specials, p, 5, 20)
+    expect(at([10, 10])).toBe(cup)
+    expect(at([150, 4])).toBe(line)
+    expect(at([150, 10])).toBeNull()
+    expect(at([350, 50])).toBe(area)
+    expect(at([403, 50])).toBe(area)
+    expect(at([450, 50])).toBeNull()
+    const area0 = present(s).specials[2] as EventDoc['specials'][number]
+    expect(vertexAt(area0, [401, 99], 5)).toBe(2)
+    expect(movedPoints(area0, [10, 0], 2)[2]).toEqual([410, 100])
+    expect(movedPoints(area0, [10, 0], null)[0]).toEqual([310, 0])
+  })
+
+  it('keeps a selected special across edits, and drops the selection when it is deleted by undo', () => {
+    let s = clicks(withCourse(), 'firstAid', [[0, 0]])
+    s = reducer(s, { type: 'edit', doc: addCourse(present(s), { id: 'B', name: 'B', printScale: 15000 }) })
+    expect(s.selected).toBe('n1')
+    s = reducer(s, { type: 'undo' })
+    s = reducer(s, { type: 'undo' })
+    expect(present(s).specials).toEqual([])
+    expect(s.selected).toBeNull()
   })
 })

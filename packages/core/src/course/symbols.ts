@@ -2,7 +2,7 @@
 // (Canvas in the editor, pdf-lib for print, see ../render). Coordinates are "print paper mm": a map frame
 // position in metres × 1000 / printScale, y up, so one primitive list serves screen and paper.
 //
-// Sizes per ISOM 2017-2 section 3.7 (given at 1:15 000) and ISSprOM 2019-2 section 4.7 (given at
+// Sizes per ISOM 2017-2 section 3.7 (given at 1:15 000) and ISSprOM 2019-2 revision 6 section 4.7 (given at
 // 1:4 000), enlarged in proportion when printed at a larger scale (150 % at 1:10 000, 300 % at 1:5 000;
 // 133 % at 1:3 000 for sprint). Where the specifications give no number (the crossing point's curve, how
 // far course lines stop short of a crossing point), the values are taken from the specifications'
@@ -39,8 +39,12 @@ export type SymbolSizes = {
   crossingEnd: number
   crossingWaist: number
   crossingHandle: number
+  crossingLineWidth: number
   /** How far from a crossing point's centre the course lines stop. */
   crossingClearance: number
+  /** A leg that is a marked route (707) is dashed: dash and gap lengths. */
+  markedDash: number
+  markedGap: number
 }
 
 const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
@@ -59,7 +63,10 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       crossingEnd: 0.85,
       crossingWaist: 0.35,
       crossingHandle: 0.65,
+      crossingLineWidth: 0.35,
       crossingClearance: 2.5,
+      markedDash: 2.0,
+      markedGap: 0.5,
     },
   },
   issprom: {
@@ -73,12 +80,16 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       numberHeight: 4.0,
       numberGap: 1.0,
       legGap: 0.6,
-      // ISSprOM's crossing point is wider: 0.175 mm more on each side.
-      crossingHalfLength: 1.5,
-      crossingEnd: 1.025,
-      crossingWaist: 0.525,
-      crossingHandle: 0.65,
-      crossingClearance: 2.5,
+      // ISSprOM 2019-2 revision 6 (710.1): 4.5 mm long, 0.5 mm lines, 1.0 mm clear in the middle
+      // (centre lines 0.75 mm from the course line), the ends about 0.27 mm further out.
+      crossingHalfLength: 2.25,
+      crossingEnd: 1.02,
+      crossingWaist: 0.66,
+      crossingHandle: 0.975,
+      crossingLineWidth: 0.5,
+      crossingClearance: 3.25,
+      markedDash: 2.0,
+      markedGap: 0.5,
     },
   },
 }
@@ -88,6 +99,24 @@ export function symbolSizes(standard: Standard, printScale: number): SymbolSizes
   const { scale, sizes } = BASE[standard]
   const factor = Math.max(1, scale / printScale)
   return Object.fromEntries(Object.entries(sizes).map(([k, v]) => [k, v * factor])) as SymbolSizes
+}
+
+export function polylineLength(points: Point[]): number {
+  let total = 0
+  for (let i = 1; i < points.length; i++) total += len(sub(points[i] as Point, points[i - 1] as Point))
+  return total
+}
+
+/**
+ * A dash pattern stretched so a line of `length` starts and ends with a whole dash (as OCAD and Purple
+ * Pen draw dashed lines): n dashes and n − 1 gaps. A closed outline has as many gaps as dashes. A line
+ * shorter than one dash is drawn solid.
+ */
+export function fittedDash(length: number, dash: number, gap: number, closed = false): number[] | undefined {
+  if (length <= dash) return undefined
+  const n = Math.max(1, Math.round((length + (closed ? 0 : gap)) / (dash + gap)))
+  const k = length / (n * dash + (closed ? n : n - 1) * gap)
+  return [dash * k, gap * k]
 }
 
 /** Map frame metres -> print paper mm at a print scale. */
@@ -143,7 +172,7 @@ function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string): Pri
           ...at(h, side * s.crossingEnd),
         ],
       ],
-      lineWidth: s.lineWidth,
+      lineWidth: s.crossingLineWidth,
       role: 'symbol',
       owner,
     } as const
@@ -201,7 +230,10 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
     }
     points[0] = along(first, unit(sub(second, first)), Math.min(startCut, len(sub(second, first))))
     points[points.length - 1] = along(last, unit(sub(beforeLast, last)), Math.min(endCut, len(sub(last, beforeLast))))
-    out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg' })
+    // A marked route (707) is dashed instead of a course line, starting and ending with a dash.
+    const marked = course.markedRoutes?.includes(legKey(course.controls[i] as string, course.controls[i + 1] as string))
+    const dash = marked ? fittedDash(polylineLength(points), s.markedDash, s.markedGap) : undefined
+    out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg', ...(dash ? { dash } : {}) })
   }
 
   stops.forEach((stop, i) => {

@@ -2,6 +2,7 @@
 // editor keeps every state for undo/redo. Invalid edits throw CourseError.
 import { cellSymbol } from '../descriptions/symbols.ts'
 import {
+  type BoundaryStyle,
   type ControlKind,
   type Course,
   CourseError,
@@ -10,8 +11,13 @@ import {
   type DescriptionColumnKey,
   type EventDoc,
   legKey,
+  MIN_POINTS,
   type Point,
+  SPECIAL_GEOMETRY,
+  type Special,
+  type SpecialKind,
   type Standard,
+  specialById,
 } from './doc.ts'
 import { nextFreeCode } from './numbering.ts'
 
@@ -37,16 +43,18 @@ export function moveControl(doc: EventDoc, id: string, position: Point): EventDo
   return { ...doc, controls: doc.controls.map(c => (c.id === id ? { ...c, position } : c)) }
 }
 
-/** Delete a control and take it out of every course (with the bends of its legs). */
+/** Delete a control and take it out of every course (with the bends and marked routes of its legs). */
 export function deleteControl(doc: EventDoc, id: string): EventDoc {
   controlById(doc, id)
+  const keep = (key: string) => !key.split('>').includes(id)
   return {
     ...doc,
     controls: doc.controls.filter(c => c.id !== id),
     courses: doc.courses.map(course => ({
       ...course,
       controls: course.controls.filter(c => c !== id),
-      bends: Object.fromEntries(Object.entries(course.bends).filter(([key]) => !key.split('>').includes(id))),
+      bends: Object.fromEntries(Object.entries(course.bends).filter(([key]) => keep(key))),
+      ...(course.markedRoutes ? { markedRoutes: course.markedRoutes.filter(keep) } : {}),
     })),
   }
 }
@@ -110,9 +118,14 @@ export function setDescription(doc: EventDoc, controlId: string, column: Descrip
   }
 }
 
+/** Delete a course; special symbols limited to chosen courses no longer list it. */
 export function deleteCourse(doc: EventDoc, id: string): EventDoc {
   courseById(doc, id)
-  return { ...doc, courses: doc.courses.filter(c => c.id !== id) }
+  return {
+    ...doc,
+    courses: doc.courses.filter(c => c.id !== id),
+    specials: doc.specials.map(s => (s.courses?.includes(id) ? { ...s, courses: s.courses.filter(c => c !== id) } : s)),
+  }
 }
 
 /** Put a control into a course at `index` (default: at the end). */
@@ -159,6 +172,69 @@ export function setNumberPosition(doc: EventDoc, courseId: string, controlId: st
   return withCourse(doc, courseId, c => {
     const { [controlId]: _old, ...rest } = c.numberPositions
     return { ...c, numberPositions: offset ? { ...rest, [controlId]: offset } : rest }
+  })
+}
+
+/** Make the leg from one control to the next a marked route (707), or a normal course line again. */
+export function setMarkedRoute(doc: EventDoc, courseId: string, from: string, to: string, marked: boolean): EventDoc {
+  return withCourse(doc, courseId, c => {
+    const key = legKey(from, to)
+    const rest = (c.markedRoutes ?? []).filter(k => k !== key)
+    const markedRoutes = marked ? [...rest, key] : rest
+    const { markedRoutes: _old, ...bare } = c
+    return markedRoutes.length ? { ...bare, markedRoutes } : bare
+  })
+}
+
+function checkPoints(kind: SpecialKind, points: Point[]): void {
+  const needed = MIN_POINTS[SPECIAL_GEOMETRY[kind]]
+  if (points.length < needed || (needed === 1 && points.length > 1) || points.some(p => !p.every(Number.isFinite))) {
+    throw new CourseError('invalid_special', `A ${kind} needs ${needed === 1 ? 'one point' : `${needed} points or more`}`)
+  }
+}
+
+function withSpecial(doc: EventDoc, id: string, change: (special: Special) => Special): EventDoc {
+  specialById(doc, id)
+  return { ...doc, specials: doc.specials.map(s => (s.id === id ? change(s) : s)) }
+}
+
+/** Add a special symbol, shown on every course. */
+export function addSpecial(doc: EventDoc, { id, kind, points }: { id: string; kind: SpecialKind; points: Point[] }): EventDoc {
+  checkPoints(kind, points)
+  if (doc.specials.some(s => s.id === id) || doc.controls.some(c => c.id === id)) {
+    throw new CourseError('invalid_special', `Id ${id} is already used`)
+  }
+  return { ...doc, specials: [...doc.specials, { id, kind, points }] }
+}
+
+/** Replace a special symbol's points (moving it, or one of its vertices). */
+export function setSpecialPoints(doc: EventDoc, id: string, points: Point[]): EventDoc {
+  return withSpecial(doc, id, s => {
+    checkPoints(s.kind, points)
+    return { ...s, points }
+  })
+}
+
+export function deleteSpecial(doc: EventDoc, id: string): EventDoc {
+  specialById(doc, id)
+  return { ...doc, specials: doc.specials.filter(s => s.id !== id) }
+}
+
+/** Show a special symbol on the chosen courses only, or with null on every course. */
+export function setSpecialCourses(doc: EventDoc, id: string, courses: string[] | null): EventDoc {
+  for (const c of courses ?? []) courseById(doc, c)
+  return withSpecial(doc, id, s => {
+    const { courses: _old, ...bare } = s
+    return courses ? { ...bare, courses: [...new Set(courses)] } : bare
+  })
+}
+
+/** How an out-of-bounds area's boundary is drawn. */
+export function setSpecialBoundary(doc: EventDoc, id: string, boundary: BoundaryStyle): EventDoc {
+  return withSpecial(doc, id, s => {
+    if (s.kind !== 'oobArea') throw new CourseError('invalid_special', `A ${s.kind} has no boundary style`)
+    const { boundary: _old, ...bare } = s
+    return boundary === 'solid' ? bare : { ...bare, boundary }
   })
 }
 

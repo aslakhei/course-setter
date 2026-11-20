@@ -4,7 +4,10 @@ import {
   appendBezierCurve,
   asPDFNumber,
   type Color,
+  ColorTypes,
   closePath,
+  cmyk,
+  grayscale,
   LineCapStyle,
   LineJoinStyle,
   lineTo,
@@ -15,6 +18,7 @@ import {
   type PDFPage,
   popGraphicsState,
   pushGraphicsState,
+  rgb,
   setDashPattern,
   setFillingColor,
   setLineCap,
@@ -40,6 +44,14 @@ export type PdfOptions = {
   boldFont?: PDFFont
   /** Digit height of `font` as a fraction of its size. */
   digitHeight?: number
+}
+
+/** `share` of a colour on white paper: CMYK and grey ink scaled down, RGB mixed with white. */
+function tinted(color: Color, share: number): Color {
+  if (color.type === ColorTypes.CMYK) return cmyk(color.cyan * share, color.magenta * share, color.yellow * share, color.key * share)
+  if (color.type === ColorTypes.Grayscale) return grayscale(1 - (1 - color.gray) * share)
+  const mix = (v: number) => 1 - (1 - v) * share
+  return rgb(mix(color.red), mix(color.green), mix(color.blue))
 }
 
 const CAPS: Record<LineCap, LineCapStyle> = { butt: LineCapStyle.Butt, round: LineCapStyle.Round, square: LineCapStyle.Projecting }
@@ -100,7 +112,13 @@ export function drawPrimitivesOnPage(page: PDFPage, primitives: Primitive[], opt
       strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     } else if (p.type === 'path') {
       trace(p.commands)
-      if (p.filled) ops.push(PDFOperator.of(PDFOperatorNames.FillEvenOdd))
+      if (p.filled && p.tint !== undefined && p.tint < 1) {
+        ops.push(
+          setFillingColor(tinted(options.color, p.tint)),
+          PDFOperator.of(PDFOperatorNames.FillEvenOdd),
+          setFillingColor(options.color),
+        )
+      } else if (p.filled) ops.push(PDFOperator.of(PDFOperatorNames.FillEvenOdd))
       else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     } else {
       texts.push(p)

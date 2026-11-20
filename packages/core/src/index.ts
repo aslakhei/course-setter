@@ -1,9 +1,11 @@
 export {
   addControl,
   addCourse,
+  addSpecial,
   type CourseChange,
   deleteControl,
   deleteCourse,
+  deleteSpecial,
   insertCourseControl,
   moveControl,
   moveCourseControl,
@@ -11,11 +13,17 @@ export {
   setControlCode,
   setDescription,
   setLegBends,
+  setMarkedRoute,
   setNumberPosition,
+  setSpecialBoundary,
+  setSpecialCourses,
+  setSpecialPoints,
   setStandard,
   updateCourse,
 } from './course/commands.ts'
 export {
+  BOUNDARY_STYLES,
+  type BoundaryStyle,
   CONTROL_KINDS,
   type Control,
   type ControlKind,
@@ -32,21 +40,40 @@ export {
   emptyDoc,
   eventDocSchema,
   legKey,
+  MIN_POINTS,
   parseDoc,
   SCHEMA_VERSION,
+  SPECIAL_GEOMETRY,
+  SPECIAL_KINDS,
+  SPECIALS_BY_STANDARD,
+  type Special,
+  type SpecialKind,
   STANDARDS,
   type Standard,
+  specialById,
+  specialShownOn,
 } from './course/doc.ts'
 export { canRedo, canUndo, createHistory, HISTORY_LIMIT, type History, record, redo, undo } from './course/history.ts'
 export { courseLength, legLengths, legPath, pathLength } from './course/length.ts'
 export { chainTransforms, type MovedDoc, moveDocToVersion, transformBetween, type VersionLink } from './course/move.ts'
 export { type CourseStop, courseStops, coursesUsing, FIRST_CODE, nextFreeCode } from './course/numbering.ts'
-export { allControlsDrawing, courseDrawing, type SymbolSizes, symbolSizes, toPaperMm } from './course/symbols.ts'
+export { hatchLines, isPointKind, type SpecialSizes, specialDrawing, specialSizes, specialsDrawing } from './course/specials.ts'
+export {
+  allControlsDrawing,
+  courseDrawing,
+  fittedDash,
+  polylineLength,
+  type SymbolSizes,
+  symbolSizes,
+  toPaperMm,
+} from './course/symbols.ts'
 export {
   CROSSING_DIRECTIVE,
   descriptionSheet,
   drawDescriptionSheet,
   FINISH_DIRECTIVE,
+  MARKED_FINISH_DIRECTIVE,
+  MARKED_ROUTE_DIRECTIVE,
   SHEET,
   type SheetLine,
   sheetCell,

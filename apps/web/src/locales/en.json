@@ -264,7 +264,15 @@
       "crossingPoint": "Crossing point",
       "bend": "Bend leg",
       "special": "Special symbols",
-      "moreLater": "More symbols (map issue point, marked route, out of bounds, first aid, refreshments) come with special markings."
+      "mapIssue": "Map issue point",
+      "markedRoute": "Marked route",
+      "oobBoundary": "Out-of-bounds boundary",
+      "oobArea": "Out-of-bounds area",
+      "oobRoute": "Out-of-bounds route",
+      "crossingSection": "Crossing section",
+      "firstAid": "First aid post",
+      "refreshment": "Refreshment point",
+      "temporaryConstruction": "Temporary construction or closed area"
     },
     "undo": "Undo",
     "redo": "Redo",
@@ -275,6 +283,10 @@
       "finish": "Click on the map to place the finish{{inCourse}}.",
       "crossingPoint": "Click on the map to add a mandatory crossing point{{inCourse}}.",
       "bend": "Click on a course line to bend it; drag a bend to move it, click it to remove it.",
+      "placeSpecial": "Click on the map to place a {{name}}.",
+      "mapIssue": "Click on the map to place the map issue point. Its bar turns across the way to the nearest start.",
+      "drawSpecial": "Click to add points of the {{name}}. Double-click or Enter finishes, Backspace removes the last point, Esc cancels.",
+      "selectSpecial": "Drag to move it, or drag one of its points. Delete removes it.",
       "inCourse": " in {{course}}",
       "reuse": "Click to use {{name}} again in {{course}}.",
       "selectAll": "Click a control to select it, then drag it to move it. Delete removes it from the event."
@@ -330,6 +342,20 @@
       "deleteConfirm": "Delete the course {{course}}? Its controls stay in the event."
     },
     "selected": "Selected: {{name}}",
+    "markedRoute": "Marked route from {{from}} to {{to}}",
+    "special": {
+      "shownOn": "Shown on",
+      "allCourses": "All courses",
+      "chosenCourses": "Chosen courses",
+      "noCourses": "No courses yet.",
+      "boundary": "Edge",
+      "boundaryStyle": {
+        "solid": "Solid: marked all along",
+        "dashed": "Dashed: marked in places",
+        "none": "None: not marked"
+      },
+      "delete": "Delete {{name}}"
+    },
     "code": "Code",
     "codeInUse": "Code {{code}} is already used.",
     "removeFromCourse": "Remove from {{course}}",

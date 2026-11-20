@@ -1,7 +1,7 @@
 // The control description sheet of a course (IOF Control Descriptions 2024, symbols only): which rows it
 // has, and the rows drawn as primitives in paper mm. Line widths, the thick lines and the text sizes
 // follow the IOF specification as Purple Pen draws it (DescriptionRenderer.cs).
-import { type Course, controlById, type Description, type EventDoc } from '../course/doc.ts'
+import { type Course, controlById, type Description, type EventDoc, legKey } from '../course/doc.ts'
 import { courseLength, legLengths } from '../course/length.ts'
 import { courseStops } from '../course/numbering.ts'
 import type { Primitive } from '../render/primitives.ts'
@@ -18,8 +18,13 @@ export type SheetLine =
   /** An instruction across the sheet: the way to the finish, a mandatory crossing point. */
   | { kind: 'directive'; controlId: string; symbol: string; text: string }
 
-/** Instruction symbols: navigate to the finish (14.3), mandatory crossing point (13.3). */
+/**
+ * Instruction symbols: navigate to the finish (14.3), follow the marked route to the finish (14.1),
+ * follow the marked route between controls (13.2), mandatory crossing point (13.3).
+ */
 export const FINISH_DIRECTIVE = '14.3'
+export const MARKED_FINISH_DIRECTIVE = '14.1'
+export const MARKED_ROUTE_DIRECTIVE = '13.2'
 export const CROSSING_DIRECTIVE = '13.3'
 
 const formatKm = (metres: number) => `${(metres / 1000).toFixed(1)} km`
@@ -32,15 +37,21 @@ export function descriptionSheet(doc: EventDoc, course: Course, title: string): 
     { kind: 'header', name: course.name, length: formatKm(courseLength(doc, course)), climb },
   ]
   const legs = legLengths(doc, course)
-  courseStops(doc, course).forEach((stop, i) => {
+  const metres = (leg: number | undefined) => (leg === undefined ? '' : `${Math.round(leg / 10) * 10} m`)
+  const marked = (i: number) =>
+    i >= 0 &&
+    i + 1 < course.controls.length &&
+    (course.markedRoutes ?? []).includes(legKey(course.controls[i] as string, course.controls[i + 1] as string))
+  const stops = courseStops(doc, course)
+  stops.forEach((stop, i) => {
     if (stop.kind === 'finish') {
-      // "Navigate X m to the finish", X being the last leg rounded to 10 m.
-      const leg = i > 0 ? legs[i - 1] : undefined
+      // "Navigate X m to the finish" (14.3), or "follow the marked route X m to the finish" (14.1) when
+      // the last leg is a marked route; X is the last leg rounded to 10 m.
       lines.push({
         kind: 'directive',
         controlId: stop.controlId,
-        symbol: FINISH_DIRECTIVE,
-        text: leg === undefined ? '' : `${Math.round(leg / 10) * 10} m`,
+        symbol: marked(i - 1) ? MARKED_FINISH_DIRECTIVE : FINISH_DIRECTIVE,
+        text: metres(i > 0 ? legs[i - 1] : undefined),
       })
     } else if (stop.kind === 'crossingPoint') {
       lines.push({ kind: 'directive', controlId: stop.controlId, symbol: CROSSING_DIRECTIVE, text: '' })
@@ -53,6 +64,10 @@ export function descriptionSheet(doc: EventDoc, course: Course, title: string): 
         code: stop.code === null ? '' : String(stop.code),
         cells: controlById(doc, stop.controlId).description ?? {},
       })
+    }
+    // A marked route to the next stop (not the finish, which says it itself): "follow the marked route X m" (13.2).
+    if (marked(i) && stops[i + 1]?.kind !== 'finish') {
+      lines.push({ kind: 'directive', controlId: stop.controlId, symbol: MARKED_ROUTE_DIRECTIVE, text: metres(legs[i]) })
     }
   })
   return lines
