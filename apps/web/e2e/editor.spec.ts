@@ -263,6 +263,13 @@ test('special symbols and marked routes: draw, limit to a course, keep after rel
   await clickMap(page, 0.45, 0.58)
   await page.keyboard.press('Enter')
   await expect(page.getByText('Selected: Out-of-bounds area')).toBeVisible()
+  // Shift+click on an edge adds a corner there.
+  await tool(page, 'Select').click()
+  const mapBox = await page.getByTestId('editor-map').boundingBox()
+  if (!mapBox) throw new Error('no map')
+  await page.keyboard.down('Shift')
+  await page.mouse.click(mapBox.x + mapBox.width * 0.425, mapBox.y + mapBox.height * 0.5)
+  await page.keyboard.up('Shift')
   await page.getByLabel('Edge').selectOption('dashed')
   await page.getByRole('radio', { name: 'Chosen courses' }).check()
   await page.getByRole('checkbox', { name: 'D16' }).uncheck()
@@ -288,6 +295,7 @@ test('special symbols and marked routes: draw, limit to a course, keep after rel
   const h21 = doc.courses.find(c => c.name === 'H21')
   expect(doc.specials.map(s => s.kind)).toEqual(['firstAid', 'oobArea'])
   expect(doc.specials[1]).toMatchObject({ boundary: 'dashed', courses: [h21?.id] })
+  expect((doc.specials[1] as unknown as { points: unknown[] }).points).toHaveLength(4)
   expect(h21?.markedRoutes).toHaveLength(1)
 
   // Click the first aid post on the map to select it; Delete removes it.
@@ -299,6 +307,42 @@ test('special symbols and marked routes: draw, limit to a course, keep after rel
   const { data: after } = await admin.from('events').select('doc').eq('club_id', clubId).single()
   const remaining = (after?.doc as { specials: { kind: string }[] } | undefined)?.specials ?? []
   expect(remaining.map(s => s.kind)).toEqual(['oobArea'])
+})
+
+test('a bend is removed by clicking it', async ({ browser }) => {
+  test.setTimeout(180_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId } = await clubWithMap(ada, `E2E bends ${randomUUID().slice(0, 8)}`, fixture)
+  clubs.push(clubId)
+  const page = await pageFor(browser, ada)
+  await page.goto(`/clubs/${clubId}/events`)
+  await page.getByLabel('Name').fill('Bends')
+  await page.getByRole('button', { name: 'Create event' }).click()
+  await expect(page.getByTestId('editor-map')).toBeVisible()
+  await newCourse(page, 'H21')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.2, 0.5)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.6, 0.5)
+  const straight = await lengthOf(page)
+
+  // Click the leg to bend it, drag the bend away, then click the bend: the leg is straight again.
+  await tool(page, 'Bend leg').click()
+  await clickMap(page, 0.4, 0.5)
+  const box = await page.getByTestId('editor-map').boundingBox()
+  if (!box) throw new Error('no map')
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.5)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.4, box.y + box.height * 0.42, { steps: 6 })
+  await page.mouse.up()
+  await expect.poll(() => lengthOf(page)).not.toBe(straight)
+  await clickMap(page, 0.4, 0.42)
+  await expect.poll(() => lengthOf(page)).toBe(straight)
+  await waitSaved(page)
+  const { data: event } = await admin.from('events').select('doc').eq('club_id', clubId).single()
+  const courses = (event?.doc as { courses: { bends: Record<string, unknown[]> }[] } | undefined)?.courses ?? []
+  expect(courses[0]?.bends).toEqual({})
 })
 
 test('two people editing at once: the second save gets the conflict and nothing is lost', async ({ browser }) => {
