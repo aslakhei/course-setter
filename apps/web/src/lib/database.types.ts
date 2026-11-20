@@ -167,6 +167,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"exports": {
+                  Row: {
+                    "club_id": string,"course_ids": (string)[],"created_at": string,"error": string | null,"event_id": string,"expires_at": string,"file_name": string | null,"finished_at": string | null,"id": string,"path": string | null,"requested_by": string | null,"revision": number,"separate": boolean,"status": Database["public"]['Enums']["export_status"]
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id": string,"course_ids": (string)[],"created_at"?: string,"error"?: string | null,"event_id": string,"expires_at"?: string,"file_name"?: string | null,"finished_at"?: string | null,"id"?: string,"path"?: string | null,"requested_by"?: string | null,"revision": number,"separate"?: boolean,"status"?: Database["public"]['Enums']["export_status"]
+                  }
+                  Update: {
+                    "club_id"?: string,"course_ids"?: (string)[],"created_at"?: string,"error"?: string | null,"event_id"?: string,"expires_at"?: string,"file_name"?: string | null,"finished_at"?: string | null,"id"?: string,"path"?: string | null,"requested_by"?: string | null,"revision"?: number,"separate"?: boolean,"status"?: Database["public"]['Enums']["export_status"]
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "exports_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "exports_event_id_fkey"
+      columns: ["event_id"]
+isOneToOne: false
+      referencedRelation: "events"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "exports_requested_by_fkey"
+      columns: ["requested_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"jobs": {
                   Row: {
                     "attempts": number,"created_at": string,"error": string | null,"finished_at": string | null,"id": number,"locked_by": string | null,"locked_until": string | null,"max_attempts": number,"payload": NonNullable<Json>,"result": Json | null,"run_after": string,"started_at": string | null,"status": Database["public"]['Enums']["job_status"],"type": string
@@ -311,6 +343,9 @@ isOneToOne: false
 "move_event_to_version":
 { Args: { "doc": Json,"event": string,"expected_revision": number,"map_version": string }; Returns: number
                            },
+"request_export":
+{ Args: { "course_ids": (string)[],"event": string,"separate"?: boolean }; Returns: string
+                           },
 "save_event":
 { Args: { "doc": Json,"event": string,"expected_revision": number }; Returns: number
                            },
@@ -324,7 +359,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "club_role": "admin"|"member","job_status": "queued"|"running"|"done"|"failed","map_kind": "ocad"|"pdf","map_version_status": "uploading"|"processing"|"needs_alignment"|"ready"|"failed"|"deleted"
+            "club_role": "admin"|"member","export_status": "queued"|"running"|"ready"|"failed"|"expired","job_status": "queued"|"running"|"done"|"failed","map_kind": "ocad"|"pdf","map_version_status": "uploading"|"processing"|"needs_alignment"|"ready"|"failed"|"deleted"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -440,7 +475,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "club_role": ["admin", "member"],"job_status": ["queued", "running", "done", "failed"],"map_kind": ["ocad", "pdf"],"map_version_status": ["uploading", "processing", "needs_alignment", "ready", "failed", "deleted"]
+            "club_role": ["admin", "member"],"export_status": ["queued", "running", "ready", "failed", "expired"],"job_status": ["queued", "running", "done", "failed"],"map_kind": ["ocad", "pdf"],"map_version_status": ["uploading", "processing", "needs_alignment", "ready", "failed", "deleted"]
           }
         }
 } as const
