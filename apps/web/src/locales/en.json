@@ -286,7 +286,7 @@
       "placeSpecial": "Click on the map to place a {{name}}.",
       "mapIssue": "Click on the map to place the map issue point. Its bar turns across the way to the nearest start.",
       "drawSpecial": "Click to add points of the {{name}}. Double-click or Enter finishes, Backspace removes the last point, Esc cancels.",
-      "selectSpecial": "Drag to move it, or drag one of its points. Delete removes it.",
+      "selectSpecial": "Drag to move it, or drag one of its points. Shift+click adds a point on an edge or removes one. Delete removes it.",
       "inCourse": " in {{course}}",
       "reuse": "Click to use {{name}} again in {{course}}.",
       "selectAll": "Click a control to select it, then drag it to move it. Delete removes it from the event."

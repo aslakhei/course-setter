@@ -1,4 +1,4 @@
-// The editor's map: the map version's tiles, the course being edited (or all controls), the rest of
+﻿// The editor's map: the map version's tiles, the course being edited (or all controls), the rest of
 // the control pool faintly (to reuse), the selection, a preview of what a click will place, and pointer
 // handling for the tools.
 import 'ol/ol.css'
@@ -39,7 +39,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
 import { COURSE_PURPLE, type Drawing, primitiveLayer } from './courseLayer.ts'
-import { isControlTool, isSpecialTool, legAt, movedPoints, specialAt, type Tool, vertexAt } from './state.ts'
+import { editPoints, isControlTool, isSpecialTool, legAt, movedPoints, numberAt, specialAt, type Tool, vertexAt } from './state.ts'
 
 /** The selected control (and a control a click would reuse) is drawn in this colour instead of purple. */
 export const HIGHLIGHT = '#0b62a4'
@@ -175,22 +175,12 @@ export function EditorMap(props: Props) {
       // In a course, its own stops win over pool controls at the same place.
       return (c && near.find(x => c.controls.includes(x.id))?.id) || near[0]?.id || null
     }
-    /** A control number of the course under the pointer. */
+    /** A control number (in the all-controls view: a code) under the pointer. */
     const hitNumber = (coordinate: Point): { id: string; atMm: Point } | null => {
-      const { doc: d, course: c } = latest.current
-      if (!c) return null
-      const pointer = toPaperMm(coordinate, c.printScale)
-      const slack = (PICK_PX * resolution() * 1000) / c.printScale
-      for (const p of courseDrawing(d, c)) {
-        if (p.type !== 'text' || !p.owner) continue
-        if (
-          Math.abs(pointer[0] - p.at[0]) <= p.height * 0.45 * p.text.length + slack &&
-          Math.abs(pointer[1] - p.at[1]) <= p.height / 2 + slack
-        ) {
-          return { id: p.owner, atMm: p.at }
-        }
-      }
-      return null
+      const { doc: d, course: c, mapScale: m } = latest.current
+      const scale = c?.printScale ?? m
+      const slack = (PICK_PX * resolution() * 1000) / scale
+      return numberAt(c ? courseDrawing(d, c) : allControlsDrawing(d, m), toPaperMm(coordinate, scale), slack)
     }
     /** A special symbol shown on the course (or any, in the all-controls view) under the pointer. */
     const hitSpecial = (coordinate: Point): string | null => {
@@ -210,10 +200,15 @@ export function EditorMap(props: Props) {
     }
 
     let dragging: Drag | null = null
+    // A press this interaction handled also ends in a map click; that click must not act again (a bend
+    // removed by clicking it would otherwise be added back by the same click).
+    let handledUpAt = 0
     const pointer = new PointerInteraction({
       handleDownEvent: (e: MapBrowserEvent) => {
         const coordinate = e.coordinate as Point
         const { tool: t } = latest.current
+        // Shift+click edits points (see the click handler): no dragging.
+        if ((e.originalEvent as PointerEvent).shiftKey) return false
         if (t === 'select') {
           // Only the selected control (or its number) can be dragged; anything else pans the map, and a
           // click selects it first. No accidental moves while panning.
@@ -254,6 +249,7 @@ export function EditorMap(props: Props) {
         dragging = null
         setDrag(null)
         if (!done) return false
+        handledUpAt = Date.now()
         const moved = done.point[0] !== done.from[0] || done.point[1] !== done.from[1]
         const { doc: d, course: c } = latest.current
         if (done.kind === 'special') {
@@ -286,14 +282,22 @@ export function EditorMap(props: Props) {
     // Every click counts at once: setters place controls in quick succession, so no waiting to rule out
     // a double click (and no double-click zoom in the editor).
     map.on('click', e => {
+      if (Date.now() - handledUpAt < 300) return
       const coordinate = e.coordinate as Point
-      const { doc: d, course: c, tool: t } = latest.current
+      const { doc: d, course: c, tool: t, selected: s } = latest.current
+      // Shift+click on the selected line or area: removes the point clicked, or adds one on an edge.
+      const selectedSpecial = d.specials.find(x => x.id === s)
+      if ((e.originalEvent as PointerEvent).shiftKey && t === 'select' && selectedSpecial) {
+        const points = editPoints(selectedSpecial, coordinate, PICK_PX * 1.5 * resolution())
+        if (points) latest.current.onMoveSpecial(selectedSpecial.id, points)
+        return
+      }
       const leg = t === 'bend' && c ? legAt(d, c, coordinate, PICK_PX * resolution()) : null
-      // Selecting: a control, else a special symbol. Placing a control: one of that kind to reuse.
-      // Special symbols are always new.
+      // Selecting: a control or its number, else a special symbol. Placing a control: one of that kind
+      // to reuse. Special symbols are always new.
       const hit =
         t === 'select'
-          ? (hitControl(coordinate) ?? hitSpecial(coordinate))
+          ? (hitControl(coordinate) ?? hitNumber(coordinate)?.id ?? hitSpecial(coordinate))
           : isControlTool(t)
             ? hitControl(coordinate, t)
             : isSpecialTool(t)

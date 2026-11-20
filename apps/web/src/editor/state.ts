@@ -16,6 +16,7 @@ import {
   legPath,
   MIN_POINTS,
   type Point,
+  type Primitive,
   record,
   redo,
   removeCourseControl,
@@ -210,6 +211,23 @@ export function legAt(doc: EventDoc, course: Course, point: Point, tolerance: nu
   return best && { leg: best.leg, segment: best.segment }
 }
 
+/**
+ * The control whose number (a code, in the all-controls view) is under `pointer` (paper mm), with the
+ * number's position; `slack` mm of leeway round the digits.
+ */
+export function numberAt(drawing: Primitive[], pointer: Point, slack: number): { id: string; atMm: Point } | null {
+  for (const p of drawing) {
+    if (p.type !== 'text' || p.role !== 'number' || !p.owner) continue
+    if (
+      Math.abs(pointer[0] - p.at[0]) <= p.height * 0.45 * p.text.length + slack &&
+      Math.abs(pointer[1] - p.at[1]) <= p.height / 2 + slack
+    ) {
+      return { id: p.owner, atMm: p.at }
+    }
+  }
+  return null
+}
+
 /** Whether `point` lies inside a polygon (even-odd). */
 export function insidePolygon([x, y]: Point, polygon: Point[]): boolean {
   let inside = false
@@ -247,6 +265,28 @@ export function vertexAt(special: Special, point: Point, tolerance: number): num
   if (SPECIAL_GEOMETRY[special.kind] === 'point') return null
   const index = special.points.findIndex(p => Math.hypot(p[0] - point[0], p[1] - point[1]) <= tolerance)
   return index >= 0 ? index : null
+}
+
+/**
+ * Shift+click on a selected line or area: on one of its points, that point removed (while enough are
+ * left); on an edge within `tolerance` metres, a new point there. Null when the click is on neither, or
+ * the point cannot go.
+ */
+export function editPoints(special: Special, point: Point, tolerance: number): Point[] | null {
+  const geometry = SPECIAL_GEOMETRY[special.kind]
+  if (geometry === 'point') return null
+  const index = vertexAt(special, point, tolerance)
+  if (index !== null) {
+    return special.points.length > MIN_POINTS[geometry] ? special.points.filter((_, i) => i !== index) : null
+  }
+  const pts = special.points
+  const edges = geometry === 'area' ? pts.length : pts.length - 1
+  let best: { at: number; distance: number } | null = null
+  for (let i = 0; i < edges; i++) {
+    const distance = distanceToSegment(point, pts[i] as Point, pts[(i + 1) % pts.length] as Point)
+    if (distance <= tolerance && (!best || distance < best.distance)) best = { at: i + 1, distance }
+  }
+  return best ? [...pts.slice(0, best.at), point, ...pts.slice(best.at)] : null
 }
 
 /** A special's points moved by `delta`, or only vertex `index` of them. */

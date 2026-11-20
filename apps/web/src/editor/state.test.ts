@@ -1,4 +1,13 @@
-﻿import { addCourse, courseById, courseLength, type EventDoc, emptyDoc, moveControl } from '@course-setter/core'
+﻿import {
+  addCourse,
+  allControlsDrawing,
+  courseById,
+  courseDrawing,
+  courseLength,
+  type EventDoc,
+  emptyDoc,
+  moveControl,
+} from '@course-setter/core'
 import { describe, expect, it } from 'vitest'
 import {
   type Action,
@@ -6,9 +15,11 @@ import {
   addBend,
   clickAction,
   type EditorState,
+  editPoints,
   initialState,
   legAt,
   movedPoints,
+  numberAt,
   reducer,
   specialAt,
   type Tool,
@@ -269,5 +280,81 @@ describe('special symbols', () => {
     s = reducer(s, { type: 'undo' })
     expect(present(s).specials).toEqual([])
     expect(s.selected).toBeNull()
+  })
+})
+
+describe('editing the points of a line or area (Shift+click)', () => {
+  const area = {
+    id: 'a',
+    kind: 'oobArea' as const,
+    points: [
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ] as [number, number][],
+  }
+  const line = {
+    id: 'l',
+    kind: 'oobBoundary' as const,
+    points: [
+      [0, 0],
+      [100, 0],
+    ] as [number, number][],
+  }
+
+  it('adds a point on the nearest edge, also on the edge closing an area', () => {
+    expect(editPoints(area, [50, 2], 5)).toEqual([
+      [0, 0],
+      [50, 2],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+    ])
+    expect(editPoints(area, [1, 50], 5)).toEqual([
+      [0, 0],
+      [100, 0],
+      [100, 100],
+      [0, 100],
+      [1, 50],
+    ])
+    expect(editPoints(line, [50, -3], 5)).toEqual([
+      [0, 0],
+      [50, -3],
+      [100, 0],
+    ])
+    expect(editPoints(area, [50, 50], 5)).toBeNull() // inside, on no edge
+  })
+
+  it('removes the point clicked, keeping at least what the shape needs', () => {
+    expect(editPoints(area, [99, 99], 5)).toEqual([
+      [0, 0],
+      [100, 0],
+      [0, 100],
+    ])
+    const triangle = { ...area, points: area.points.slice(0, 3) }
+    expect(editPoints(triangle, [100, 100], 5)).toBeNull()
+    expect(editPoints(line, [0, 1], 5)).toBeNull()
+    expect(editPoints({ id: 'p', kind: 'firstAid', points: [[0, 0]] }, [0, 0], 5)).toBeNull()
+  })
+})
+
+describe('clicking a control number', () => {
+  it('finds the control whose number is under the pointer, in a course and in the all-controls view', () => {
+    let s = withCourse()
+    s = click(s, 'start', [0, 0])
+    s = click(s, 'control', [300, 0])
+    const doc = present(s)
+    const drawing = courseDrawing(doc, courseById(doc, 'A'))
+    const number = drawing.find(p => p.type === 'text')
+    if (number?.type !== 'text') throw new Error('no number')
+    const control = doc.controls.find(c => c.kind === 'control')?.id
+    expect(numberAt(drawing, number.at, 0)?.id).toBe(control)
+    expect(numberAt(drawing, [number.at[0], number.at[1] + 3], 0)).toBeNull() // above the digits
+    expect(numberAt(drawing, [number.at[0], number.at[1] + 3], 1.5)?.id).toBe(control) // with leeway
+    const codes = allControlsDrawing(doc, 15000)
+    const code = codes.find(p => p.type === 'text')
+    if (code?.type !== 'text') throw new Error('no code')
+    expect(numberAt(codes, code.at, 0)?.id).toBe(control)
   })
 })
