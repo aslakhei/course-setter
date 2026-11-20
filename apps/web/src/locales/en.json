@@ -414,5 +414,44 @@
       "cancel": "Cancel",
       "conflict": "Someone else saved this event meanwhile. Close this and try again once their changes have loaded."
     }
+  },
+  "print": {
+    "open": "Print",
+    "back": "Back to editing",
+    "toolbar": "Page",
+    "pageOf": "Page of",
+    "paper": "Paper",
+    "orientation": "Orientation",
+    "portrait": "Portrait",
+    "landscape": "Landscape",
+    "paperName": {
+      "portrait": "{{paper}} portrait",
+      "landscape": "{{paper}} landscape"
+    },
+    "reset": "Reset page",
+    "resetHelp": "Place the page and the description sheet automatically again",
+    "hint": "Drag the page to choose what is printed. Drag the description sheet to a free spot.",
+    "mapLabel": "Map with the printed page: drag the page or the description sheet to move it",
+    "panel": "Print",
+    "selected": "{{count}} of {{total}} courses",
+    "summary": "{{paper}} · {{scale}} · {{length}} km",
+    "shown": "Shown",
+    "show": "Show",
+    "showCourse": "Show the page of {{name}}",
+    "files": "Files",
+    "onePdf": "One PDF, a page per course",
+    "zip": "A PDF per course (zip)",
+    "make_one": "Make PDF",
+    "make_other": "Make PDF of {{count}} courses",
+    "chooseCourse": "Choose at least one course.",
+    "waitForSave": "Saving your changes first…",
+    "saveFirst": "Your changes are not saved yet, so the PDF cannot be made.",
+    "recent": "Your recent PDFs (kept for 24 hours)",
+    "none": "No PDFs yet.",
+    "making": "Making a PDF of {{courses}}…",
+    "failed": "Could not make the PDF of {{courses}}",
+    "download": "Download",
+    "downloadLabel": "Download {{name}}",
+    "downloadFailed": "Could not download the file. Make a new PDF if it has expired."
   }
 }

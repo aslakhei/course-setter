@@ -106,13 +106,17 @@ export {
   SYMBOL_BOX_UNITS,
 } from './descriptions/symbols.ts'
 export {
+  changePaper,
   DEFAULT_MARGIN,
   defaultPrintSettings,
   groundToPage,
   mapAreaOf,
   type PrintPage,
+  pageGroundArea,
   pagePosition,
   pageSize,
+  pageToPaperOffset,
+  placeDescriptions,
   printPage,
   printSettingsOf,
 } from './print/layout.ts'

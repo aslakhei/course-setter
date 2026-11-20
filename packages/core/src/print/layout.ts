@@ -171,3 +171,66 @@ export function pagePosition(course: Course, settings: PrintSettings, p: Point):
   const size = pageSize(settings.paper, settings.orientation)
   return groundToPage(settings.center, mapAreaOf(size, settings.margin), course.printScale)(p)
 }
+
+/** The whole sheet of paper (map area and margin) in ground metres: the frame the print view shows. */
+export function pageGroundArea(course: Course, settings: PrintSettings): Extent {
+  const [w, h] = pageSize(settings.paper, settings.orientation)
+  const half = (mm: number) => (mm * course.printScale) / 2000
+  const [x, y] = settings.center
+  return { minX: x - half(w), maxX: x + half(w), minY: y - half(h), maxY: y + half(h) }
+}
+
+/**
+ * What to add to page mm (y up) to get paper mm in the map frame at the course's print scale, the
+ * coordinates course symbols are drawn in: the print view draws the page's primitives on the map with it.
+ */
+export function pageToPaperOffset(course: Course, settings: PrintSettings): Point {
+  const [x, y] = pagePosition(course, settings, [0, 0])
+  return [-x, -y]
+}
+
+/** Where the description sheet's top-left corner (page mm, y down) may go: the sheet stays in the map area. */
+function sheetRange(doc: EventDoc, course: Course, title: string, settings: PrintSettings) {
+  const [, height] = pageSize(settings.paper, settings.orientation)
+  const area = mapAreaOf(pageSize(settings.paper, settings.orientation), settings.margin)
+  const sheet = sheetOf(doc, course, title)
+  const x = { min: area.minX + sheet.pad, max: area.maxX - sheet.pad - sheet.width }
+  const y = { min: height - area.maxY + sheet.pad, max: height - area.minY - sheet.pad - sheet.height }
+  return { x, y }
+}
+
+const clampTo = (v: number, r: { min: number; max: number }) => Math.max(r.min, Math.min(Math.max(r.min, r.max), v))
+
+/**
+ * The settings with the description sheet's top-left corner at `at` (page mm, y down), kept inside the
+ * map area (at its top-left when it is bigger than the map area).
+ */
+export function placeDescriptions(doc: EventDoc, course: Course, title: string, settings: PrintSettings, at: Point): PrintSettings {
+  const range = sheetRange(doc, course, title, settings)
+  const placed: LayoutElement = { kind: 'descriptions', at: [clampTo(at[0], range.x), clampTo(at[1], range.y)] }
+  const others = settings.layout.filter(e => e.kind !== 'descriptions')
+  return { ...settings, layout: [...others, placed] }
+}
+
+/**
+ * The settings on other paper or the other way round. The page keeps its centre, and the description
+ * sheet keeps its distance from the nearest side and the nearest top or bottom of the map area, so a
+ * sheet in a corner stays in that corner.
+ */
+export function changePaper(
+  doc: EventDoc,
+  course: Course,
+  title: string,
+  settings: PrintSettings,
+  paper: Paper,
+  orientation: Orientation,
+): PrintSettings {
+  const next = { ...settings, paper, orientation }
+  const element = settings.layout.find(e => e.kind === 'descriptions')
+  if (!element) return next
+  const from = sheetRange(doc, course, title, settings)
+  const to = sheetRange(doc, course, title, next)
+  const keep = (v: number, a: { min: number; max: number }, b: { min: number; max: number }) =>
+    v - a.min <= a.max - v ? b.min + (v - a.min) : b.max - (a.max - v)
+  return placeDescriptions(doc, course, title, next, [keep(element.at[0], from.x, to.x), keep(element.at[1], from.y, to.y)])
+}
