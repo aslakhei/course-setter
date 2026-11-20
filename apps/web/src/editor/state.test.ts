@@ -21,6 +21,9 @@ import {
   movedPoints,
   numberAt,
   reducer,
+  routeAt,
+  type Shape,
+  shapeOf,
   specialAt,
   type Tool,
   vertexAt,
@@ -223,12 +226,12 @@ describe('special symbols', () => {
     })
     expect(s.selected).toBe(present(s).specials[0]?.id)
     // Two quick clicks at different places do not finish it; Enter does.
-    s = reducer(s, { type: 'tool', tool: 'markedRoute' })
+    s = reducer(s, { type: 'tool', tool: 'oobRoute' })
     s = reducer(s, clickAction(s, [0, 0], null, newId, 5) as Action)
     s = reducer(s, clickAction(s, [50, 0], null, newId, 5) as Action)
     expect(s.draft).toHaveLength(2)
     s = reducer(s, { type: 'finishDraft', id: newId() })
-    expect(present(s).specials.map(x => x.kind)).toEqual(['oobBoundary', 'markedRoute'])
+    expect(present(s).specials.map(x => x.kind)).toEqual(['oobBoundary', 'oobRoute'])
   })
 
   it('drops an area with too few points, and a drawing when the tool changes', () => {
@@ -266,7 +269,7 @@ describe('special symbols', () => {
     expect(at([350, 50])).toBe(area)
     expect(at([403, 50])).toBe(area)
     expect(at([450, 50])).toBeNull()
-    const area0 = present(s).specials[2] as EventDoc['specials'][number]
+    const area0 = shapeOf(present(s), area ?? null) as Shape
     expect(vertexAt(area0, [401, 99], 5)).toBe(2)
     expect(movedPoints(area0, [10, 0], 2)[2]).toEqual([410, 100])
     expect(movedPoints(area0, [10, 0], null)[0]).toEqual([310, 0])
@@ -286,7 +289,7 @@ describe('special symbols', () => {
 describe('editing the points of a line or area (Shift+click)', () => {
   const area = {
     id: 'a',
-    kind: 'oobArea' as const,
+    geometry: 'area' as const,
     points: [
       [0, 0],
       [100, 0],
@@ -296,7 +299,7 @@ describe('editing the points of a line or area (Shift+click)', () => {
   }
   const line = {
     id: 'l',
-    kind: 'oobBoundary' as const,
+    geometry: 'line' as const,
     points: [
       [0, 0],
       [100, 0],
@@ -335,7 +338,7 @@ describe('editing the points of a line or area (Shift+click)', () => {
     const triangle = { ...area, points: area.points.slice(0, 3) }
     expect(editPoints(triangle, [100, 100], 5)).toBeNull()
     expect(editPoints(line, [0, 1], 5)).toBeNull()
-    expect(editPoints({ id: 'p', kind: 'firstAid', points: [[0, 0]] }, [0, 0], 5)).toBeNull()
+    expect(editPoints({ id: 'p', geometry: 'point', points: [[0, 0]] }, [0, 0], 5)).toBeNull()
   })
 })
 
@@ -356,5 +359,82 @@ describe('clicking a control number', () => {
     const code = codes.find(p => p.type === 'text')
     if (code?.type !== 'text') throw new Error('no code')
     expect(numberAt(codes, code.at, 0)?.id).toBe(control)
+  })
+})
+
+describe('course objects: map issue point, marked route, voluntary crossing point', () => {
+  const draw = (state: EditorState, tool: Tool, points: [number, number][]): EditorState => {
+    let s = reducer(state, { type: 'tool', tool })
+    for (const p of points) s = reducer(s, clickAction(s, p, null, newId, 1) as Action)
+    return s
+  }
+
+  it('puts the map issue point first and the start right after it, whichever comes first', () => {
+    let s = click(withCourse(), 'start', [0, 0])
+    s = click(s, 'finish', [500, 0])
+    s = click(s, 'mapIssue', [-200, 0])
+    expect(stops(s)).toEqual(['mapIssue', 'start', 'finish'])
+    s = click(s, 'start', [10, 0]) // a new start replaces the old one, still after the map issue point
+    expect(stops(s)).toEqual(['mapIssue', 'start', 'finish'])
+    s = click(s, 'mapIssue', [-300, 0])
+    expect(stops(s)).toEqual(['mapIssue', 'start', 'finish'])
+    expect(present(s).controls.filter(c => c.kind === 'mapIssue')).toHaveLength(2) // the old one stays in the pool
+  })
+
+  it('draws a marked route into the course after the selected stop; clicking it with the tool reuses it', () => {
+    let s = click(withCourse(), 'start', [0, 0])
+    s = click(s, 'control', [300, 0])
+    s = click(s, 'finish', [600, 0])
+    s = reducer(s, { type: 'select', controlId: present(s).controls.find(c => c.kind === 'control')?.id ?? null })
+    s = draw(s, 'markedRoute', [
+      [350, 0],
+      [450, 50],
+      [550, 0],
+    ])
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    expect(stops(s)).toEqual(['start', 'control', 'markedRoute', 'finish'])
+    const route = present(s).controls.find(c => c.kind === 'markedRoute')
+    expect(route?.route).toHaveLength(3)
+    expect(s.selected).toBe(route?.id)
+
+    // A second course follows the same route by clicking it before drawing.
+    s = reducer(s, { type: 'edit', doc: addCourse(present(s), { id: 'B', name: 'B', printScale: 15000 }) })
+    s = reducer(s, { type: 'course', courseId: 'B' })
+    s = reducer(s, { type: 'tool', tool: 'markedRoute' })
+    s = reducer(s, clickAction(s, [450, 50], route?.id ?? null, newId, 1) as Action)
+    expect(courseById(present(s), 'B').controls).toEqual([route?.id])
+    expect(s.draft).toEqual([])
+  })
+
+  it('places a voluntary crossing point with two clicks: where, then the way through', () => {
+    const s = draw(withCourse(), 'optionalCrossing', [
+      [100, 100],
+      [100, 200],
+    ])
+    expect(present(s).specials).toEqual([
+      {
+        id: expect.any(String),
+        kind: 'optionalCrossing',
+        points: [
+          [100, 100],
+          [100, 200],
+        ],
+      },
+    ])
+    expect(s.draft).toEqual([])
+    expect(courseById(present(s), 'A').controls).toEqual([]) // not part of the course
+  })
+
+  it('edits a marked route like a line: drag its points, Shift+click to add or remove one', () => {
+    let s = draw(withCourse(), 'markedRoute', [
+      [0, 0],
+      [100, 0],
+    ])
+    s = reducer(s, { type: 'finishDraft', id: newId() })
+    const shape = shapeOf(present(s), s.selected) as Shape
+    expect(shape.geometry).toBe('line')
+    expect(editPoints(shape, [50, 1], 5)).toHaveLength(3)
+    expect(routeAt(present(s), null, [50, 3], 5)).toBe(shape.id)
+    expect(routeAt(present(s), null, [50, 30], 5)).toBeNull()
   })
 })

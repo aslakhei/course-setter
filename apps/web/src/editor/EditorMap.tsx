@@ -14,7 +14,7 @@ import {
   nextFreeCode,
   type Point,
   type Primitive,
-  SPECIAL_GEOMETRY,
+  type SpecialKind,
   setNumberPosition,
   specialDrawing,
   specialShownOn,
@@ -39,23 +39,43 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
 import { COURSE_PURPLE, type Drawing, primitiveLayer } from './courseLayer.ts'
-import { editPoints, isControlTool, isSpecialTool, legAt, movedPoints, numberAt, specialAt, type Tool, vertexAt } from './state.ts'
+import {
+  drawingGeometry,
+  editPoints,
+  isControlTool,
+  isDrawingTool,
+  isSpecialTool,
+  legAt,
+  movedPoints,
+  numberAt,
+  routeAt,
+  shapeOf,
+  specialAt,
+  type Tool,
+  vertexAt,
+} from './state.ts'
 
 /** The selected control (and a control a click would reuse) is drawn in this colour instead of purple. */
 export const HIGHLIGHT = '#0b62a4'
 /** Extra pick radius around a symbol, in screen pixels. */
 const PICK_PX = 6
 
-/** Tools that place something where the pointer is (a preview follows the pointer). */
-const placing = (tool: Tool) => isControlTool(tool) || isSpecialTool(tool)
+/** Tools that place or draw something where the pointer is (a preview follows the pointer). */
+const placing = (tool: Tool) => isControlTool(tool) || isSpecialTool(tool) || isDrawingTool(tool)
 
 type Drag =
   | { kind: 'control'; id: string; point: Point; from: Point }
   | { kind: 'bend'; key: string; index: number; point: Point; from: Point }
   /** `startMm`: where the number was, in paper mm, when the drag began. */
   | { kind: 'number'; id: string; point: Point; from: Point; startMm: Point }
-  /** A whole special symbol, or (`index`) one of its points. */
-  | { kind: 'special'; id: string; index: number | null; point: Point; from: Point }
+  /** A whole special symbol or marked route, or (`index`) one of its points. */
+  | { kind: 'shape'; id: string; index: number | null; point: Point; from: Point }
+
+/** The document with a shape's points replaced (a special symbol's or a marked route's). */
+function withShapePoints(doc: EventDoc, id: string, points: Point[]): EventDoc {
+  if (doc.specials.some(s => s.id === id)) return { ...doc, specials: doc.specials.map(s => (s.id === id ? { ...s, points } : s)) }
+  return { ...doc, controls: doc.controls.map(c => (c.id === id && c.route ? { ...c, position: points[0] as Point, route: points } : c)) }
+}
 
 /** Where the pointer is while placing: `snapTo` is an existing control the click would reuse. */
 export type Hover = { point: Point; snapTo: string | null }
@@ -73,7 +93,8 @@ type Props = {
   draft: Point[]
   /** `tolerance`: a few screen pixels, in metres. */
   onClick: (point: Point, hit: string | null, leg: { leg: number; segment: number } | null, tolerance: number) => void
-  onMoveSpecial: (id: string, points: Point[]) => void
+  /** New points for a special symbol or a marked route (dragged, or a point added or removed). */
+  onMoveShape: (id: string, points: Point[]) => void
   onMoveControl: (id: string, point: Point) => void
   onMoveNumber: (id: string, offsetMm: Point) => void
   onMoveBend: (key: string, index: number, point: Point) => void
@@ -117,8 +138,9 @@ export function EditorMap(props: Props) {
   const shown = useMemo(() => {
     if (!drag) return doc
     const delta: Point = [drag.point[0] - drag.from[0], drag.point[1] - drag.from[1]]
-    if (drag.kind === 'special') {
-      return { ...doc, specials: doc.specials.map(s => (s.id === drag.id ? { ...s, points: movedPoints(s, delta, drag.index) } : s)) }
+    if (drag.kind === 'shape') {
+      const shape = shapeOf(doc, drag.id)
+      return shape ? withShapePoints(doc, drag.id, movedPoints(shape, delta, drag.index)) : doc
     }
     if (drag.kind === 'control') {
       const original = doc.controls.find(c => c.id === drag.id)?.position
@@ -164,11 +186,17 @@ export function EditorMap(props: Props) {
     const hitControl = (coordinate: Point, kind?: ControlKind): string | null => {
       const { doc: d, course: c } = latest.current
       const r = latestRadius.current + PICK_PX * resolution()
+      // A marked route is hit along its line, more narrowly than a symbol.
+      const lineReach = PICK_PX * resolution()
       const near = d.controls
         .filter(control => !kind || control.kind === kind)
         .map(control => ({
           id: control.id,
-          distance: Math.hypot(control.position[0] - coordinate[0], control.position[1] - coordinate[1]),
+          distance: control.route
+            ? routeAt(d, [control.id], coordinate, lineReach) === control.id
+              ? 0
+              : Number.POSITIVE_INFINITY
+            : Math.hypot(control.position[0] - coordinate[0], control.position[1] - coordinate[1]),
         }))
         .filter(x => x.distance <= r)
         .sort((a, b) => a.distance - b.distance)
@@ -214,12 +242,14 @@ export function EditorMap(props: Props) {
           // click selects it first. No accidental moves while panning.
           const selectedId = latest.current.selected
           if (!selectedId) return false
-          const special = latest.current.doc.specials.find(s => s.id === selectedId)
-          if (special) {
-            // One of its points, or the whole symbol.
-            const index = vertexAt(special, coordinate, PICK_PX * 1.5 * resolution())
-            if (index === null && hitSpecial(coordinate) !== selectedId) return false
-            dragging = { kind: 'special', id: selectedId, index, point: coordinate, from: coordinate }
+          const shape = shapeOf(latest.current.doc, selectedId)
+          if (shape) {
+            // One of its points, or the whole symbol or route.
+            const index = vertexAt(shape, coordinate, PICK_PX * 1.5 * resolution())
+            const onIt =
+              hitSpecial(coordinate) === selectedId || routeAt(latest.current.doc, [selectedId], coordinate, PICK_PX * resolution())
+            if (index === null && !onIt) return false
+            dragging = { kind: 'shape', id: selectedId, index, point: coordinate, from: coordinate }
             return true
           }
           const number = hitNumber(coordinate)
@@ -252,12 +282,12 @@ export function EditorMap(props: Props) {
         handledUpAt = Date.now()
         const moved = done.point[0] !== done.from[0] || done.point[1] !== done.from[1]
         const { doc: d, course: c } = latest.current
-        if (done.kind === 'special') {
-          const special = d.specials.find(s => s.id === done.id)
-          if (special && moved) {
-            latest.current.onMoveSpecial(
+        if (done.kind === 'shape') {
+          const shape = shapeOf(d, done.id)
+          if (shape && moved) {
+            latest.current.onMoveShape(
               done.id,
-              movedPoints(special, [done.point[0] - done.from[0], done.point[1] - done.from[1]], done.index),
+              movedPoints(shape, [done.point[0] - done.from[0], done.point[1] - done.from[1]], done.index),
             )
           }
         } else if (done.kind === 'control') {
@@ -285,24 +315,28 @@ export function EditorMap(props: Props) {
       if (Date.now() - handledUpAt < 300) return
       const coordinate = e.coordinate as Point
       const { doc: d, course: c, tool: t, selected: s } = latest.current
-      // Shift+click on the selected line or area: removes the point clicked, or adds one on an edge.
-      const selectedSpecial = d.specials.find(x => x.id === s)
-      if ((e.originalEvent as PointerEvent).shiftKey && t === 'select' && selectedSpecial) {
-        const points = editPoints(selectedSpecial, coordinate, PICK_PX * 1.5 * resolution())
-        if (points) latest.current.onMoveSpecial(selectedSpecial.id, points)
+      // Shift+click on the selected line, area or marked route: removes the point clicked, or adds one
+      // on an edge.
+      const shape = shapeOf(d, s)
+      if ((e.originalEvent as PointerEvent).shiftKey && t === 'select' && shape) {
+        const points = editPoints(shape, coordinate, PICK_PX * 1.5 * resolution())
+        if (points) latest.current.onMoveShape(shape.id, points)
         return
       }
       const leg = t === 'bend' && c ? legAt(d, c, coordinate, PICK_PX * resolution()) : null
       // Selecting: a control or its number, else a special symbol. Placing a control: one of that kind
-      // to reuse. Special symbols are always new.
+      // to reuse; starting a marked route on one in the pool: that one, for this course too. Special
+      // symbols are always new.
       const hit =
         t === 'select'
           ? (hitControl(coordinate) ?? hitNumber(coordinate)?.id ?? hitSpecial(coordinate))
           : isControlTool(t)
             ? hitControl(coordinate, t)
-            : isSpecialTool(t)
-              ? null
-              : hitControl(coordinate)
+            : t === 'markedRoute'
+              ? hitControl(coordinate, 'markedRoute')
+              : isSpecialTool(t)
+                ? null
+                : hitControl(coordinate)
       // While drawing a line or area, a click this close to the last point (a double-click) finishes it.
       latest.current.onClick(coordinate, hit, leg, PICK_PX * resolution())
     })
@@ -356,26 +390,44 @@ export function EditorMap(props: Props) {
     ]
     const handles: Feature[] = []
     for (const id of highlighted) {
+      // A point symbol gets a crosshair on its centre; a line, area or route a handle on each point; a
+      // voluntary crossing point a crosshair and a handle on its direction.
+      const shape = shapeOf(shown, id)
       const control = shown.controls.find(c => c.id === id)
-      const special = shown.specials.find(s => s.id === id)
-      // A special point symbol gets the crosshair too; a line or area gets a handle on each point.
-      const centres = control ? [control.position] : special && SPECIAL_GEOMETRY[special.kind] === 'point' ? special.points : []
+      const centres = shape
+        ? shape.geometry === 'line' || shape.geometry === 'area'
+          ? []
+          : shape.points.slice(0, 1)
+        : control
+          ? [control.position]
+          : []
       for (const p of centres) {
         const centre = new Feature(new OlPoint(p))
         centre.setStyle(crosshairStyles)
         handles.push(centre)
       }
-      if (special && SPECIAL_GEOMETRY[special.kind] !== 'point') handles.push(...special.points.map(vertexHandle))
+      if (shape && shape.geometry !== 'point') handles.push(...shape.points.slice(shape.geometry === 'direction' ? 1 : 0).map(vertexHandle))
     }
 
-    if (isSpecialTool(tool)) {
-      // The special being placed or drawn, with the pointer as its next point. Until a line or area has
+    if (isDrawingTool(tool) || isSpecialTool(tool)) {
+      // What is being placed or drawn, with the pointer as its next point. Until a line or area has
       // enough points to be drawn, a dashed guide shows its outline.
-      const points = [...draft, ...(hover ? [hover.point] : [])]
-      const needed = MIN_POINTS[SPECIAL_GEOMETRY[tool]]
+      const points = [...draft, ...(hover && !hover.snapTo ? [hover.point] : [])]
+      const geometry = drawingGeometry(tool)
+      const needed = MIN_POINTS[geometry]
       if (points.length >= needed) {
-        const ghost = { id: 'preview', kind: tool, points: needed === 1 ? points.slice(-1) : points }
-        marks.push({ primitives: specialDrawing(shown, ghost, scale), printScale: scale, paint: { color: COURSE_PURPLE } })
+        const ghostPoints = needed === 1 ? points.slice(-1) : geometry === 'direction' ? points.slice(0, 2) : points
+        const primitives =
+          tool === 'markedRoute'
+            ? allControlsDrawing(
+                {
+                  ...shown,
+                  controls: [{ id: 'preview', kind: 'markedRoute', code: null, position: ghostPoints[0] as Point, route: ghostPoints }],
+                },
+                scale,
+              )
+            : specialDrawing(shown, { id: 'preview', kind: tool as SpecialKind, points: ghostPoints }, scale)
+        marks.push({ primitives, printScale: scale, paint: { color: COURSE_PURPLE } })
       } else if (points.length > 1) {
         const guide = points.map(p => toPaperMm(p, scale))
         marks.push({

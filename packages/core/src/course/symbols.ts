@@ -8,7 +8,7 @@
 // far course lines stop short of a crossing point), the values are taken from the specifications'
 // drawings and match Purple Pen.
 import type { Primitive } from '../render/primitives.ts'
-import { type Course, controlById, type EventDoc, legKey, type Point, type Standard } from './doc.ts'
+import { type Course, controlById, type EventDoc, entryPoint, exitPoint, legKey, type Point, type Standard } from './doc.ts'
 import { courseStops } from './numbering.ts'
 
 export type { Primitive, PrimitiveRole } from '../render/primitives.ts'
@@ -45,6 +45,9 @@ export type SymbolSizes = {
   /** A leg that is a marked route (707) is dashed: dash and gap lengths. */
   markedDash: number
   markedGap: number
+  /** Map issue point (702): a bar across the way to the start. */
+  mapIssueLength: number
+  mapIssueWidth: number
 }
 
 const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
@@ -67,6 +70,8 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       crossingClearance: 2.5,
       markedDash: 2.0,
       markedGap: 0.5,
+      mapIssueLength: 2.5,
+      mapIssueWidth: 0.6,
     },
   },
   issprom: {
@@ -90,6 +95,8 @@ const BASE: Record<Standard, { scale: number; sizes: SymbolSizes }> = {
       crossingClearance: 3.25,
       markedDash: 2.0,
       markedGap: 0.5,
+      mapIssueLength: 2.5,
+      mapIssueWidth: 0.6,
     },
   },
 }
@@ -130,8 +137,12 @@ const unit = (v: Point): Point => {
 }
 const along = (p: Point, dir: Point, d: number): Point => [p[0] + dir[0] * d, p[1] + dir[1] * d]
 
-/** How far from its centre a course line stops at a stop of this kind (so it ends at the symbol's edge plus the gap). */
-function clearance(kind: string, s: SymbolSizes): number {
+/**
+ * How far from its centre a course line stops at a stop of this kind (so it ends at the symbol's edge
+ * plus the gap). Lines meet a marked route's ends and the map issue point's bar directly.
+ */
+export function clearance(kind: string, s: SymbolSizes): number {
+  if (kind === 'markedRoute' || kind === 'mapIssue') return 0
   if (kind === 'start') return s.startSide / Math.sqrt(3) + s.legGap
   if (kind === 'finish') return s.finishOuter / 2 + s.legGap
   if (kind === 'control') return s.controlDiameter / 2 + s.legGap
@@ -148,11 +159,46 @@ function triangle(center: Point, dir: Point, side: number): Point[] {
   })
 }
 
+/** A polyline with the first `d` mm of its length cut off (nothing when `d` is not positive). */
+function trimStart(points: Point[], d: number): Point[] {
+  if (d <= 0) return points
+  let rest = d
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1] as Point
+    const b = points[i] as Point
+    const l = len(sub(b, a))
+    if (rest < l) return [along(a, unit(sub(b, a)), rest), ...points.slice(i)]
+    rest -= l
+  }
+  return []
+}
+const trimEnd = (points: Point[], d: number): Point[] => trimStart([...points].reverse(), d).reverse()
+
+/** A marked route (707): dashed, starting and ending with a whole dash. */
+function markedLine(points: Point[], s: SymbolSizes, tag: { role: 'leg' | 'symbol'; owner?: string }): Primitive {
+  const dash = fittedDash(polylineLength(points), s.markedDash, s.markedGap)
+  return { type: 'polyline', points, lineWidth: s.lineWidth, closed: false, ...(dash ? { dash } : {}), ...tag }
+}
+
+/** The map issue point (702): a bar across the way it leads, `dir`. */
+function mapIssueBar(center: Point, dir: Point, s: SymbolSizes, owner: string): Primitive {
+  const across: Point = [-dir[1], dir[0]]
+  return {
+    type: 'polyline',
+    points: [along(center, across, -s.mapIssueLength / 2), along(center, across, s.mapIssueLength / 2)],
+    lineWidth: s.mapIssueWidth,
+    closed: false,
+    role: 'symbol',
+    owner,
+  }
+}
+
 /**
  * A crossing point (710): two curved lines on either side of the course line, along the leg direction
  * `dir`, closest together in the middle where the course passes through, like an hourglass ")(".
+ * Also drawn for a voluntary crossing point, along the way through it.
  */
-function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string): Primitive[] {
+export function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string, role: 'symbol' | 'special' = 'symbol'): Primitive[] {
   const normal: Point = [-dir[1], dir[0]]
   // Local (along the leg, across it) -> paper mm.
   const at = (u: number, v: number): [number, number] => {
@@ -173,7 +219,7 @@ function crossing(center: Point, dir: Point, s: SymbolSizes, owner: string): Pri
         ],
       ],
       lineWidth: s.crossingLineWidth,
-      role: 'symbol',
+      role,
       owner,
     } as const
   })
@@ -208,15 +254,20 @@ function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes, t
 export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
   const s = symbolSizes(doc.standard, course.printScale)
   const stops = courseStops(doc, course)
-  const at = (i: number) => toPaperMm(controlById(doc, course.controls[i] as string).position, course.printScale)
+  const paper = (p: Point) => toPaperMm(p, course.printScale)
+  const control = (i: number) => controlById(doc, course.controls[i] as string)
+  const at = (i: number) => paper(control(i).position)
+  // Each leg runs from where the course leaves one stop to where it reaches the next (a marked route's
+  // last and first points).
   const path = (i: number): Point[] => {
     const from = course.controls[i] as string
     const to = course.controls[i + 1] as string
-    return [at(i), ...(course.bends[legKey(from, to)] ?? []).map(p => toPaperMm(p, course.printScale)), at(i + 1)]
+    return [paper(exitPoint(control(i))), ...(course.bends[legKey(from, to)] ?? []).map(paper), paper(entryPoint(control(i + 1)))]
   }
   const out: Primitive[] = []
 
-  // Course lines, cut back at both ends to the symbols' edges.
+  // Course lines, cut back at both ends to the symbols' edges. The way from the map issue point to the
+  // start is a marked route (702: "if there is a marked route to the start"), dashed.
   for (let i = 0; i + 1 < stops.length; i++) {
     const points = path(i)
     const first = points[0] as Point
@@ -230,10 +281,8 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
     }
     points[0] = along(first, unit(sub(second, first)), Math.min(startCut, len(sub(second, first))))
     points[points.length - 1] = along(last, unit(sub(beforeLast, last)), Math.min(endCut, len(sub(last, beforeLast))))
-    // A marked route (707) is dashed instead of a course line, starting and ending with a dash.
-    const marked = course.markedRoutes?.includes(legKey(course.controls[i] as string, course.controls[i + 1] as string))
-    const dash = marked ? fittedDash(polylineLength(points), s.markedDash, s.markedGap) : undefined
-    out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg', ...(dash ? { dash } : {}) })
+    if (stops[i]?.kind === 'mapIssue') out.push(markedLine(points, s, { role: 'leg' }))
+    else out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg' })
   }
 
   stops.forEach((stop, i) => {
@@ -242,7 +291,18 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
     const tag = { role: 'symbol', owner } as const
     const next = i + 1 < stops.length ? path(i)[1] : undefined
     const prev = i > 0 ? path(i - 1).at(-2) : undefined
-    if (stop.kind === 'start') {
+    if (stop.kind === 'markedRoute') {
+      // Dashed along its line; where it starts or ends inside the stop before or after it, cut back to
+      // that symbol's edge.
+      let route = (control(i).route ?? []).map(paper)
+      const before = i > 0 ? { kind: stops[i - 1]?.kind ?? '', at: paper(exitPoint(control(i - 1))) } : null
+      const after = i + 1 < stops.length ? { kind: stops[i + 1]?.kind ?? '', at: paper(entryPoint(control(i + 1))) } : null
+      if (before) route = trimStart(route, clearance(before.kind, s) - len(sub(route[0] as Point, before.at)))
+      if (after && route.length) route = trimEnd(route, clearance(after.kind, s) - len(sub(route.at(-1) as Point, after.at)))
+      if (route.length >= 2) out.push(markedLine(route, s, tag))
+    } else if (stop.kind === 'mapIssue') {
+      out.push(mapIssueBar(p, next ? unit(sub(next, p)) : [0, 1], s, owner))
+    } else if (stop.kind === 'start') {
       out.push({
         type: 'polyline',
         points: triangle(p, next ? unit(sub(next, p)) : [0, 1], s.startSide),
@@ -283,6 +343,20 @@ export function allControlsDrawing(doc: EventDoc, printScale: number): Primitive
       ]
     }
     if (c.kind === 'crossingPoint') return crossing(p, [0, 1], s, c.id)
+    if (c.kind === 'markedRoute')
+      return [
+        markedLine(
+          (c.route ?? []).map(q => toPaperMm(q, printScale)),
+          s,
+          tag,
+        ),
+      ]
+    if (c.kind === 'mapIssue') {
+      // Across the way to the nearest start.
+      const starts = doc.controls.filter(x => x.kind === 'start').map(x => toPaperMm(x.position, printScale))
+      const nearest = starts.sort((a, b) => len(sub(a, p)) - len(sub(b, p)))[0]
+      return [mapIssueBar(p, nearest ? unit(sub(nearest, p)) : [0, 1], s, c.id)]
+    }
     return [
       { type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth, ...tag },
       {

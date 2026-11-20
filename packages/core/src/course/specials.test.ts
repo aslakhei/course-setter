@@ -1,18 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { descriptionSheet } from '../descriptions/sheet.ts'
 import type { Primitive } from '../render/primitives.ts'
 import { IDENTITY } from '../similarity.ts'
-import {
-  addSpecial,
-  deleteControl,
-  deleteCourse,
-  deleteSpecial,
-  setMarkedRoute,
-  setSpecialBoundary,
-  setSpecialCourses,
-  setSpecialPoints,
-} from './commands.ts'
-import { CourseError, courseById, type EventDoc, eventDocSchema, type Point, type SpecialKind, specialShownOn } from './doc.ts'
+import { addSpecial, deleteCourse, deleteSpecial, setSpecialBoundary, setSpecialCourses, setSpecialPoints } from './commands.ts'
+import { CourseError, type EventDoc, eventDocSchema, type Point, type SpecialKind, specialShownOn } from './doc.ts'
 import { moveDocToVersion } from './move.ts'
 import { hatchLines, specialDrawing, specialSizes, specialsDrawing } from './specials.ts'
 import { testEvent } from './test-doc.ts'
@@ -48,22 +38,18 @@ describe('special symbol sizes', () => {
 })
 
 describe('specialDrawing', () => {
-  it('702: a 2.5 × 0.6 mm bar across the way to the nearest start', () => {
-    // The start is at (0, 0); the map issue point 10 mm east of it: the bar runs north-south.
-    const [bar] = drawn('mapIssue', [[10, 0]])
-    expect(bar).toMatchObject({ type: 'polyline', lineWidth: 0.6 })
-    const [a, b] = ends(bar as Primitive) as [Point, Point]
-    expect(dist(a, b)).toBeCloseTo(2.5, 9)
-    expect(a[0]).toBeCloseTo(10, 9)
-    expect(b[0]).toBeCloseTo(10, 9)
-  })
-
-  it('707: a free marked route is dashed 2.0 / 0.5 mm, 0.35 mm wide, with whole dashes at both ends', () => {
-    const [route] = drawn('markedRoute', [
-      [0, 0],
-      [22, 0],
+  it('710 voluntary: the crossing point symbol at its first point, along the way to its second', () => {
+    const lines = drawn('optionalCrossing', [
+      [10, 10],
+      [10, 20],
     ])
-    expect(route).toMatchObject({ lineWidth: 0.35, dash: [2, 0.5] }) // 22 = 9 dashes + 8 gaps exactly
+    expect(lines).toHaveLength(2)
+    for (const l of lines) expect(l).toMatchObject({ type: 'path', lineWidth: 0.35, role: 'special', owner: 'x' })
+    // Running north: each line goes from 1.5 mm south to 1.5 mm north of the point.
+    const [a, b] = ends(lines[0] as Primitive) as [Point, Point]
+    expect(a[1]).toBeCloseTo(8.5, 9)
+    expect(b[1]).toBeCloseTo(11.5, 9)
+    expect(Math.abs(a[0] - 10)).toBeCloseTo(0.85, 9)
   })
 
   it('708: out-of-bounds boundary 0.7 mm (forest), 1.0 mm (sprint)', () => {
@@ -326,17 +312,6 @@ describe('special symbol commands', () => {
     expect(setSpecialCourses(doc, 's1', null).specials[0]).not.toHaveProperty('courses')
   })
 
-  it('marks a leg as a marked route and back; deleting a control drops its legs', () => {
-    let doc = setMarkedRoute(testEvent(), 'A', 'a', 'b', true)
-    doc = setMarkedRoute(doc, 'A', 'c', 'f', true)
-    expect(courseById(doc, 'A').markedRoutes).toEqual(['a>b', 'c>f'])
-    expect(courseById(setMarkedRoute(doc, 'A', 'a', 'b', false), 'A').markedRoutes).toEqual(['c>f'])
-    expect(courseById(deleteControl(doc, 'b'), 'A').markedRoutes).toEqual(['c>f'])
-    expect(courseById(setMarkedRoute(setMarkedRoute(doc, 'A', 'a', 'b', false), 'A', 'c', 'f', false), 'A')).not.toHaveProperty(
-      'markedRoutes',
-    )
-  })
-
   it('moves specials with the event to a new map version, and keeps old documents valid', () => {
     const doc = addSpecial(testEvent(), {
       id: 's1',
@@ -356,23 +331,5 @@ describe('special symbol commands', () => {
     expect(eventDocSchema.parse(JSON.parse(JSON.stringify(setSpecialCourses(doc, 's1', ['A']))))).toEqual(
       setSpecialCourses(doc, 's1', ['A']),
     )
-  })
-})
-
-describe('marked routes on the description sheet', () => {
-  it('adds "follow the marked route" (13.2) after a marked leg, and 14.1 when the last leg is marked', () => {
-    let doc = setMarkedRoute(testEvent(), 'A', 'a', 'b', true) // 600 m
-    doc = setMarkedRoute(doc, 'A', 'c', 'f', true) // 1000 m
-    const lines = descriptionSheet(doc, courseById(doc, 'A'), 'Club night')
-    expect(lines.map(l => (l.kind === 'directive' ? `${l.symbol} ${l.text}` : l.kind === 'control' ? l.code || 'start' : l.kind))).toEqual([
-      'title',
-      'header',
-      'start',
-      '31',
-      '13.2 600 m',
-      '32',
-      '33',
-      '14.1 1000 m',
-    ])
   })
 })

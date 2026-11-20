@@ -24,6 +24,13 @@ const icons: Record<Tool, ReactNode> = {
     </g>
   ),
   bend: <path d="M4 18l6-10 10 4" stroke="currentColor" />,
+  // The same hourglass, lighter: not part of any course.
+  optionalCrossing: (
+    <g stroke={PURPLE} strokeDasharray="3 2">
+      <path d="M8 4c4 5 4 11 0 16" />
+      <path d="M16 4c-4 5-4 11 0 16" />
+    </g>
+  ),
   mapIssue: <path d="M6 12h12" stroke={PURPLE} strokeWidth="4" />,
   markedRoute: <path d="M3 19L21 5" stroke={PURPLE} strokeDasharray="5 2.5" />,
   oobBoundary: <path d="M3 19L21 5" stroke={PURPLE} strokeWidth="4" />,
@@ -49,7 +56,13 @@ const icons: Record<Tool, ReactNode> = {
  * Special course planning symbols (ISOM 2017-2 / ISSprOM 2019-2, 7xx): the crossing point (a stop on the
  * course) and the special symbols of the event's standard.
  */
-const specialTools = (standard: Standard): Tool[] => ['crossingPoint', ...SPECIALS_BY_STANDARD[standard]]
+const specialTools = (standard: Standard): Tool[] => [
+  'crossingPoint',
+  'optionalCrossing',
+  'mapIssue',
+  'markedRoute',
+  ...SPECIALS_BY_STANDARD[standard].filter(kind => kind !== 'optionalCrossing'),
+]
 
 function Icon({ tool }: { tool: Tool }) {
   return (

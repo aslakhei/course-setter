@@ -17,12 +17,14 @@ import {
   MIN_POINTS,
   type Point,
   type Primitive,
+  pointsFit,
   record,
   redo,
   removeCourseControl,
   SPECIAL_GEOMETRY,
   SPECIAL_KINDS,
   type Special,
+  type SpecialGeometry,
   type SpecialKind,
   setLegBends,
   undo,
@@ -32,10 +34,14 @@ import {
 export type Tool = 'select' | ControlKind | SpecialKind | 'bend'
 export const ALL_CONTROLS = 'all'
 
-export const isControlTool = (tool: Tool): tool is ControlKind => (CONTROL_KINDS as readonly string[]).includes(tool)
+/** A course stop placed with one click (a marked route is drawn instead). */
+export const isControlTool = (tool: Tool): tool is Exclude<ControlKind, 'markedRoute'> =>
+  tool !== 'markedRoute' && (CONTROL_KINDS as readonly string[]).includes(tool)
 export const isSpecialTool = (tool: Tool): tool is SpecialKind => (SPECIAL_KINDS as readonly string[]).includes(tool)
-/** A special drawn point by point (a line or an area). */
-export const isDrawingTool = (tool: Tool): tool is SpecialKind => isSpecialTool(tool) && SPECIAL_GEOMETRY[tool] !== 'point'
+/** Drawn point by point: a marked route, or a special line, area, or point with a direction. */
+export const isDrawingTool = (tool: Tool): boolean => tool === 'markedRoute' || (isSpecialTool(tool) && SPECIAL_GEOMETRY[tool] !== 'point')
+/** The shape a drawing tool makes. */
+export const drawingGeometry = (tool: Tool): SpecialGeometry => (isSpecialTool(tool) ? SPECIAL_GEOMETRY[tool] : 'line')
 
 export type EditorState = {
   history: History<EventDoc>
@@ -89,7 +95,10 @@ export function reducer(state: EditorState, action: Action): EditorState {
       if (last && Math.hypot(action.point[0] - last[0], action.point[1] - last[1]) <= action.tolerance) {
         return finishDraft(state, action.id)
       }
-      return { ...state, draft: [...state.draft, action.point] }
+      const draft = [...state.draft, action.point]
+      // A point with a direction is done at its second click.
+      if (drawingGeometry(state.tool) === 'direction' && draft.length === 2) return finishDraft({ ...state, draft }, action.id)
+      return { ...state, draft }
     }
     case 'finishDraft':
       return finishDraft(state, action.id)
@@ -115,8 +124,16 @@ export function reducer(state: EditorState, action: Action): EditorState {
 function finishDraft(state: EditorState, id: string): EditorState {
   const kind = state.tool
   const points = state.draft.filter((p, i) => i === 0 || p[0] !== state.draft[i - 1]?.[0] || p[1] !== state.draft[i - 1]?.[1])
-  if (!isDrawingTool(kind) || points.length < MIN_POINTS[SPECIAL_GEOMETRY[kind]]) return { ...state, draft: [] }
-  return reducer(state, { type: 'edit', doc: addSpecial(state.history.present, { id, kind, points }), select: id })
+  if (!isDrawingTool(kind) || !pointsFit(drawingGeometry(kind), points.length)) return { ...state, draft: [] }
+  const doc = state.history.present
+  if (kind === 'markedRoute') {
+    // A marked route goes into the course being edited, like a crossing point.
+    const withRoute = addControl(doc, { id, kind, position: points[0] as Point, route: points })
+    const course = currentCourse(state)
+    const placed = course ? placeInCourse(withRoute, courseById(withRoute, course.id), id, state.selected) : withRoute
+    return reducer(state, { type: 'edit', doc: placed, select: id })
+  }
+  return reducer(state, { type: 'edit', doc: addSpecial(doc, { id, kind: kind as SpecialKind, points }), select: id })
 }
 
 /** After undo or a reload, the course or control may be gone: fall back to something that exists. */
@@ -132,30 +149,32 @@ export function currentCourse(state: EditorState): Course | null {
 const kindOf = (doc: EventDoc, id: string) => doc.controls.find(c => c.id === id)?.kind
 
 /**
- * Where a new stop of `kind` goes in `course`: a start first, a finish last; anything else after the
- * selected stop (if it is on the course), otherwise before the finish, otherwise at the end.
+ * Where a new stop of `kind` goes in `course`: the map issue point first, the start first or right after
+ * it, a finish last; anything else after the selected stop (if it is on the course and not the map issue
+ * point), otherwise before the finish, otherwise at the end.
  */
 export function insertionIndex(doc: EventDoc, course: Course, kind: ControlKind, selected: string | null): number {
-  if (kind === 'start') return 0
+  const firstIsMapIssue = course.controls.length > 0 && kindOf(doc, course.controls[0] as string) === 'mapIssue'
+  if (kind === 'mapIssue') return 0
+  if (kind === 'start') return firstIsMapIssue ? 1 : 0
   const lastIsFinish = course.controls.length > 0 && kindOf(doc, course.controls.at(-1) as string) === 'finish'
   if (kind === 'finish') return course.controls.length
   const at = selected ? course.controls.lastIndexOf(selected) : -1
-  if (at >= 0 && !(at === course.controls.length - 1 && lastIsFinish)) return at + 1
+  if (at >= 0 && !(at === course.controls.length - 1 && lastIsFinish) && !(at === 0 && firstIsMapIssue)) return at + 1
   return lastIsFinish ? course.controls.length - 1 : course.controls.length
 }
 
-/** Put a stop into a course; a course has one start and one finish, so a new one replaces the old. */
+/** Put a stop into a course; a course has one map issue point, start and finish: a new one replaces the old. */
 function placeInCourse(doc: EventDoc, course: Course, controlId: string, selected: string | null): EventDoc {
   const kind = kindOf(doc, controlId) as ControlKind
   let next = doc
   let current = course
-  if (kind === 'start' && current.controls.length > 0 && kindOf(doc, current.controls[0] as string) === 'start') {
-    next = removeCourseControl(next, current.id, 0)
-    current = courseById(next, current.id)
-  }
-  if (kind === 'finish' && current.controls.length > 0 && kindOf(doc, current.controls.at(-1) as string) === 'finish') {
-    next = removeCourseControl(next, current.id, current.controls.length - 1)
-    current = courseById(next, current.id)
+  if (kind === 'mapIssue' || kind === 'start' || kind === 'finish') {
+    const old = current.controls.findIndex(id => kindOf(next, id) === kind)
+    if (old >= 0) {
+      next = removeCourseControl(next, current.id, old)
+      current = courseById(next, current.id)
+    }
   }
   return insertCourseControl(next, current.id, controlId, insertionIndex(next, current, kind, selected))
 }
@@ -169,11 +188,16 @@ export function clickAction(state: EditorState, point: Point, hit: string | null
   const course = currentCourse(state)
   if (state.tool === 'select') return { type: 'select', controlId: hit }
   if (state.tool === 'bend') return null // bends are added on legs, see addBend
+  // A marked route already in the pool, clicked before drawing a new one: this course follows it too.
+  if (state.tool === 'markedRoute' && hit && state.draft.length === 0 && course && kindOf(doc, hit) === 'markedRoute') {
+    return { type: 'edit', doc: placeInCourse(doc, course, hit, state.selected), select: hit }
+  }
   if (isDrawingTool(state.tool)) return { type: 'draftPoint', point, tolerance, id: newId() }
   if (isSpecialTool(state.tool)) {
     const id = newId()
     return { type: 'edit', doc: addSpecial(doc, { id, kind: state.tool, points: [point] }), select: id }
   }
+  if (!isControlTool(state.tool)) return null
   if (hit) {
     // An existing control: in a course, the setter reuses it (a control shared by several courses).
     if (!course) return { type: 'select', controlId: hit }
@@ -246,7 +270,7 @@ export function specialAt(specials: Special[], point: Point, tolerance: number, 
   for (const s of [...specials].reverse()) {
     const geometry = SPECIAL_GEOMETRY[s.kind]
     const pts = s.points
-    if (geometry === 'point') {
+    if (geometry === 'point' || geometry === 'direction') {
       const [p] = pts as [Point]
       if (Math.hypot(p[0] - point[0], p[1] - point[1]) <= radius) return s.id
       continue
@@ -260,26 +284,36 @@ export function specialAt(specials: Special[], point: Point, tolerance: number, 
   return null
 }
 
-/** The vertex of a line or area within `tolerance` metres of `point`. */
-export function vertexAt(special: Special, point: Point, tolerance: number): number | null {
-  if (SPECIAL_GEOMETRY[special.kind] === 'point') return null
-  const index = special.points.findIndex(p => Math.hypot(p[0] - point[0], p[1] - point[1]) <= tolerance)
+/** Something drawn through points the setter can drag and edit: a special symbol or a marked route. */
+export type Shape = { id: string; geometry: SpecialGeometry; points: Point[] }
+
+export function shapeOf(doc: EventDoc, id: string | null): Shape | null {
+  const special = doc.specials.find(s => s.id === id)
+  if (special) return { id: special.id, geometry: SPECIAL_GEOMETRY[special.kind], points: special.points }
+  const control = doc.controls.find(c => c.id === id)
+  return control?.route ? { id: control.id, geometry: 'line', points: control.route } : null
+}
+
+/** The point of a shape within `tolerance` metres of `point` (a point symbol has none to drag apart). */
+export function vertexAt(shape: Shape, point: Point, tolerance: number): number | null {
+  if (shape.geometry === 'point') return null
+  const index = shape.points.findIndex(p => Math.hypot(p[0] - point[0], p[1] - point[1]) <= tolerance)
   return index >= 0 ? index : null
 }
 
 /**
- * Shift+click on a selected line or area: on one of its points, that point removed (while enough are
- * left); on an edge within `tolerance` metres, a new point there. Null when the click is on neither, or
- * the point cannot go.
+ * Shift+click on a selected line, area or route: on one of its points, that point removed (while enough
+ * are left); on an edge within `tolerance` metres, a new point there. Null when the click is on neither,
+ * or the point cannot go.
  */
-export function editPoints(special: Special, point: Point, tolerance: number): Point[] | null {
-  const geometry = SPECIAL_GEOMETRY[special.kind]
-  if (geometry === 'point') return null
-  const index = vertexAt(special, point, tolerance)
+export function editPoints(shape: Shape, point: Point, tolerance: number): Point[] | null {
+  const geometry = shape.geometry
+  if (geometry === 'point' || geometry === 'direction') return null
+  const index = vertexAt(shape, point, tolerance)
   if (index !== null) {
-    return special.points.length > MIN_POINTS[geometry] ? special.points.filter((_, i) => i !== index) : null
+    return shape.points.length > MIN_POINTS[geometry] ? shape.points.filter((_, i) => i !== index) : null
   }
-  const pts = special.points
+  const pts = shape.points
   const edges = geometry === 'area' ? pts.length : pts.length - 1
   let best: { at: number; distance: number } | null = null
   for (let i = 0; i < edges; i++) {
@@ -289,9 +323,20 @@ export function editPoints(special: Special, point: Point, tolerance: number): P
   return best ? [...pts.slice(0, best.at), point, ...pts.slice(best.at)] : null
 }
 
-/** A special's points moved by `delta`, or only vertex `index` of them. */
-export function movedPoints(special: Special, delta: Point, index: number | null): Point[] {
-  return special.points.map((p, i): Point => (index === null || i === index ? [p[0] + delta[0], p[1] + delta[1]] : p))
+/** A shape's points moved by `delta`, or only point `index` of them. */
+export function movedPoints(shape: Shape, delta: Point, index: number | null): Point[] {
+  return shape.points.map((p, i): Point => (index === null || i === index ? [p[0] + delta[0], p[1] + delta[1]] : p))
+}
+
+/** A marked route under `point` (within `tolerance` metres of its line). */
+export function routeAt(doc: EventDoc, ids: string[] | null, point: Point, tolerance: number): string | null {
+  for (const c of doc.controls) {
+    if (!c.route || (ids && !ids.includes(c.id))) continue
+    for (let i = 0; i + 1 < c.route.length; i++) {
+      if (distanceToSegment(point, c.route[i] as Point, c.route[i + 1] as Point) <= tolerance) return c.id
+    }
+  }
+  return null
 }
 
 /** Add a bend point on a leg where it was clicked (between the points of the clicked segment). */

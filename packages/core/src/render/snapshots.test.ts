@@ -14,7 +14,7 @@ import fontkit from '@pdf-lib/fontkit'
 import * as mupdf from 'mupdf'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import { addSpecial, insertCourseControl, setDescription, setMarkedRoute, setSpecialBoundary, updateCourse } from '../course/commands.ts'
+import { addControl, addSpecial, insertCourseControl, setDescription, setSpecialBoundary, updateCourse } from '../course/commands.ts'
 import { courseById, type DescriptionColumnKey, type EventDoc, SPECIALS_BY_STANDARD, type SpecialKind, STANDARDS } from '../course/doc.ts'
 import { specialDrawing } from '../course/specials.ts'
 import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
@@ -168,19 +168,32 @@ async function matchSnapshot(sheet: Sheet, backend: string, image: Image): Promi
 
 // The sheets -------------------------------------------------------------------------------------------
 
-/** Course A of the test event with a crossing point between control c and the finish. */
+/**
+ * Course A of the test event with a map issue point before the start, a marked route from control a
+ * part of the way to b, and a crossing point between control c and the finish.
+ */
 function testCourse(standard: EventDoc['standard'], printScale: number): Primitive[] {
   let doc: EventDoc = { ...testEvent(), standard }
-  doc = { ...doc, controls: [...doc.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 0] }] }
+  doc = addControl(doc, { id: 'x', kind: 'crossingPoint', position: [600, 0] })
+  doc = addControl(doc, { id: 'm', kind: 'mapIssue', position: [-150, 250] })
+  doc = addControl(doc, {
+    id: 'r',
+    kind: 'markedRoute',
+    position: [300, 400],
+    route: [
+      [300, 400],
+      [250, 600],
+      [300, 750],
+    ],
+  })
   doc = insertCourseControl(doc, 'A', 'x', 4)
-  doc = setMarkedRoute(doc, 'A', 'a', 'b', true)
+  doc = insertCourseControl(doc, 'A', 'm', 0)
+  doc = insertCourseControl(doc, 'A', 'r', 3)
   // Shrink the ground distances so the whole course (about 40 mm plus symbols) fits a 72 mm cell at any scale.
+  const shrink = (p: Point): Point => [(0.6 * p[0] * printScale) / 15000, (0.6 * p[1] * printScale) / 15000]
   const scaled = {
     ...doc,
-    controls: doc.controls.map(c => ({
-      ...c,
-      position: [(0.6 * c.position[0] * printScale) / 15000, (0.6 * c.position[1] * printScale) / 15000] as Point,
-    })),
+    controls: doc.controls.map(c => ({ ...c, position: shrink(c.position), ...(c.route ? { route: c.route.map(shrink) } : {}) })),
   }
   const course = { ...courseById(scaled, 'A'), printScale }
   return courseDrawing({ ...scaled, courses: [course] }, course)
@@ -209,6 +222,8 @@ const symbolSheet = (): Sheet => ({
       { name: `${label} control and number`, primitives: symbolOf('b', course) },
       { name: `${label} crossing point`, primitives: symbolOf('x', course) },
       { name: `${label} finish`, primitives: symbolOf('f', course) },
+      { name: `${label} map issue point`, primitives: symbolOf('m', course) },
+      { name: `${label} marked route`, primitives: symbolOf('r', course) },
     ]
   }),
 })
@@ -237,11 +252,9 @@ const courseSheet = (): Sheet => ({
 /** Every special symbol of each standard at its base scale, as a small example shape in paper mm. */
 const specialSheet = (): Sheet => {
   const shapes: Record<SpecialKind, Point[]> = {
-    mapIssue: [[6, 0]],
-    markedRoute: [
+    optionalCrossing: [
       [0, 0],
-      [8, 6],
-      [16, 4],
+      [3, 4],
     ],
     oobBoundary: [
       [0, 0],
@@ -282,7 +295,6 @@ const specialSheet = (): Sheet => {
       const metres = shapes[kind].map(([x, y]): Point => [(x * printScale) / 1000, (y * printScale) / 1000])
       doc = addSpecial(doc, { id: 'x', kind, points: metres })
       const special = doc.specials[0] as EventDoc['specials'][number]
-      // The map issue point turns across the way to the start (at the origin).
       return { name: `${standard} ${kind}`, primitives: specialDrawing(doc, special, printScale) }
     }),
   )

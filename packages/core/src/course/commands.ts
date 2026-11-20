@@ -11,8 +11,8 @@ import {
   type DescriptionColumnKey,
   type EventDoc,
   legKey,
-  MIN_POINTS,
   type Point,
+  pointsFit,
   SPECIAL_GEOMETRY,
   type Special,
   type SpecialKind,
@@ -26,35 +26,52 @@ function withCourse(doc: EventDoc, courseId: string, change: (course: Course) =>
   return { ...doc, courses: doc.courses.map(c => (c.id === courseId ? change(c) : c)) }
 }
 
+/** Add a control (a marked route with its `route`, two points or more; its position is the first). */
 export function addControl(
   doc: EventDoc,
-  { id, kind, position, code }: { id: string; kind: ControlKind; position: Point; code?: number },
+  { id, kind, position, code, route }: { id: string; kind: ControlKind; position: Point; code?: number; route?: Point[] },
 ): EventDoc {
   const controlCode = kind === 'control' ? (code ?? nextFreeCode(doc)) : null
   if (controlCode !== null && doc.controls.some(c => c.code === controlCode)) {
     throw new CourseError('code_in_use', `Code ${controlCode} is already used`)
   }
+  if (kind === 'markedRoute') {
+    if (!route || route.length < 2) throw new CourseError('invalid_special', 'A marked route needs two points or more')
+    return { ...doc, controls: [...doc.controls, { id, kind, code: null, position: route[0] as Point, route }] }
+  }
   return { ...doc, controls: [...doc.controls, { id, kind, code: controlCode, position }] }
 }
 
-/** Move a control: every course that uses it follows. */
+/** Move a control: every course that uses it follows. A marked route moves as a whole. */
 export function moveControl(doc: EventDoc, id: string, position: Point): EventDoc {
-  controlById(doc, id)
-  return { ...doc, controls: doc.controls.map(c => (c.id === id ? { ...c, position } : c)) }
+  const control = controlById(doc, id)
+  const [dx, dy] = [position[0] - control.position[0], position[1] - control.position[1]]
+  return {
+    ...doc,
+    controls: doc.controls.map(c =>
+      c.id !== id ? c : { ...c, position, ...(c.route ? { route: c.route.map(([x, y]): Point => [x + dx, y + dy]) } : {}) },
+    ),
+  }
 }
 
-/** Delete a control and take it out of every course (with the bends and marked routes of its legs). */
+/** Replace a marked route's line (two points or more). */
+export function setRoute(doc: EventDoc, id: string, route: Point[]): EventDoc {
+  const control = controlById(doc, id)
+  if (control.kind !== 'markedRoute' || route.length < 2)
+    throw new CourseError('invalid_special', 'A marked route needs two points or more')
+  return { ...doc, controls: doc.controls.map(c => (c.id === id ? { ...c, position: route[0] as Point, route } : c)) }
+}
+
+/** Delete a control and take it out of every course (with the bends of its legs). */
 export function deleteControl(doc: EventDoc, id: string): EventDoc {
   controlById(doc, id)
-  const keep = (key: string) => !key.split('>').includes(id)
   return {
     ...doc,
     controls: doc.controls.filter(c => c.id !== id),
     courses: doc.courses.map(course => ({
       ...course,
       controls: course.controls.filter(c => c !== id),
-      bends: Object.fromEntries(Object.entries(course.bends).filter(([key]) => keep(key))),
-      ...(course.markedRoutes ? { markedRoutes: course.markedRoutes.filter(keep) } : {}),
+      bends: Object.fromEntries(Object.entries(course.bends).filter(([key]) => !key.split('>').includes(id))),
     })),
   }
 }
@@ -175,21 +192,9 @@ export function setNumberPosition(doc: EventDoc, courseId: string, controlId: st
   })
 }
 
-/** Make the leg from one control to the next a marked route (707), or a normal course line again. */
-export function setMarkedRoute(doc: EventDoc, courseId: string, from: string, to: string, marked: boolean): EventDoc {
-  return withCourse(doc, courseId, c => {
-    const key = legKey(from, to)
-    const rest = (c.markedRoutes ?? []).filter(k => k !== key)
-    const markedRoutes = marked ? [...rest, key] : rest
-    const { markedRoutes: _old, ...bare } = c
-    return markedRoutes.length ? { ...bare, markedRoutes } : bare
-  })
-}
-
 function checkPoints(kind: SpecialKind, points: Point[]): void {
-  const needed = MIN_POINTS[SPECIAL_GEOMETRY[kind]]
-  if (points.length < needed || (needed === 1 && points.length > 1) || points.some(p => !p.every(Number.isFinite))) {
-    throw new CourseError('invalid_special', `A ${kind} needs ${needed === 1 ? 'one point' : `${needed} points or more`}`)
+  if (!pointsFit(SPECIAL_GEOMETRY[kind], points.length) || points.some(p => !p.every(Number.isFinite))) {
+    throw new CourseError('invalid_special', `Wrong number of points for a ${kind}`)
   }
 }
 

@@ -4,7 +4,14 @@ import { z } from 'zod'
 
 export const SCHEMA_VERSION = 1
 
-export const CONTROL_KINDS = ['start', 'control', 'finish', 'crossingPoint'] as const
+/**
+ * What a course passes through, in the shared pool:
+ * - map issue point (702): before the start; the way from it to the start is a marked route;
+ * - start, control, finish;
+ * - mandatory crossing point (710);
+ * - marked route (707): a taped line the course follows, from its first point to its last.
+ */
+export const CONTROL_KINDS = ['mapIssue', 'start', 'control', 'finish', 'crossingPoint', 'markedRoute'] as const
 export type ControlKind = (typeof CONTROL_KINDS)[number]
 
 /** Which IOF specification the course symbols follow: forest (ISOM 2017-2) or sprint (ISSprOM 2019-2). */
@@ -29,7 +36,10 @@ const control = z.object({
   kind: z.enum(CONTROL_KINDS),
   /** Control code on the marker, for kind 'control' only (31 and up by default). */
   code: z.number().int().min(1).max(999).nullable(),
+  /** Where it is; for a marked route, its first point. */
   position: point,
+  /** A marked route's line, two points or more, in running order. Other kinds have none. */
+  route: z.array(point).optional(),
   /** The same in every course that uses the control. Start and controls only. */
   description: description.optional(),
 })
@@ -40,8 +50,7 @@ const control = z.object({
  * section or temporary construction.
  */
 export const SPECIAL_KINDS = [
-  'mapIssue', // 702, point
-  'markedRoute', // 707 as a free line, e.g. from the map issue point to the start (legs have their own)
+  'optionalCrossing', // 710 not on a course: a voluntary crossing point, its point and the way through
   'oobBoundary', // 708, line
   'oobArea', // 709, area
   'oobRoute', // 711, line (ISOM)
@@ -52,9 +61,11 @@ export const SPECIAL_KINDS = [
 ] as const
 export type SpecialKind = (typeof SPECIAL_KINDS)[number]
 
-export const SPECIAL_GEOMETRY: Record<SpecialKind, 'point' | 'line' | 'area'> = {
-  mapIssue: 'point',
-  markedRoute: 'line',
+/** 'direction': a point and a second point giving a direction from it (two clicks). */
+export type SpecialGeometry = 'point' | 'direction' | 'line' | 'area'
+
+export const SPECIAL_GEOMETRY: Record<SpecialKind, SpecialGeometry> = {
+  optionalCrossing: 'direction',
   oobBoundary: 'line',
   oobArea: 'area',
   oobRoute: 'line',
@@ -66,12 +77,15 @@ export const SPECIAL_GEOMETRY: Record<SpecialKind, 'point' | 'line' | 'area'> = 
 
 /** The kinds each standard has, in the order of the specification. */
 export const SPECIALS_BY_STANDARD: Record<Standard, readonly SpecialKind[]> = {
-  isom: ['mapIssue', 'markedRoute', 'oobBoundary', 'oobArea', 'oobRoute', 'firstAid', 'refreshment'],
-  issprom: ['mapIssue', 'markedRoute', 'oobBoundary', 'oobArea', 'crossingSection', 'temporaryConstruction'],
+  isom: ['optionalCrossing', 'oobBoundary', 'oobArea', 'oobRoute', 'firstAid', 'refreshment'],
+  issprom: ['optionalCrossing', 'oobBoundary', 'oobArea', 'crossingSection', 'temporaryConstruction'],
 }
 
-/** How many points each geometry needs at least. */
-export const MIN_POINTS = { point: 1, line: 2, area: 3 } as const
+/** How many points each geometry needs at least (a point and a direction need exactly that many). */
+export const MIN_POINTS = { point: 1, direction: 2, line: 2, area: 3 } as const
+/** Whether `count` points make a shape of this geometry. */
+export const pointsFit = (geometry: SpecialGeometry, count: number) =>
+  geometry === 'point' || geometry === 'direction' ? count === MIN_POINTS[geometry] : count >= MIN_POINTS[geometry]
 
 /** Out-of-bounds area boundary (709): marked continuously (solid), intermittently (dashed) or not at all. */
 export const BOUNDARY_STYLES = ['solid', 'dashed', 'none'] as const
@@ -103,8 +117,6 @@ const course = z.object({
   climb: z.number().int().min(0).max(9999).nullable().optional(),
   /** Cell size of the printed description sheet in mm (IOF: 5–7); default DEFAULT_CELL_SIZE. */
   descriptionCellSize: z.number().min(5).max(7).optional(),
-  /** Legs that are marked routes (707), by `legKey(from, to)`: drawn dashed, with an instruction on the sheet. */
-  markedRoutes: z.array(z.string()).optional(),
 })
 
 export const DEFAULT_CELL_SIZE = 6
@@ -130,6 +142,9 @@ export const eventDocSchema = z
       } else if (c.code !== null) {
         ctx.addIssue({ code: 'custom', path: ['controls', i, 'code'], message: `a ${c.kind} has no code` })
       }
+      if (c.kind === 'markedRoute' ? (c.route?.length ?? 0) < 2 : c.route !== undefined) {
+        ctx.addIssue({ code: 'custom', path: ['controls', i, 'route'], message: 'only a marked route has a route, of two points or more' })
+      }
     })
     const courseIds = new Set<string>()
     doc.courses.forEach((c, i) => {
@@ -144,13 +159,8 @@ export const eventDocSchema = z
       if (specialIds.has(s.id) || ids.has(s.id))
         ctx.addIssue({ code: 'custom', path: ['specials', i, 'id'], message: `duplicate id ${s.id}` })
       specialIds.add(s.id)
-      const needed = MIN_POINTS[SPECIAL_GEOMETRY[s.kind]]
-      if (s.points.length < needed || (needed === 1 && s.points.length > 1)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['specials', i, 'points'],
-          message: `a ${s.kind} needs ${needed === 1 ? 'one point' : `${needed} points or more`}`,
-        })
+      if (!pointsFit(SPECIAL_GEOMETRY[s.kind], s.points.length)) {
+        ctx.addIssue({ code: 'custom', path: ['specials', i, 'points'], message: `wrong number of points for a ${s.kind}` })
       }
     })
   })
@@ -161,6 +171,11 @@ export type Course = z.infer<typeof course>
 export type Description = z.infer<typeof description>
 export type Special = z.infer<typeof special>
 export type EventDoc = z.infer<typeof eventDocSchema>
+
+/** Where the course arrives at a stop: a marked route's first point, otherwise its position. */
+export const entryPoint = (control: Control): Point => control.route?.[0] ?? control.position
+/** Where the course leaves a stop: a marked route's last point, otherwise its position. */
+export const exitPoint = (control: Control): Point => control.route?.at(-1) ?? control.position
 
 /** Key of a leg in `Course.bends`. */
 export const legKey = (from: string, to: string) => `${from}>${to}`
@@ -177,8 +192,54 @@ export function emptyDoc(mapScale: number): EventDoc {
  * filled in from the map scale.
  */
 export function parseDoc(raw: unknown, mapScale: number): EventDoc {
-  const input = raw && typeof raw === 'object' ? { standard: defaultStandard(mapScale), ...raw } : raw
+  const input = raw && typeof raw === 'object' ? { standard: defaultStandard(mapScale), ...upgrade(raw as RawDoc) } : raw
   return eventDocSchema.parse(input)
+}
+
+type RawPoint = [number, number]
+type RawDoc = {
+  controls?: { id: string; kind: string; position: RawPoint }[]
+  courses?: { id: string; controls: string[]; bends?: Record<string, RawPoint[]>; markedRoutes?: string[] }[]
+  specials?: { id: string; kind: string; points: RawPoint[] }[]
+}
+
+/**
+ * Documents saved before marked routes and map issue points became course stops: map issue points
+ * and free marked routes were special symbols, and a marked route was a whole leg marked as such.
+ * They become a map issue point and marked routes in the pool (a marked leg: a marked route from
+ * control to control, through the leg's bends, put into the course between them).
+ */
+export function upgrade(raw: RawDoc): RawDoc {
+  const legacy = (raw.specials ?? []).filter(s => s.kind === 'mapIssue' || s.kind === 'markedRoute')
+  const markedLegs = (raw.courses ?? []).some(c => c.markedRoutes?.length)
+  if (!legacy.length && !markedLegs) return raw
+  const controls = [...(raw.controls ?? [])] as Record<string, unknown>[]
+  for (const s of legacy) {
+    const [first] = s.points as [RawPoint]
+    controls.push(
+      s.kind === 'mapIssue'
+        ? { id: s.id, kind: 'mapIssue', code: null, position: first }
+        : { id: s.id, kind: 'markedRoute', code: null, position: first, route: s.points },
+    )
+  }
+  const positions = new Map((raw.controls ?? []).map(c => [c.id, c.position]))
+  const courses = (raw.courses ?? []).map(course => {
+    const { markedRoutes = [], ...rest } = course
+    const sequence = [...course.controls]
+    const bends = { ...(course.bends ?? {}) }
+    for (const key of markedRoutes) {
+      const [from = '', to = ''] = key.split('>')
+      const at = sequence.findIndex((id, i) => id === from && sequence[i + 1] === to)
+      const [a, b] = [positions.get(from), positions.get(to)]
+      if (at < 0 || !a || !b) continue
+      const id = `${course.id}:${key}`
+      controls.push({ id, kind: 'markedRoute', code: null, position: a, route: [a, ...(bends[key] ?? []), b] })
+      delete bends[key]
+      sequence.splice(at + 1, 0, id)
+    }
+    return { ...rest, controls: sequence, bends }
+  })
+  return { ...raw, controls: controls as RawDoc['controls'], courses, specials: (raw.specials ?? []).filter(s => !legacy.includes(s)) }
 }
 
 export class CourseError extends Error {

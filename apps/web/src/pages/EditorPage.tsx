@@ -9,6 +9,7 @@ import {
   parseDoc,
   removeCourseControl,
   setNumberPosition,
+  setRoute,
   setSpecialPoints,
   transformBetween,
 } from '@course-setter/core'
@@ -31,6 +32,7 @@ import {
   moveBend,
   reducer,
   removeBend,
+  shapeOf,
   type Tool,
 } from '../editor/state.ts'
 import { Toolbar } from '../editor/Toolbar.tsx'
@@ -219,16 +221,17 @@ function Editor({
 
   const inCourse = course ? t('editor.hint.inCourse', { course: course.name }) : ''
   const snapped = hover?.snapTo ? doc.controls.find(c => c.id === hover.snapTo) : undefined
-  const selectedSpecial = doc.specials.find(s => s.id === state.selected)
+  // A selected special symbol or marked route: moved and reshaped by its points.
+  const selectedShape = shapeOf(doc, state.selected)
   const toolHint = (tool: Tool): string => {
-    if (tool === 'mapIssue') return t('editor.hint.mapIssue')
+    if (tool === 'select') {
+      if (selectedShape && selectedShape.geometry !== 'point') return t('editor.hint.selectSpecial')
+      return course ? t('editor.hint.select', { course: course.name }) : t('editor.hint.selectAll')
+    }
+    if (tool === 'optionalCrossing') return t('editor.hint.optionalCrossing')
     if (isSpecialTool(tool)) {
       const name = t(`editor.tools.${tool}`).toLowerCase()
       return isDrawingTool(tool) ? t('editor.hint.drawSpecial', { name }) : t('editor.hint.placeSpecial', { name })
-    }
-    if (tool === 'select') {
-      if (selectedSpecial) return t('editor.hint.selectSpecial')
-      return course ? t('editor.hint.select', { course: course.name }) : t('editor.hint.selectAll')
     }
     return t(`editor.hint.${tool}`, { inCourse })
   }
@@ -285,7 +288,9 @@ function Editor({
             tool={state.tool}
             draft={state.draft}
             onClick={onClick}
-            onMoveSpecial={(id, points) => edit(setSpecialPoints(doc, id, points))}
+            onMoveShape={(id, points) =>
+              edit(doc.specials.some(s => s.id === id) ? setSpecialPoints(doc, id, points) : setRoute(doc, id, points))
+            }
             onMoveControl={(id, point) => edit(moveControl(doc, id, point))}
             onMoveBend={(key, index, point) => course && edit(moveBend(doc, course, key, index, point))}
             onRemoveBend={(key, index) => course && edit(removeBend(doc, course, key, index))}

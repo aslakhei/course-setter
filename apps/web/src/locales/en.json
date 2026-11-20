@@ -261,7 +261,8 @@
       "start": "Start",
       "control": "Control",
       "finish": "Finish",
-      "crossingPoint": "Crossing point",
+      "crossingPoint": "Crossing point (mandatory)",
+      "optionalCrossing": "Crossing point (voluntary)",
       "bend": "Bend leg",
       "special": "Special symbols",
       "mapIssue": "Map issue point",
@@ -284,7 +285,9 @@
       "crossingPoint": "Click on the map to add a mandatory crossing point{{inCourse}}.",
       "bend": "Click on a course line to bend it; drag a bend to move it, click it to remove it.",
       "placeSpecial": "Click on the map to place a {{name}}.",
-      "mapIssue": "Click on the map to place the map issue point. Its bar turns across the way to the nearest start.",
+      "mapIssue": "Click on the map to place the map issue point{{inCourse}}. The way from it to the start is a marked route.",
+      "optionalCrossing": "Click where the crossing is, then in the direction runners go through. It is not part of any course.",
+      "markedRoute": "Click to add points of the marked route{{inCourse}}, or click a marked route already in the event to use it again. Double-click or Enter finishes, Backspace removes the last point, Esc cancels.",
       "drawSpecial": "Click to add points of the {{name}}. Double-click or Enter finishes, Backspace removes the last point, Esc cancels.",
       "selectSpecial": "Drag to move it, or drag one of its points. Shift+click adds a point on an edge or removes one. Delete removes it.",
       "inCourse": " in {{course}}",
@@ -319,6 +322,8 @@
       "start": "Start",
       "finish": "Finish",
       "crossingPoint": "Crossing point",
+      "mapIssue": "Map issue point",
+      "markedRoute": "Marked route",
       "control": "Code {{code}}"
     },
     "moveUp": "Move {{name}} up",
@@ -342,7 +347,7 @@
       "deleteConfirm": "Delete the course {{course}}? Its controls stay in the event."
     },
     "selected": "Selected: {{name}}",
-    "markedRoute": "Marked route from {{from}} to {{to}}",
+    "routeLength": "{{metres}} m taped",
     "special": {
       "shownOn": "Shown on",
       "allCourses": "All courses",
@@ -365,7 +370,9 @@
       "start": "start",
       "control": "control {{code}}",
       "finish": "finish",
-      "crossingPoint": "crossing point"
+      "crossingPoint": "crossing point",
+      "mapIssue": "map issue point",
+      "markedRoute": "marked route"
     },
     "conflict": {
       "heading": "Someone else saved this event",
