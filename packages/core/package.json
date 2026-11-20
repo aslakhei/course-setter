@@ -6,7 +6,7 @@
   "license": "AGPL-3.0-only",
   "exports": {
     ".": "./src/index.ts",
-    "./pdf": "./src/render/pdf.ts"
+    "./pdf": "./src/pdf.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"

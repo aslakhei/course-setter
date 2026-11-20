@@ -14,6 +14,7 @@ export {
   setDescription,
   setLegBends,
   setNumberPosition,
+  setPrintSettings,
   setRoute,
   setSpecialBoundary,
   setSpecialCourses,
@@ -41,8 +42,14 @@ export {
   entryPoint,
   eventDocSchema,
   exitPoint,
+  type LayoutElement,
   legKey,
   MIN_POINTS,
+  ORIENTATIONS,
+  type Orientation,
+  PAPERS,
+  type Paper,
+  type PrintSettings,
   parseDoc,
   pointsFit,
   SCHEMA_VERSION,
@@ -98,6 +105,17 @@ export {
   drawDescriptionSymbol,
   SYMBOL_BOX_UNITS,
 } from './descriptions/symbols.ts'
+export {
+  DEFAULT_MARGIN,
+  defaultPrintSettings,
+  groundToPage,
+  mapAreaOf,
+  type PrintPage,
+  pagePosition,
+  pageSize,
+  printPage,
+  printSettingsOf,
+} from './print/layout.ts'
 export { type CanvasOptions, type CanvasTarget, type DeviceTransform, drawPrimitives, paperToDevice } from './render/canvas.ts'
 export {
   ARIAL_DIGIT_HEIGHT,
