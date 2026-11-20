@@ -13,12 +13,25 @@ export type Standard = (typeof STANDARDS)[number]
 
 const point = z.tuple([z.number().finite(), z.number().finite()])
 
+/** Columns of a control description the setter fills in (A and B are the number and code). */
+export const DESCRIPTION_COLUMNS = ['c', 'd', 'e', 'f', 'g', 'h'] as const
+export type DescriptionColumnKey = (typeof DESCRIPTION_COLUMNS)[number]
+
+/**
+ * A control's description: IOF symbol ids by column (see descriptions/symbols.ts); column F also takes
+ * a size ("1.5", "3x4", "0.5/2" for two sizes, "2|3" for one above the other). Checked by setDescription.
+ */
+const cell = z.string().min(1).max(16).optional()
+const description = z.object({ c: cell, d: cell, e: cell, f: cell, g: cell, h: cell })
+
 const control = z.object({
   id: z.string().min(1),
   kind: z.enum(CONTROL_KINDS),
   /** Control code on the marker, for kind 'control' only (31 and up by default). */
   code: z.number().int().min(1).max(999).nullable(),
   position: point,
+  /** The same in every course that uses the control. Start and controls only. */
+  description: description.optional(),
 })
 
 const course = z.object({
@@ -32,7 +45,13 @@ const course = z.object({
   bends: z.record(z.string(), z.array(point)),
   /** Control numbers the setter moved: offset from the control's centre in paper mm, by control id. */
   numberPositions: z.record(z.string(), point).default({}),
+  /** Climb in metres, shown on the description sheet; set by hand (null or absent: not shown). */
+  climb: z.number().int().min(0).max(9999).nullable().optional(),
+  /** Cell size of the printed description sheet in mm (IOF: 5–7); default DEFAULT_CELL_SIZE. */
+  descriptionCellSize: z.number().min(5).max(7).optional(),
 })
+
+export const DEFAULT_CELL_SIZE = 6
 
 export const eventDocSchema = z
   .object({
@@ -68,6 +87,7 @@ export const eventDocSchema = z
 export type Point = [number, number]
 export type Control = z.infer<typeof control>
 export type Course = z.infer<typeof course>
+export type Description = z.infer<typeof description>
 export type EventDoc = z.infer<typeof eventDocSchema>
 
 /** Key of a leg in `Course.bends`. */
@@ -90,7 +110,7 @@ export function parseDoc(raw: unknown, mapScale: number): EventDoc {
 }
 
 export class CourseError extends Error {
-  readonly code: 'unknown_control' | 'unknown_course' | 'code_in_use' | 'invalid_code' | 'invalid_index'
+  readonly code: 'unknown_control' | 'unknown_course' | 'code_in_use' | 'invalid_code' | 'invalid_index' | 'invalid_description'
   constructor(code: CourseError['code'], message: string) {
     super(message)
     this.code = code

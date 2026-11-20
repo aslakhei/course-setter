@@ -39,6 +39,6 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Liberation Sans (tests only)
 
-`packages/core/test/fonts/LiberationSans-Regular.ttf` (Liberation Fonts 2.1.5, metric-compatible with
-Arial) is used by the symbol snapshot tests so they draw the same text on every platform. It is licensed
+`packages/core/test/fonts/LiberationSans-Regular.ttf` and `LiberationSans-Bold.ttf` (Liberation Fonts
+2.1.5, metric-compatible with Arial) are used by the symbol snapshot tests so they draw the same text on every platform. It is licensed
 under the SIL Open Font License 1.1, see `packages/core/test/fonts/LICENSE-LiberationSans.txt`.

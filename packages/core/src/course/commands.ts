@@ -1,11 +1,13 @@
 // Editing commands: pure functions from a document to a new one (the input is never changed), so the
 // editor keeps every state for undo/redo. Invalid edits throw CourseError.
+import { cellSymbol } from '../descriptions/symbols.ts'
 import {
   type ControlKind,
   type Course,
   CourseError,
   controlById,
   courseById,
+  type DescriptionColumnKey,
   type EventDoc,
   legKey,
   type Point,
@@ -61,12 +63,51 @@ export function addCourse(doc: EventDoc, { id, name, printScale }: { id: string;
   return { ...doc, courses: [...doc.courses, { id, name: name.trim(), controls: [], printScale, bends: {}, numberPositions: {} }] }
 }
 
-export function updateCourse(doc: EventDoc, id: string, change: { name?: string; printScale?: number }): EventDoc {
+export type CourseChange = { name?: string; printScale?: number; climb?: number | null; descriptionCellSize?: number }
+
+export function updateCourse(doc: EventDoc, id: string, change: CourseChange): EventDoc {
+  if (change.climb != null && (!Number.isInteger(change.climb) || change.climb < 0 || change.climb > 9999)) {
+    throw new CourseError('invalid_description', `Invalid climb ${change.climb}`)
+  }
+  const cell = change.descriptionCellSize
+  if (cell !== undefined && !(cell >= 5 && cell <= 7)) throw new CourseError('invalid_description', `Invalid cell size ${cell}`)
   return withCourse(doc, id, c => ({
     ...c,
     ...(change.name !== undefined ? { name: change.name.trim() } : {}),
     ...(change.printScale !== undefined ? { printScale: change.printScale } : {}),
+    ...(change.climb !== undefined ? { climb: change.climb } : {}),
+    ...(cell !== undefined ? { descriptionCellSize: cell } : {}),
   }))
+}
+
+/** A size in column F: one number, two numbers ("3x4" a size, "0.5/2" two heights, "2|3" one above the other). */
+const SIZE = /^\d{1,4}(?:[.,]\d{1,2})?(?:[x×/|]\d{1,4}(?:[.,]\d{1,2})?)?$/
+
+/**
+ * Set one cell of a control's description to an IOF symbol id (or, in column F, a size), or clear it
+ * with null. The description belongs to the control, so it changes in every course that uses it.
+ */
+export function setDescription(doc: EventDoc, controlId: string, column: DescriptionColumnKey, value: string | null): EventDoc {
+  const control = controlById(doc, controlId)
+  if (control.kind !== 'control' && control.kind !== 'start') {
+    throw new CourseError('invalid_description', `A ${control.kind} has no description`)
+  }
+  let stored: string | null = null
+  if (value !== null) {
+    if (cellSymbol(column, value)) stored = value
+    else if (column === 'f' && SIZE.test(value.trim())) stored = value.trim().replace('×', 'x').replace(',', '.')
+    else throw new CourseError('invalid_description', `${value} does not go in column ${column.toUpperCase()}`)
+  }
+  const { [column]: _old, ...rest } = control.description ?? {}
+  const description = stored === null ? rest : { ...rest, [column]: stored }
+  return {
+    ...doc,
+    controls: doc.controls.map(c => {
+      if (c.id !== controlId) return c
+      const { description: _d, ...bare } = c
+      return Object.keys(description).length ? { ...bare, description } : bare
+    }),
+  }
 }
 
 export function deleteCourse(doc: EventDoc, id: string): EventDoc {

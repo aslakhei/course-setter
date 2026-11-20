@@ -36,6 +36,8 @@ export type PdfOptions = {
   color: Color
   /** The font for text (Arial or a metric-compatible font such as Liberation Sans, embedded by the caller). */
   font: PDFFont
+  /** Its bold face, for bold text (default: `font`). */
+  boldFont?: PDFFont
   /** Digit height of `font` as a fraction of its size. */
   digitHeight?: number
 }
@@ -109,14 +111,17 @@ export function drawPrimitivesOnPage(page: PDFPage, primitives: Primitive[], opt
 
   // Centred on the middle of the digits, as in the Canvas backend.
   for (const t of texts) {
-    const size = (t.height * PT_PER_MM) / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT)
-    const width = options.font.widthOfTextAtSize(t.text, size)
-    page.drawText(t.text, {
-      x: x(t.at[0]) - width / 2,
-      y: y(t.at[1]) - (t.height * PT_PER_MM) / 2,
-      size,
-      font: options.font,
-      color: options.color,
-    })
+    const font = t.bold ? (options.boldFont ?? options.font) : options.font
+    let digit = t.height * PT_PER_MM
+    let size = digit / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT)
+    let width = font.widthOfTextAtSize(t.text, size)
+    const max = t.maxWidth === undefined ? Number.POSITIVE_INFINITY : t.maxWidth * PT_PER_MM
+    if (width > max) {
+      const k = (max / width) * 0.95
+      digit *= k
+      size *= k
+      width *= k
+    }
+    page.drawText(t.text, { x: x(t.at[0]) - width / 2, y: y(t.at[1]) - digit / 2, size, font, color: options.color })
   }
 }

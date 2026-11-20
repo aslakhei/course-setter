@@ -1,6 +1,7 @@
 // IOF control description symbols (International Specification for Control Descriptions 2024), as
 // drawing primitives. The artwork comes from Purple Pen (see symbols.data.ts); ids are Purple Pen's,
 // which keep the 2004 specification's numbers for symbols that were renumbered later, so they stay stable.
+import type { DescriptionColumnKey } from '../course/doc.ts'
 import type { PathCommand, Primitive } from '../render/primitives.ts'
 import type { Point } from '../similarity.ts'
 import { SYMBOLS } from './symbols.data.ts'
@@ -30,6 +31,25 @@ const byId = new Map(SYMBOLS.map(s => [s.id, s]))
 
 export function descriptionSymbol(id: string): DescriptionSymbolDef | undefined {
   return byId.get(id)
+}
+
+/** Which symbol columns each description column takes: column E may also hold a second feature. */
+export const CELL_SYMBOL_COLUMNS: Record<DescriptionColumnKey, readonly string[]> = {
+  c: ['C'],
+  d: ['D'],
+  e: ['E', 'D'],
+  f: ['F'],
+  g: ['G'],
+  h: ['H'],
+}
+
+/**
+ * The symbol a cell's value stands for, or undefined when it is not a drawn symbol of that column. Ids
+ * look like numbers ("1.5" is the quarry), so a size in column F must not be read as a symbol.
+ */
+export function cellSymbol(column: DescriptionColumnKey, value: string): DescriptionSymbolDef | undefined {
+  const symbol = byId.get(value)
+  return symbol && symbol.shapes.length > 0 && CELL_SYMBOL_COLUMNS[column].includes(symbol.column) ? symbol : undefined
 }
 
 /** Units of the symbol drawing per box: a symbol is drawn in a 200 × 200 unit box. */

@@ -254,6 +254,7 @@ function Editor({
         </main>
         <CoursePanel
           state={state}
+          eventName={event.name}
           onCourse={courseId => dispatch({ type: 'course', courseId })}
           onSelect={controlId => dispatch({ type: 'select', controlId })}
           onEdit={edit}

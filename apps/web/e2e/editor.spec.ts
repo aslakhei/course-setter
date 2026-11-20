@@ -135,6 +135,89 @@ test('set a course on the map, share a control with a second course, and keep it
   await expect(page.getByTestId('course-length')).toHaveText(h21Before)
 })
 
+test('control descriptions show in every course that uses the control and survive a reload', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId } = await clubWithMap(ada, `E2E descriptions ${randomUUID().slice(0, 8)}`, fixture)
+  clubs.push(clubId)
+
+  const page = await pageFor(browser, ada)
+  await page.goto(`/clubs/${clubId}/events`)
+  await page.getByLabel('Name').fill('Club night')
+  await page.getByRole('button', { name: 'Create event' }).click()
+  await expect(page.getByTestId('editor-map')).toBeVisible()
+
+  // H21: start, 31, 32, finish. D16: start, 32 (reused), finish.
+  await newCourse(page, 'H21')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.2, 0.55)
+  await tool(page, 'Control').click()
+  await clickMap(page, 0.4, 0.45)
+  await clickMap(page, 0.6, 0.45)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.8, 0.55)
+  await newCourse(page, 'D16')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.2, 0.55)
+  await tool(page, 'Control').click()
+  await clickMap(page, 0.6, 0.45)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.8, 0.55)
+  await expect(courseList(page, 'D16').getByText('Code 32')).toBeVisible()
+  await tool(page, 'Select').click()
+
+  // In H21's sheet: 32 is a boulder, 1.5 m high; 31 a knoll.
+  const course = page.getByRole('combobox', { name: 'Course', exact: true })
+  await course.selectOption({ label: (await course.locator('option', { hasText: 'H21' }).textContent()) ?? '' })
+  await page.getByRole('button', { name: 'Descriptions' }).click()
+  const sheet = page.getByTestId('description-sheet')
+  await sheet.getByRole('button', { name: 'Code 32, Feature: empty' }).click()
+  const picker = page.getByRole('dialog', { name: 'Code 32 · column D' })
+  await expect(picker.getByRole('searchbox', { name: 'Search symbols' })).toBeFocused()
+  await picker.getByRole('searchbox').fill('boulder')
+  await expect(picker.getByRole('button', { name: 'Knoll' })).toHaveCount(0)
+  await picker.getByRole('button', { name: 'Boulder', exact: true }).click()
+  await expect(picker).toHaveCount(0)
+  await expect(sheet.getByRole('button', { name: 'Code 32, Feature: Boulder' })).toBeVisible()
+
+  await sheet.getByRole('button', { name: 'Code 32, Dimensions and combinations: empty' }).click()
+  await page.getByLabel('Size in metres').fill('1.5')
+  await page.getByRole('button', { name: 'Set', exact: true }).click()
+  await expect(sheet.getByRole('button', { name: 'Code 32, Dimensions and combinations: 1.5' })).toBeVisible()
+
+  await sheet.getByRole('button', { name: 'Code 31, Feature: empty' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Knoll', exact: true }).click()
+  // Escape closes the picker without changing anything.
+  await sheet.getByRole('button', { name: 'Code 31, Appearance: empty' }).click()
+  await expect(page.getByRole('dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(sheet.getByRole('button', { name: 'Code 31, Appearance: empty' })).toBeFocused()
+
+  // D16 shares control 32, so it has the same description.
+  await course.selectOption({ label: (await course.locator('option', { hasText: 'D16' }).textContent()) ?? '' })
+  await expect(sheet.getByRole('button', { name: 'Code 32, Feature: Boulder' })).toBeVisible()
+  await expect(sheet.getByRole('button', { name: 'Code 32, Dimensions and combinations: 1.5' })).toBeVisible()
+  await waitSaved(page)
+
+  // After a reload both courses still have it.
+  await page.reload()
+  await page.getByRole('button', { name: 'Descriptions' }).click()
+  for (const name of ['H21', 'D16']) {
+    await course.selectOption({ label: (await course.locator('option', { hasText: name }).textContent()) ?? '' })
+    await expect(sheet.getByRole('button', { name: 'Code 32, Feature: Boulder' })).toBeVisible()
+  }
+  await expect(sheet.getByRole('button', { name: 'Code 31' })).toHaveCount(0) // not in D16
+  await course.selectOption({ label: (await course.locator('option', { hasText: 'H21' }).textContent()) ?? '' })
+  await expect(sheet.getByRole('button', { name: 'Code 31, Feature: Knoll' })).toBeVisible()
+
+  // Clearing a cell.
+  await sheet.getByRole('button', { name: 'Code 31, Feature: Knoll' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Clear cell' }).click()
+  await expect(sheet.getByRole('button', { name: 'Code 31, Feature: empty' })).toBeVisible()
+})
+
 test('two people editing at once: the second save gets the conflict and nothing is lost', async ({ browser }) => {
   test.setTimeout(240_000)
   const [ada, ivan] = await Promise.all([createUser('Ada Admin'), createUser('Ivan Invited')])
@@ -196,6 +279,8 @@ test('an event moves to a newer version of its map and keeps its course', async 
   await page.goto(`/clubs/${clubId}/events`)
   await page.getByLabel('Name').fill('Moving training')
   await page.getByRole('button', { name: 'Create event' }).click()
+  // The events page lists "Test forest · version 1" too: wait for the editor first.
+  await expect(page.getByRole('heading', { level: 1, name: 'Moving training' })).toBeVisible()
   await expect(page.getByText('Test forest · Version 1')).toBeVisible()
   await newCourse(page, 'H21')
   await tool(page, 'Start').click()

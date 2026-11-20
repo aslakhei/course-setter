@@ -14,10 +14,11 @@ import fontkit from '@pdf-lib/fontkit'
 import * as mupdf from 'mupdf'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import { insertCourseControl } from '../course/commands.ts'
-import { courseById, type EventDoc } from '../course/doc.ts'
+import { insertCourseControl, setDescription, updateCourse } from '../course/commands.ts'
+import { courseById, type DescriptionColumnKey, type EventDoc } from '../course/doc.ts'
 import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
 import { testEvent } from '../course/test-doc.ts'
+import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
 import type { Point } from '../similarity.ts'
 import { drawPrimitives, paperToDevice } from './canvas.ts'
@@ -26,6 +27,7 @@ import { type Primitive, primitivesBounds, transformPrimitives } from './primiti
 
 const SNAPSHOTS = fileURLToPath(new URL('./__snapshots__/', import.meta.url))
 const FONT_FILE = fileURLToPath(new URL('../../test/fonts/LiberationSans-Regular.ttf', import.meta.url))
+const BOLD_FONT_FILE = fileURLToPath(new URL('../../test/fonts/LiberationSans-Bold.ttf', import.meta.url))
 const FONT_FAMILY = 'Snapshot Sans'
 /** Liberation Sans digits are 1409 of 2048 units high (Arial's are 1472). */
 const DIGIT_HEIGHT = 1409 / 2048
@@ -33,9 +35,14 @@ const PX_PER_MM = 12
 const PURPLE = { css: '#b5179e', pdf: rgb(0xb5 / 255, 0x17 / 255, 0x9e / 255) }
 const BLACK = { css: '#000000', pdf: rgb(0, 0, 0) }
 GlobalFonts.registerFromPath(FONT_FILE, FONT_FAMILY)
+GlobalFonts.registerFromPath(BOLD_FONT_FILE, FONT_FAMILY)
 
 type Cell = { name: string; primitives: Primitive[] }
-type Sheet = { name: string; color: typeof PURPLE; cell: Point; columns: number; cells: Cell[] }
+/**
+ * `between` is the share of drawn pixels per cell the Canvas and PDF images may differ by (default 2 %).
+ * Text makes it larger: the two rasterisers place glyphs up to half a pixel (0.04 mm) apart.
+ */
+type Sheet = { name: string; color: typeof PURPLE; cell: Point; columns: number; cells: Cell[]; between?: number }
 type Image = { width: number; height: number; data: Uint8ClampedArray | Uint8Array; channels: number }
 
 /** The sheet's primitives, each cell's drawing centred in its grid cell, in sheet mm (y up). */
@@ -69,8 +76,9 @@ async function drawPdf(size: Point, primitives: Primitive[], color: typeof PURPL
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
   const font = await doc.embedFont(readFileSync(FONT_FILE), { subset: true })
+  const boldFont = await doc.embedFont(readFileSync(BOLD_FONT_FILE), { subset: true })
   const page = doc.addPage([size[0] * PT_PER_MM, size[1] * PT_PER_MM])
-  drawPrimitivesOnPage(page, primitives, { origin: [0, 0], color: color.pdf, font, digitHeight: DIGIT_HEIGHT })
+  drawPrimitivesOnPage(page, primitives, { origin: [0, 0], color: color.pdf, font, boldFont, digitHeight: DIGIT_HEIGHT })
   const pdf = mupdf.Document.openDocument(await doc.save(), 'application/pdf')
   const k = PX_PER_MM / PT_PER_MM
   const pixmap = pdf.loadPage(0).toPixmap(mupdf.Matrix.scale(k, k), mupdf.ColorSpace.DeviceRGB, false)
@@ -219,7 +227,7 @@ const BOX = 6 // mm, a typical description cell
 const drawn = DESCRIPTION_SYMBOLS.filter(s => s.shapes.length > 0)
 const isLine = (column: string) => 'VWXYZ'.includes(column)
 
-const descriptionSheet = (): Sheet => ({
+const descriptionSymbolsSheet = (): Sheet => ({
   name: 'description-symbols',
   color: BLACK,
   cell: [8, 8],
@@ -235,7 +243,50 @@ const instructionSheet = (): Sheet => ({
   cells: drawn.filter(s => isLine(s.column)).map(s => ({ name: `${s.id} ${s.name}`, primitives: drawDescriptionSymbol(s, [0, 0], BOX) })),
 })
 
-describe.each([symbolSheet, courseSheet, descriptionSheet, instructionSheet])('%o', makeSheet => {
+/**
+ * Whole description sheets: course A with a crossing point, every kind of cell (symbols in C–H, one size,
+ * a size with ×, two sizes split diagonally and one above the other) and a climb, at 6 mm cells; course B
+ * without a climb at 5 mm.
+ */
+const sheetsSheet = (): Sheet => {
+  let doc = testEvent()
+  doc = { ...doc, controls: [...doc.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 1000] }] }
+  doc = insertCourseControl(doc, 'A', 'x', 3)
+  const cells: [string, DescriptionColumnKey, string][] = [
+    ['s', 'd', '5.2'],
+    ['s', 'f', '10.2'],
+    ['a', 'c', '0.1E'],
+    ['a', 'd', '2.4'],
+    ['a', 'f', '1.5'],
+    ['a', 'g', '11.1SE'],
+    ['b', 'd', '1.10'],
+    ['b', 'e', '8.6'],
+    ['b', 'f', '3x4'],
+    ['b', 'h', '12.2'],
+    ['c', 'd', '2.1'],
+    ['c', 'f', '0.5/2'],
+    ['c', 'g', '11.13'],
+  ]
+  for (const [id, column, value] of cells) doc = setDescription(doc, id, column, value)
+  doc = setDescription(doc, 'b', 'f', '2|3')
+  doc = updateCourse(doc, 'A', { climb: 45 })
+  const sheet = (course: string, cell: number) =>
+    drawDescriptionSheet(descriptionSheet(doc, courseById(doc, course), 'Club night championship'), cell)
+  return {
+    name: 'description-sheets',
+    color: BLACK,
+    cell: [56, 64],
+    columns: 2,
+    // Mostly text at 5 mm cells (the sheet's structure is checked by the unit tests in sheet.test.ts).
+    between: 0.04,
+    cells: [
+      { name: 'course A, 6 mm', primitives: sheet('A', 6) },
+      { name: 'course B, 5 mm', primitives: sheet('B', 5) },
+    ],
+  }
+}
+
+describe.each([symbolSheet, courseSheet, descriptionSymbolsSheet, instructionSheet, sheetsSheet])('%o', makeSheet => {
   const sheet = makeSheet()
 
   it('draws the same with the Canvas and the PDF backend, and both match their snapshots', { timeout: 60_000 }, async () => {
@@ -244,7 +295,18 @@ describe.each([symbolSheet, courseSheet, descriptionSheet, instructionSheet])('%
     const pdf = await drawPdf(size, primitives, sheet.color)
     expect(pdf.width).toBe(canvas.width)
     expect(pdf.height).toBe(canvas.height)
-    expect(differingCells(canvas, pdf, sheet, 0.02), 'Canvas and PDF differ').toEqual([])
+    const between = differingCells(canvas, pdf, sheet, sheet.between ?? 0.02)
+    if (between.length) {
+      for (const [backend, image] of [
+        ['canvas', canvas],
+        ['pdf', pdf],
+      ] as const) {
+        const file = join(tmpdir(), `${sheet.name}.${backend}.actual.png`)
+        writeFileSync(file, toPng(image))
+        between.push(`(${backend}: ${file})`)
+      }
+    }
+    expect(between, 'Canvas and PDF differ').toEqual([])
     expect(await matchSnapshot(sheet, 'canvas', canvas), 'Canvas differs from its snapshot').toEqual([])
     expect(await matchSnapshot(sheet, 'pdf', pdf), 'PDF differs from its snapshot').toEqual([])
   })

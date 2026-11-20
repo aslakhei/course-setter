@@ -21,6 +21,7 @@
   "nav": {
     "switchClub": "Switch club",
     "allClubs": "All clubs",
+    "licences": "Source code and licences",
     "clubs": "Clubs"
   },
   "roles": {
@@ -217,6 +218,42 @@
     "automatic": "This version was lined up automatically. Match points only if it is off.",
     "tooFew": "Match at least two points."
   },
+  "descriptions": {
+    "help": "Click a cell to choose a symbol. A description belongs to the control, so it shows in every course that uses it.",
+    "credits": "Symbol artwork and licences",
+    "selectControl": "Select {{name}}",
+    "cell": "{{name}}, {{column}}: {{value}}",
+    "empty": "empty",
+    "pickerTitle": "{{name}} · column {{column}}",
+    "close": "Close",
+    "search": "Search symbols",
+    "searchPlaceholder": "Search symbols, e.g. boulder",
+    "noMatch": "No symbol matches.",
+    "current": "Current:",
+    "hoverHint": "Point at a symbol to see its name.",
+    "clear": "Clear cell",
+    "size": "Size in metres",
+    "setSize": "Set",
+    "sizeHelp": "For example 1.5, 3x4 (width × length), 0.5/2 (two heights) or 2|3.",
+    "columns": {
+      "c": "Which of similar features",
+      "d": "Feature",
+      "e": "Appearance",
+      "f": "Dimensions and combinations",
+      "g": "Location",
+      "h": "Other information"
+    },
+    "groups": {
+      "landforms": "Landforms",
+      "rock": "Rock and boulders",
+      "water": "Water and marshes",
+      "vegetation": "Vegetation",
+      "manMade": "Man-made features",
+      "special": "Special items",
+      "appearance": "Appearance",
+      "second": "Second feature: {{group}}"
+    }
+  },
   "editor": {
     "tools": {
       "label": "Tools",
@@ -280,11 +317,15 @@
     "usedIn_zero": "Not in any course",
     "usedIn_one": "In {{courses}}",
     "usedIn_other": "In {{courses}}",
-    "descriptionsLater": "Control descriptions come in a later version.",
     "settings": {
       "name": "Course name",
       "printScale": "Print scale",
       "printScaleHelp": "The scale the course is printed at. Symbol sizes follow it.",
+      "climb": "Climb (m)",
+      "climbHelp": "Shown on the description sheet, rounded to 5 m. Leave empty to leave it out.",
+      "cellSize": "Description sheet cell size",
+      "cellSizeOption": "{{size}} mm",
+      "cellSizeHelp": "Size of each square on the printed description sheet (IOF: 5 to 7 mm).",
       "delete": "Delete course",
       "deleteConfirm": "Delete the course {{course}}? Its controls stay in the event."
     },
