@@ -102,6 +102,33 @@ const special = z.object({
   boundary: z.enum(BOUNDARY_STYLES).optional(),
 })
 
+/** Paper sizes in mm (portrait: width × height). */
+export const PAPERS = { A4: [210, 297], A3: [297, 420] } as const
+export type Paper = keyof typeof PAPERS
+export const ORIENTATIONS = ['portrait', 'landscape'] as const
+export type Orientation = (typeof ORIENTATIONS)[number]
+
+/**
+ * Something placed on the printed page, in page mm from the page's top-left corner, y down (as the
+ * setter sees the page). Only the description sheet so far; text, logos and layout templates can join
+ * later as new kinds.
+ */
+const layoutElement = z.object({
+  kind: z.literal('descriptions'),
+  /** Top-left corner of the element on the page. */
+  at: point,
+})
+
+const printSettings = z.object({
+  paper: z.enum(['A4', 'A3']),
+  orientation: z.enum(ORIENTATIONS),
+  /** Centre of the printed map area, ground metres in the map frame. */
+  center: point,
+  /** White border round the map area, mm (most printers cannot print to the edge). */
+  margin: z.number().min(0).max(30),
+  layout: z.array(layoutElement),
+})
+
 const course = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1).max(60),
@@ -117,6 +144,8 @@ const course = z.object({
   climb: z.number().int().min(0).max(9999).nullable().optional(),
   /** Cell size of the printed description sheet in mm (IOF: 5–7); default DEFAULT_CELL_SIZE. */
   descriptionCellSize: z.number().min(5).max(7).optional(),
+  /** How the course is printed; absent: chosen from the course (see print/layout.ts). */
+  print: printSettings.optional(),
 })
 
 export const DEFAULT_CELL_SIZE = 6
@@ -170,6 +199,8 @@ export type Control = z.infer<typeof control>
 export type Course = z.infer<typeof course>
 export type Description = z.infer<typeof description>
 export type Special = z.infer<typeof special>
+export type PrintSettings = z.infer<typeof printSettings>
+export type LayoutElement = z.infer<typeof layoutElement>
 export type EventDoc = z.infer<typeof eventDocSchema>
 
 /** Where the course arrives at a stop: a marked route's first point, otherwise its position. */
@@ -252,6 +283,7 @@ export class CourseError extends Error {
     | 'invalid_index'
     | 'invalid_description'
     | 'invalid_special'
+    | 'invalid_print'
   constructor(code: CourseError['code'], message: string) {
     super(message)
     this.code = code

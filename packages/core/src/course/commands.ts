@@ -12,6 +12,7 @@ import {
   type EventDoc,
   legKey,
   type Point,
+  type PrintSettings,
   pointsFit,
   SPECIAL_GEOMETRY,
   type Special,
@@ -240,6 +241,24 @@ export function setSpecialBoundary(doc: EventDoc, id: string, boundary: Boundary
     if (s.kind !== 'oobArea') throw new CourseError('invalid_special', `A ${s.kind} has no boundary style`)
     const { boundary: _old, ...bare } = s
     return boundary === 'solid' ? bare : { ...bare, boundary }
+  })
+}
+
+/** How a course is printed (paper, orientation, map area centre, margin, layout); null goes back to the defaults. */
+export function setPrintSettings(doc: EventDoc, courseId: string, settings: PrintSettings | null): EventDoc {
+  if (settings) {
+    const ok =
+      (settings.paper === 'A4' || settings.paper === 'A3') &&
+      (settings.orientation === 'portrait' || settings.orientation === 'landscape') &&
+      settings.center.every(Number.isFinite) &&
+      settings.margin >= 0 &&
+      settings.margin <= 30 &&
+      settings.layout.every(e => e.at.every(Number.isFinite))
+    if (!ok) throw new CourseError('invalid_print', 'Invalid print settings')
+  }
+  return withCourse(doc, courseId, c => {
+    const { print: _old, ...bare } = c
+    return settings ? { ...bare, print: settings } : bare
   })
 }
 
