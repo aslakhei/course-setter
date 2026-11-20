@@ -31,6 +31,7 @@ export function moveDocToVersion(doc: EventDoc, transform: Similarity, newExtent
         ...course,
         bends: Object.fromEntries(Object.entries(course.bends).map(([key, points]) => [key, points.map(move)])),
       })),
+      specials: doc.specials.map(s => ({ ...s, points: s.points.map(move) })),
     },
     outside: controls.filter(c => !inside(c.position)).map(c => c.id),
   }

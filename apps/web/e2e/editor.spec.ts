@@ -218,6 +218,89 @@ test('control descriptions show in every course that uses the control and surviv
   await expect(sheet.getByRole('button', { name: 'Code 31, Feature: empty' })).toBeVisible()
 })
 
+test('special symbols and marked routes: draw, limit to a course, keep after reload, delete', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId } = await clubWithMap(ada, `E2E specials ${randomUUID().slice(0, 8)}`, fixture)
+  clubs.push(clubId)
+
+  const page = await pageFor(browser, ada)
+  await page.goto(`/clubs/${clubId}/events`)
+  await page.getByLabel('Name').fill('Specials night')
+  await page.getByRole('button', { name: 'Create event' }).click()
+  await expect(page.getByTestId('editor-map')).toBeVisible()
+
+  // H21: start, 31, 32, finish; D16: start, finish.
+  await newCourse(page, 'H21')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.2, 0.55)
+  await tool(page, 'Control').click()
+  await clickMap(page, 0.35, 0.45)
+  await clickMap(page, 0.5, 0.45)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.65, 0.55)
+  await newCourse(page, 'D16')
+  await tool(page, 'Start').click()
+  await clickMap(page, 0.2, 0.55)
+  await tool(page, 'Finish').click()
+  await clickMap(page, 0.65, 0.55)
+
+  const special = async (name: string) => {
+    await page.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: 'Special symbols' }).click()
+    await page.getByRole('button', { name, exact: true }).click()
+  }
+
+  // A first aid post: one click.
+  await special('First aid post')
+  await clickMap(page, 0.3, 0.6)
+  await expect(page.getByText('Selected: First aid post')).toBeVisible()
+
+  // An out-of-bounds area: three points, Enter finishes it. Dashed edge, shown on H21 only.
+  await special('Out-of-bounds area')
+  await clickMap(page, 0.4, 0.5)
+  await clickMap(page, 0.45, 0.5)
+  await clickMap(page, 0.45, 0.58)
+  await page.keyboard.press('Enter')
+  await expect(page.getByText('Selected: Out-of-bounds area')).toBeVisible()
+  await page.getByLabel('Edge').selectOption('dashed')
+  await page.getByRole('radio', { name: 'Chosen courses' }).check()
+  await page.getByRole('checkbox', { name: 'D16' }).uncheck()
+  await expect(page.getByRole('checkbox', { name: 'H21' })).toBeChecked()
+
+  // The leg 31 -> 32 of H21 is a marked route.
+  await tool(page, 'Select').click()
+  const course = page.getByRole('combobox', { name: 'Course', exact: true })
+  await course.selectOption({ label: (await course.locator('option', { hasText: 'H21' }).textContent()) ?? '' })
+  const toggle = page.getByRole('button', { name: 'Marked route from Code 31 to Code 32' })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await waitSaved(page)
+
+  // Saved: both specials, the edge and the course list, the marked leg.
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Marked route from Code 31 to Code 32' })).toHaveAttribute('aria-pressed', 'true')
+  const { data: event } = await admin.from('events').select('doc').eq('club_id', clubId).single()
+  const doc = event?.doc as {
+    specials: { id: string; kind: string; courses?: string[]; boundary?: string }[]
+    courses: { id: string; name: string; markedRoutes?: string[] }[]
+  }
+  const h21 = doc.courses.find(c => c.name === 'H21')
+  expect(doc.specials.map(s => s.kind)).toEqual(['firstAid', 'oobArea'])
+  expect(doc.specials[1]).toMatchObject({ boundary: 'dashed', courses: [h21?.id] })
+  expect(h21?.markedRoutes).toHaveLength(1)
+
+  // Click the first aid post on the map to select it; Delete removes it.
+  await clickMap(page, 0.3, 0.6)
+  await expect(page.getByText('Selected: First aid post')).toBeVisible()
+  await page.keyboard.press('Delete')
+  await expect(page.getByText('Selected: First aid post')).toHaveCount(0)
+  await waitSaved(page)
+  const { data: after } = await admin.from('events').select('doc').eq('club_id', clubId).single()
+  const remaining = (after?.doc as { specials: { kind: string }[] } | undefined)?.specials ?? []
+  expect(remaining.map(s => s.kind)).toEqual(['oobArea'])
+})
+
 test('two people editing at once: the second save gets the conflict and nothing is lost', async ({ browser }) => {
   test.setTimeout(240_000)
   const [ada, ivan] = await Promise.all([createUser('Ada Admin'), createUser('Ivan Invited')])

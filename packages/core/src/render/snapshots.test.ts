@@ -14,8 +14,9 @@ import fontkit from '@pdf-lib/fontkit'
 import * as mupdf from 'mupdf'
 import { PDFDocument, rgb } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
-import { insertCourseControl, setDescription, updateCourse } from '../course/commands.ts'
-import { courseById, type DescriptionColumnKey, type EventDoc } from '../course/doc.ts'
+import { addSpecial, insertCourseControl, setDescription, setMarkedRoute, setSpecialBoundary, updateCourse } from '../course/commands.ts'
+import { courseById, type DescriptionColumnKey, type EventDoc, SPECIALS_BY_STANDARD, type SpecialKind, STANDARDS } from '../course/doc.ts'
+import { specialDrawing } from '../course/specials.ts'
 import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
 import { testEvent } from '../course/test-doc.ts'
 import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
@@ -172,12 +173,13 @@ function testCourse(standard: EventDoc['standard'], printScale: number): Primiti
   let doc: EventDoc = { ...testEvent(), standard }
   doc = { ...doc, controls: [...doc.controls, { id: 'x', kind: 'crossingPoint', code: null, position: [600, 0] }] }
   doc = insertCourseControl(doc, 'A', 'x', 4)
-  // Shrink the ground distances so the whole course fits a small cell at any scale.
+  doc = setMarkedRoute(doc, 'A', 'a', 'b', true)
+  // Shrink the ground distances so the whole course (about 40 mm plus symbols) fits a 72 mm cell at any scale.
   const scaled = {
     ...doc,
     controls: doc.controls.map(c => ({
       ...c,
-      position: [(c.position[0] * printScale) / 15000, (c.position[1] * printScale) / 15000] as Point,
+      position: [(0.6 * c.position[0] * printScale) / 15000, (0.6 * c.position[1] * printScale) / 15000] as Point,
     })),
   }
   const course = { ...courseById(scaled, 'A'), printScale }
@@ -219,9 +221,82 @@ const courseSheet = (): Sheet => ({
   columns: 3,
   cells: [
     ...SCALES.map(([standard, scale]) => ({ name: `${standard} 1:${scale} course`, primitives: testCourse(standard, scale) })),
-    { name: 'all controls', primitives: allControlsDrawing(testEvent(), 15000) },
+    {
+      name: 'all controls',
+      primitives: allControlsDrawing(
+        {
+          ...testEvent(),
+          controls: testEvent().controls.map(c => ({ ...c, position: [c.position[0] * 0.6, c.position[1] * 0.6] as Point })),
+        },
+        15000,
+      ),
+    },
   ],
 })
+
+/** Every special symbol of each standard at its base scale, as a small example shape in paper mm. */
+const specialSheet = (): Sheet => {
+  const shapes: Record<SpecialKind, Point[]> = {
+    mapIssue: [[6, 0]],
+    markedRoute: [
+      [0, 0],
+      [8, 6],
+      [16, 4],
+    ],
+    oobBoundary: [
+      [0, 0],
+      [8, 4],
+      [16, 0],
+    ],
+    oobArea: [
+      [0, 0],
+      [14, 0],
+      [14, 6],
+      [6, 6],
+      [6, 12],
+      [0, 12],
+    ],
+    oobRoute: [
+      [0, 0],
+      [18, 6],
+    ],
+    crossingSection: [
+      [0, 0],
+      [6, 3],
+      [12, 3],
+    ],
+    firstAid: [[0, 0]],
+    refreshment: [[0, 0]],
+    temporaryConstruction: [
+      [0, 0],
+      [8, 0],
+      [8, 4],
+      [4, 8],
+      [0, 4],
+    ],
+  }
+  const cells = STANDARDS.flatMap(standard =>
+    SPECIALS_BY_STANDARD[standard].map(kind => {
+      const printScale = standard === 'isom' ? 15000 : 4000
+      let doc: EventDoc = { ...testEvent(), standard }
+      const metres = shapes[kind].map(([x, y]): Point => [(x * printScale) / 1000, (y * printScale) / 1000])
+      doc = addSpecial(doc, { id: 'x', kind, points: metres })
+      const special = doc.specials[0] as EventDoc['specials'][number]
+      // The map issue point turns across the way to the start (at the origin).
+      return { name: `${standard} ${kind}`, primitives: specialDrawing(doc, special, printScale) }
+    }),
+  )
+  // Out-of-bounds areas with a dashed edge and with none.
+  for (const boundary of ['dashed', 'none'] as const) {
+    let doc = addSpecial(testEvent(), { id: 'x', kind: 'oobArea', points: shapes.oobArea.map(([x, y]): Point => [x * 15, y * 15]) })
+    doc = setSpecialBoundary(doc, 'x', boundary)
+    cells.push({
+      name: `isom oobArea ${boundary}`,
+      primitives: specialDrawing(doc, doc.specials[0] as EventDoc['specials'][number], 15000),
+    })
+  }
+  return { name: 'special-symbols', color: PURPLE, cell: [24, 20], columns: 4, cells }
+}
 
 const BOX = 6 // mm, a typical description cell
 const drawn = DESCRIPTION_SYMBOLS.filter(s => s.shapes.length > 0)
@@ -286,7 +361,7 @@ const sheetsSheet = (): Sheet => {
   }
 }
 
-describe.each([symbolSheet, courseSheet, descriptionSymbolsSheet, instructionSheet, sheetsSheet])('%o', makeSheet => {
+describe.each([symbolSheet, courseSheet, specialSheet, descriptionSymbolsSheet, instructionSheet, sheetsSheet])('%o', makeSheet => {
   const sheet = makeSheet()
 
   it('draws the same with the Canvas and the PDF backend, and both match their snapshots', { timeout: 60_000 }, async () => {

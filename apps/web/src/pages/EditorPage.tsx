@@ -1,6 +1,7 @@
 import {
   addCourse,
   deleteControl,
+  deleteSpecial,
   type EventDoc,
   moveControl,
   moveDocToVersion,
@@ -8,6 +9,7 @@ import {
   parseDoc,
   removeCourseControl,
   setNumberPosition,
+  setSpecialPoints,
   transformBetween,
 } from '@course-setter/core'
 import { useQueryClient } from '@tanstack/react-query'
@@ -19,7 +21,18 @@ import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
 import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
-import { addBend, clickAction, currentCourse, initialState, moveBend, reducer, removeBend } from '../editor/state.ts'
+import {
+  addBend,
+  clickAction,
+  currentCourse,
+  initialState,
+  isDrawingTool,
+  isSpecialTool,
+  moveBend,
+  reducer,
+  removeBend,
+  type Tool,
+} from '../editor/state.ts'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
 import { type Member, useMembers } from '../lib/api.ts'
@@ -116,7 +129,7 @@ function Editor({
 
   const edit = useCallback((next: EventDoc, select?: string | null) => dispatch({ type: 'edit', doc: next, select }), [])
 
-  const onClick = (point: Point, hit: string | null, leg: { leg: number; segment: number } | null) => {
+  const onClick = (point: Point, hit: string | null, leg: { leg: number; segment: number } | null, tolerance: number) => {
     setNotice(null)
     if (state.tool === 'bend') {
       if (course && leg) edit(addBend(doc, course, leg.leg, leg.segment, point))
@@ -126,7 +139,7 @@ function Editor({
       setNotice(t('editor.outsideMap'))
       return
     }
-    const action = clickAction(state, point, hit, () => crypto.randomUUID())
+    const action = clickAction(state, point, hit, () => crypto.randomUUID(), tolerance)
     if (action) dispatch(action)
   }
 
@@ -141,6 +154,23 @@ function Editor({
         (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
       if (typing || target.closest('[role="dialog"]')) return
       const mod = e.ctrlKey || e.metaKey
+      // Drawing a line or area: Enter finishes it, Backspace takes back the last point, Escape drops it.
+      if (state.draft.length > 0) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          dispatch({ type: 'finishDraft', id: crypto.randomUUID() })
+          return
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault()
+          dispatch({ type: 'draft', points: state.draft.slice(0, -1) })
+          return
+        }
+        if (e.key === 'Escape') {
+          dispatch({ type: 'draft', points: [] })
+          return
+        }
+      }
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         dispatch({ type: e.shiftKey ? 'redo' : 'undo' })
@@ -152,7 +182,9 @@ function Editor({
         dispatch({ type: 'select', controlId: null })
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selected) {
         e.preventDefault()
-        if (course) {
+        if (doc.specials.some(s => s.id === state.selected)) {
+          edit(deleteSpecial(doc, state.selected), null)
+        } else if (course) {
           const index = course.controls.lastIndexOf(state.selected)
           if (index >= 0) edit(removeCourseControl(doc, course.id, index))
         } else {
@@ -164,7 +196,7 @@ function Editor({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [state.selected, course, doc, edit, t])
+  }, [state, course, doc, edit, t])
 
   const takeTheirs = async () => {
     setResolving(true)
@@ -187,15 +219,21 @@ function Editor({
 
   const inCourse = course ? t('editor.hint.inCourse', { course: course.name }) : ''
   const snapped = hover?.snapTo ? doc.controls.find(c => c.id === hover.snapTo) : undefined
+  const selectedSpecial = doc.specials.find(s => s.id === state.selected)
+  const toolHint = (tool: Tool): string => {
+    if (tool === 'mapIssue') return t('editor.hint.mapIssue')
+    if (isSpecialTool(tool)) {
+      const name = t(`editor.tools.${tool}`).toLowerCase()
+      return isDrawingTool(tool) ? t('editor.hint.drawSpecial', { name }) : t('editor.hint.placeSpecial', { name })
+    }
+    if (tool === 'select') {
+      if (selectedSpecial) return t('editor.hint.selectSpecial')
+      return course ? t('editor.hint.select', { course: course.name }) : t('editor.hint.selectAll')
+    }
+    return t(`editor.hint.${tool}`, { inCourse })
+  }
   const hint =
-    notice ??
-    (snapped && course
-      ? t('editor.hint.reuse', { name: stopName(snapped, t), course: course.name })
-      : state.tool === 'select'
-        ? course
-          ? t('editor.hint.select', { course: course.name })
-          : t('editor.hint.selectAll')
-        : t(`editor.hint.${state.tool}`, { inCourse }))
+    notice ?? (snapped && course ? t('editor.hint.reuse', { name: stopName(snapped, t), course: course.name }) : toolHint(state.tool))
 
   return (
     <div className="flex h-[calc(100vh-3rem)] flex-col">
@@ -224,6 +262,7 @@ function Editor({
           <Button onClick={() => setAccessOpen(true)}>{t('editor.invite')}</Button>
         </div>
         <Toolbar
+          standard={doc.standard}
           tool={state.tool}
           onTool={tool => dispatch({ type: 'tool', tool })}
           canUndo={state.history.past.length > 0}
@@ -244,7 +283,9 @@ function Editor({
             course={course}
             selected={state.selected}
             tool={state.tool}
+            draft={state.draft}
             onClick={onClick}
+            onMoveSpecial={(id, points) => edit(setSpecialPoints(doc, id, points))}
             onMoveControl={(id, point) => edit(moveControl(doc, id, point))}
             onMoveBend={(key, index, point) => course && edit(moveBend(doc, course, key, index, point))}
             onRemoveBend={(key, index) => course && edit(removeBend(doc, course, key, index))}

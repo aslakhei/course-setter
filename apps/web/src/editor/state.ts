@@ -3,6 +3,8 @@
 // panels only turn clicks into these calls.
 import {
   addControl,
+  addSpecial,
+  CONTROL_KINDS,
   type ControlKind,
   type Course,
   courseById,
@@ -12,23 +14,37 @@ import {
   insertCourseControl,
   legKey,
   legPath,
+  MIN_POINTS,
   type Point,
   record,
   redo,
   removeCourseControl,
+  SPECIAL_GEOMETRY,
+  SPECIAL_KINDS,
+  type Special,
+  type SpecialKind,
   setLegBends,
   undo,
 } from '@course-setter/core'
 
-export type Tool = 'select' | ControlKind | 'bend'
+/** Select, place a control of a kind, place or draw a special symbol of a kind, or bend legs. */
+export type Tool = 'select' | ControlKind | SpecialKind | 'bend'
 export const ALL_CONTROLS = 'all'
+
+export const isControlTool = (tool: Tool): tool is ControlKind => (CONTROL_KINDS as readonly string[]).includes(tool)
+export const isSpecialTool = (tool: Tool): tool is SpecialKind => (SPECIAL_KINDS as readonly string[]).includes(tool)
+/** A special drawn point by point (a line or an area). */
+export const isDrawingTool = (tool: Tool): tool is SpecialKind => isSpecialTool(tool) && SPECIAL_GEOMETRY[tool] !== 'point'
 
 export type EditorState = {
   history: History<EventDoc>
   tool: Tool
   /** A course id, or ALL_CONTROLS for the control pool. */
   courseId: string
+  /** A control or a special symbol. */
   selected: string | null
+  /** The points of a line or area being drawn with a special tool. */
+  draft: Point[]
 }
 
 export type Action =
@@ -40,25 +56,46 @@ export type Action =
   | { type: 'redo' }
   /** Replace the document and forget the history (after taking someone else's version). */
   | { type: 'load'; doc: EventDoc }
+  | { type: 'draft'; points: Point[] }
+  /**
+   * A click while drawing a line or area: adds a point, or, on the last point again (within `tolerance`
+   * metres, as the second click of a double-click), finishes the drawing as special `id`.
+   */
+  | { type: 'draftPoint'; point: Point; tolerance: number; id: string }
+  /** Finish the line or area being drawn (Enter) as special `id`. */
+  | { type: 'finishDraft'; id: string }
 
 export function initialState(doc: EventDoc): EditorState {
-  return { history: createHistory(doc), tool: 'select', courseId: doc.courses[0]?.id ?? ALL_CONTROLS, selected: null }
+  return { history: createHistory(doc), tool: 'select', courseId: doc.courses[0]?.id ?? ALL_CONTROLS, selected: null, draft: [] }
 }
 
-const exists = (doc: EventDoc, id: string | null) => id !== null && doc.controls.some(c => c.id === id)
+const exists = (doc: EventDoc, id: string | null) =>
+  id !== null && (doc.controls.some(c => c.id === id) || doc.specials.some(s => s.id === id))
 
 export function reducer(state: EditorState, action: Action): EditorState {
   switch (action.type) {
     case 'tool':
-      return { ...state, tool: action.tool }
+      // Changing tools drops a line or area that was not finished.
+      return { ...state, tool: action.tool, draft: [] }
     case 'course':
       return { ...state, courseId: action.courseId, selected: null }
     case 'select':
       return { ...state, selected: action.controlId }
+    case 'draft':
+      return { ...state, draft: action.points }
+    case 'draftPoint': {
+      const last = state.draft.at(-1)
+      if (last && Math.hypot(action.point[0] - last[0], action.point[1] - last[1]) <= action.tolerance) {
+        return finishDraft(state, action.id)
+      }
+      return { ...state, draft: [...state.draft, action.point] }
+    }
+    case 'finishDraft':
+      return finishDraft(state, action.id)
     case 'edit': {
       const history = record(state.history, action.doc)
       const selected = action.select !== undefined ? action.select : state.selected
-      return { ...state, history, ...keepValid(history.present, state.courseId, selected) }
+      return { ...state, history, draft: [], ...keepValid(history.present, state.courseId, selected) }
     }
     case 'undo':
     case 'redo': {
@@ -68,6 +105,17 @@ export function reducer(state: EditorState, action: Action): EditorState {
     case 'load':
       return { ...state, history: createHistory(action.doc), ...keepValid(action.doc, state.courseId, state.selected) }
   }
+}
+
+/**
+ * The line or area being drawn, finished: added to the event and selected. Repeated points count once;
+ * too few points just end the drawing.
+ */
+function finishDraft(state: EditorState, id: string): EditorState {
+  const kind = state.tool
+  const points = state.draft.filter((p, i) => i === 0 || p[0] !== state.draft[i - 1]?.[0] || p[1] !== state.draft[i - 1]?.[1])
+  if (!isDrawingTool(kind) || points.length < MIN_POINTS[SPECIAL_GEOMETRY[kind]]) return { ...state, draft: [] }
+  return reducer(state, { type: 'edit', doc: addSpecial(state.history.present, { id, kind, points }), select: id })
 }
 
 /** After undo or a reload, the course or control may be gone: fall back to something that exists. */
@@ -115,11 +163,16 @@ function placeInCourse(doc: EventDoc, course: Course, controlId: string, selecte
  * What a click on the map does with the current tool. `hit` is the control under the pointer, if any.
  * Returns the action to dispatch (or null when the click does nothing).
  */
-export function clickAction(state: EditorState, point: Point, hit: string | null, newId: () => string): Action | null {
+export function clickAction(state: EditorState, point: Point, hit: string | null, newId: () => string, tolerance = 0): Action | null {
   const doc = state.history.present
   const course = currentCourse(state)
   if (state.tool === 'select') return { type: 'select', controlId: hit }
   if (state.tool === 'bend') return null // bends are added on legs, see addBend
+  if (isDrawingTool(state.tool)) return { type: 'draftPoint', point, tolerance, id: newId() }
+  if (isSpecialTool(state.tool)) {
+    const id = newId()
+    return { type: 'edit', doc: addSpecial(doc, { id, kind: state.tool, points: [point] }), select: id }
+  }
   if (hit) {
     // An existing control: in a course, the setter reuses it (a control shared by several courses).
     if (!course) return { type: 'select', controlId: hit }
@@ -155,6 +208,50 @@ export function legAt(doc: EventDoc, course: Course, point: Point, tolerance: nu
     }
   }
   return best && { leg: best.leg, segment: best.segment }
+}
+
+/** Whether `point` lies inside a polygon (even-odd). */
+export function insidePolygon([x, y]: Point, polygon: Point[]): boolean {
+  let inside = false
+  polygon.forEach((a, i) => {
+    const b = polygon[(i + 1) % polygon.length] as Point
+    if (a[1] > y !== b[1] > y && x < a[0] + ((y - a[1]) / (b[1] - a[1])) * (b[0] - a[0])) inside = !inside
+  })
+  return inside
+}
+
+/**
+ * The special symbol under `point`: a point symbol within `radius` metres, a line within `tolerance`
+ * metres, an area containing the point or within `tolerance` of its edge. Later (drawn on top) wins.
+ */
+export function specialAt(specials: Special[], point: Point, tolerance: number, radius: number): string | null {
+  for (const s of [...specials].reverse()) {
+    const geometry = SPECIAL_GEOMETRY[s.kind]
+    const pts = s.points
+    if (geometry === 'point') {
+      const [p] = pts as [Point]
+      if (Math.hypot(p[0] - point[0], p[1] - point[1]) <= radius) return s.id
+      continue
+    }
+    const ring = geometry === 'area' ? [...pts, pts[0] as Point] : pts
+    for (let i = 0; i + 1 < ring.length; i++) {
+      if (distanceToSegment(point, ring[i] as Point, ring[i + 1] as Point) <= tolerance) return s.id
+    }
+    if (geometry === 'area' && insidePolygon(point, pts)) return s.id
+  }
+  return null
+}
+
+/** The vertex of a line or area within `tolerance` metres of `point`. */
+export function vertexAt(special: Special, point: Point, tolerance: number): number | null {
+  if (SPECIAL_GEOMETRY[special.kind] === 'point') return null
+  const index = special.points.findIndex(p => Math.hypot(p[0] - point[0], p[1] - point[1]) <= tolerance)
+  return index >= 0 ? index : null
+}
+
+/** A special's points moved by `delta`, or only vertex `index` of them. */
+export function movedPoints(special: Special, delta: Point, index: number | null): Point[] {
+  return special.points.map((p, i): Point => (index === null || i === index ? [p[0] + delta[0], p[1] + delta[1]] : p))
 }
 
 /** Add a bend point on a leg where it was clicked (between the points of the clicked segment). */

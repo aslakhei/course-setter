@@ -1,4 +1,6 @@
 import {
+  BOUNDARY_STYLES,
+  type BoundaryStyle,
   type Control,
   type Course,
   CourseError,
@@ -8,11 +10,16 @@ import {
   DEFAULT_CELL_SIZE,
   deleteControl,
   deleteCourse,
+  deleteSpecial,
   type EventDoc,
+  legKey,
   legLengths,
   moveCourseControl,
   removeCourseControl,
   setControlCode,
+  setMarkedRoute,
+  setSpecialBoundary,
+  setSpecialCourses,
   updateCourse,
 } from '@course-setter/core'
 import { type FormEvent, useEffect, useState } from 'react'
@@ -132,6 +139,7 @@ export function CoursePanel({ state, eventName, onCourse, onSelect, onEdit, onNe
       )}
 
       <SelectedControl key={state.selected ?? 'none'} doc={doc} course={course} selected={state.selected} onEdit={onEdit} />
+      <SelectedSpecial doc={doc} selected={state.selected} onEdit={onEdit} />
     </aside>
   )
 }
@@ -170,6 +178,10 @@ function StopList({
         const control = doc.controls.find(c => c.id === stop.controlId) as Control
         const name = stopName(control, t)
         const isSelected = selected === stop.controlId
+        // The leg arriving here: a marked route (707) or a normal course line.
+        const from = i > 0 ? (course.controls[i - 1] as string) : null
+        const prevName = from ? stopName(doc.controls.find(c => c.id === from) as Control, t) : ''
+        const marked = from !== null && (course.markedRoutes ?? []).includes(legKey(from, stop.controlId))
         return (
           <li
             key={`${stop.controlId}-${visit[i]}`}
@@ -180,6 +192,20 @@ function StopList({
               <span className={`grow ${isSelected ? 'font-semibold' : ''}`}>{name}</span>
               {i > 0 && <span className="text-muted">{Math.round(legs[i - 1] ?? 0)} m</span>}
             </button>
+            {from !== null && (
+              <button
+                type="button"
+                aria-pressed={marked}
+                aria-label={t('editor.markedRoute', { from: prevName, to: name })}
+                title={t('editor.markedRoute', { from: prevName, to: name })}
+                onClick={() => onEdit(setMarkedRoute(doc, course.id, from, stop.controlId, !marked))}
+                className={`flex h-6 w-7 items-center justify-center rounded ${marked ? 'bg-brand-50 text-brand-600 opacity-100' : 'text-body opacity-60 hover:bg-subtle group-hover:opacity-100'}`}
+              >
+                <svg width="18" height="10" viewBox="0 0 18 10" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M1 5h16" strokeDasharray="4 2" />
+                </svg>
+              </button>
+            )}
             <span className="flex opacity-60 group-hover:opacity-100">
               <IconButton
                 label={t('editor.moveUp', { name })}
@@ -343,6 +369,96 @@ function CourseSettings({
       >
         {t('editor.settings.delete')}
       </Button>
+    </div>
+  )
+}
+
+/** Properties of the selected special symbol: which courses show it, an out-of-bounds area's edge, delete. */
+function SelectedSpecial({
+  doc,
+  selected,
+  onEdit,
+}: {
+  doc: EventDoc
+  selected: string | null
+  onEdit: (doc: EventDoc, select?: string | null) => void
+}) {
+  const { t } = useTranslation()
+  const special = doc.specials.find(s => s.id === selected)
+  if (!special) return null
+  const name = t(`editor.tools.${special.kind}`)
+  const chosen = special.courses ?? null
+  const toggle = (courseId: string, on: boolean) => {
+    const next = on ? [...(chosen ?? []), courseId] : (chosen ?? []).filter(c => c !== courseId)
+    onEdit(setSpecialCourses(doc, special.id, next))
+  }
+  return (
+    <div className="mt-auto flex flex-col gap-2 border-t border-line px-3 py-2.5 text-[13px]">
+      <span className="font-semibold">{t('editor.selected', { name })}</span>
+      <fieldset className="m-0 flex flex-col gap-1 border-0 p-0">
+        <legend className="mb-1 p-0 text-xs text-muted">{t('editor.special.shownOn')}</legend>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="special-courses"
+            checked={chosen === null}
+            onChange={() => onEdit(setSpecialCourses(doc, special.id, null))}
+          />
+          {t('editor.special.allCourses')}
+        </label>
+        <label className="flex items-center gap-2">
+          <input
+            type="radio"
+            name="special-courses"
+            checked={chosen !== null}
+            onChange={() =>
+              onEdit(
+                setSpecialCourses(
+                  doc,
+                  special.id,
+                  doc.courses.map(c => c.id),
+                ),
+              )
+            }
+          />
+          {t('editor.special.chosenCourses')}
+        </label>
+        {chosen !== null && (
+          <span className="ml-6 flex flex-col gap-1">
+            {doc.courses.map(c => (
+              <label key={c.id} className="flex items-center gap-2">
+                <input type="checkbox" checked={chosen.includes(c.id)} onChange={e => toggle(c.id, e.target.checked)} />
+                {c.name}
+              </label>
+            ))}
+            {doc.courses.length === 0 && <span className="text-xs text-muted">{t('editor.special.noCourses')}</span>}
+          </span>
+        )}
+      </fieldset>
+      {special.kind === 'oobArea' && (
+        <span className="flex items-center gap-2">
+          <label htmlFor="special-boundary" className="text-xs text-muted">
+            {t('editor.special.boundary')}
+          </label>
+          <select
+            id="special-boundary"
+            className={`${fieldClass} h-7 grow`}
+            value={special.boundary ?? 'solid'}
+            onChange={e => onEdit(setSpecialBoundary(doc, special.id, e.target.value as BoundaryStyle))}
+          >
+            {BOUNDARY_STYLES.map(style => (
+              <option key={style} value={style}>
+                {t(`editor.special.boundaryStyle.${style}`)}
+              </option>
+            ))}
+          </select>
+        </span>
+      )}
+      <span>
+        <Button size="sm" variant="danger" onClick={() => onEdit(deleteSpecial(doc, special.id), null)}>
+          {t('editor.special.delete', { name: name.toLowerCase() })}
+        </Button>
+      </span>
     </div>
   )
 }

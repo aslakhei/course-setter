@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertCourseControl, setNumberPosition } from './commands.ts'
+import { insertCourseControl, setMarkedRoute, setNumberPosition } from './commands.ts'
 import { courseById, type Point } from './doc.ts'
 import { allControlsDrawing, courseDrawing, type Primitive, symbolSizes, toPaperMm } from './symbols.ts'
 import { testEvent } from './test-doc.ts'
@@ -115,11 +115,27 @@ describe('courseDrawing', () => {
     expect(distance(start(left), end(left))).toBeCloseTo(3.0, 9)
   })
 
-  it('makes the sprint crossing point 0.175 mm wider on each side', () => {
-    const sprint = symbolSizes('issprom', 4000)
-    const forest = symbolSizes('isom', 15000)
-    expect(sprint.crossingWaist - forest.crossingWaist).toBeCloseTo(0.175, 9)
-    expect(sprint.crossingEnd - forest.crossingEnd).toBeCloseTo(0.175, 9)
+  it('draws the sprint crossing point per ISSprOM 2019-2 revision 6: 4.5 mm long, 0.5 mm lines, 1.0 mm clear', () => {
+    const s = symbolSizes('issprom', 4000)
+    expect(2 * s.crossingHalfLength).toBeCloseTo(4.5, 9)
+    expect(s.crossingLineWidth).toBe(0.5)
+    // The bezier's middle (t = 0.5) lies at (end + 3 × waist) / 4 from the course line, on both sides.
+    const middle = (s.crossingEnd + 3 * s.crossingWaist) / 4
+    expect(2 * middle - s.crossingLineWidth).toBeCloseTo(1.0, 9)
+    expect(s.crossingEnd).toBeGreaterThan(middle) // curving outwards
+  })
+
+  it('draws a marked-route leg dashed, starting and ending with a whole 2.0 mm dash', () => {
+    const marked = setMarkedRoute(testEvent(), 'A', 'b', 'c', true)
+    const legs = of(courseDrawing(marked, courseById(marked, 'A')), 'polyline').filter(p => p.role === 'leg')
+    expect(legs.filter(l => l.dash)).toHaveLength(1)
+    const leg = legs.find(l => l.dash) as (typeof legs)[number]
+    const [dash = 0, gap = 0] = leg.dash ?? []
+    const length = Math.hypot((leg.points[1]?.[0] ?? 0) - (leg.points[0]?.[0] ?? 0), (leg.points[1]?.[1] ?? 0) - (leg.points[0]?.[1] ?? 0))
+    const n = Math.round((length + gap) / (dash + gap))
+    expect(n * dash + (n - 1) * gap).toBeCloseTo(length, 9)
+    expect(dash).toBeCloseTo(2.0, 0)
+    expect(dash / gap).toBeCloseTo(4, 9)
   })
 
   it('tags every symbol and number with its control, and course lines as legs', () => {

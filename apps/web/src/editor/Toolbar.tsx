@@ -1,3 +1,4 @@
+import { SPECIALS_BY_STANDARD, type Standard } from '@course-setter/core'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Menu, menuItemClass } from '../components/Menu.tsx'
@@ -23,14 +24,32 @@ const icons: Record<Tool, ReactNode> = {
     </g>
   ),
   bend: <path d="M4 18l6-10 10 4" stroke="currentColor" />,
+  mapIssue: <path d="M6 12h12" stroke={PURPLE} strokeWidth="4" />,
+  markedRoute: <path d="M3 19L21 5" stroke={PURPLE} strokeDasharray="5 2.5" />,
+  oobBoundary: <path d="M3 19L21 5" stroke={PURPLE} strokeWidth="4" />,
+  oobArea: (
+    <g stroke={PURPLE} strokeWidth="1.5">
+      <rect x="4" y="4" width="16" height="16" />
+      <path d="M4 12l8-8M4 20L20 4M12 20l8-8M12 4l8 8M4 4l16 16M4 12l8 8" />
+    </g>
+  ),
+  oobRoute: <path d="M3 9l4 4m0-4l-4 4M10 9l4 4m0-4l-4 4M17 9l4 4m0-4l-4 4" stroke={PURPLE} />,
+  crossingSection: <path d="M3 6q2 3 5 3h13M3 18q2-3 5-3h13" stroke={PURPLE} />,
+  firstAid: <path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill={PURPLE} />,
+  refreshment: (
+    <g stroke={PURPLE}>
+      <ellipse cx="12" cy="6" rx="7" ry="2" />
+      <path d="M5 6l3 13h8l3-13" />
+    </g>
+  ),
+  temporaryConstruction: <path d="M4 10l6-6 10 10-6 6z" stroke={PURPLE} strokeWidth="1" fill={PURPLE} fillOpacity="0.5" />,
 }
 
 /**
- * Special course planning symbols (ISOM 2017-2 / ISSprOM 2019-2, 7xx). Only the crossing point so far;
- * map issue point, marked route, out-of-bounds boundary/area/route, first aid and refreshment point
- * join this menu with special markings.
+ * Special course planning symbols (ISOM 2017-2 / ISSprOM 2019-2, 7xx): the crossing point (a stop on the
+ * course) and the special symbols of the event's standard.
  */
-const specialTools: Tool[] = ['crossingPoint']
+const specialTools = (standard: Standard): Tool[] => ['crossingPoint', ...SPECIALS_BY_STANDARD[standard]]
 
 function Icon({ tool }: { tool: Tool }) {
   return (
@@ -48,6 +67,7 @@ const buttonClass = (active: boolean) =>
   `flex h-8 items-center gap-1.5 rounded border px-2.5 text-[13px] ${active ? 'border-[#c9a9c3] bg-brand-50 font-semibold' : 'border-transparent hover:bg-subtle'}`
 
 export function Toolbar({
+  standard,
   tool,
   onTool,
   canUndo,
@@ -56,6 +76,7 @@ export function Toolbar({
   onRedo,
   hint,
 }: {
+  standard: Standard
   tool: Tool
   onTool: (tool: Tool) => void
   canUndo: boolean
@@ -71,7 +92,8 @@ export function Toolbar({
       {t(`editor.tools.${name}`)}
     </button>
   )
-  const special = specialTools.includes(tool) ? tool : null
+  const specials = specialTools(standard)
+  const special = specials.includes(tool) ? tool : null
 
   return (
     <div
@@ -96,27 +118,24 @@ export function Toolbar({
         }
       >
         {close => (
-          <>
-            <ul className="m-0 list-none p-0">
-              {specialTools.map(name => (
-                <li key={name}>
-                  <button
-                    type="button"
-                    className={`${menuItemClass} ${tool === name ? 'font-semibold' : ''}`}
-                    aria-pressed={tool === name}
-                    onClick={() => {
-                      onTool(name)
-                      close()
-                    }}
-                  >
-                    <Icon tool={name} />
-                    {t(`editor.tools.${name}`)}
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <p className="m-0 max-w-64 border-t border-line px-3 pt-2 pb-1 text-xs text-muted">{t('editor.tools.moreLater')}</p>
-          </>
+          <ul className="m-0 list-none p-0">
+            {specials.map(name => (
+              <li key={name}>
+                <button
+                  type="button"
+                  className={`${menuItemClass} ${tool === name ? 'font-semibold' : ''}`}
+                  aria-pressed={tool === name}
+                  onClick={() => {
+                    onTool(name)
+                    close()
+                  }}
+                >
+                  <Icon tool={name} />
+                  {t(`editor.tools.${name}`)}
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </Menu>
       <Divider />

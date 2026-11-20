@@ -124,6 +124,7 @@ describe('moving an event to a new map version', () => {
       standard: 'isom',
       controls: DOTS.map((p, i) => ({ id: `c${i}`, kind: 'control' as const, code: 31 + i, position: toFrame(p) })),
       courses: [],
+      specials: [],
     }
     const saved = await ada.client.rpc('save_event', { event: created.data, doc, expected_revision: 1 })
     expect(saved.error).toBeNull()

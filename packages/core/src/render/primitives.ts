@@ -7,7 +7,7 @@ import type { Point } from '../similarity.ts'
  * What a primitive draws: a control's symbol, its number, a course line, or part of a control description.
  * `owner` is the control it belongs to (for highlighting and dragging in the editor).
  */
-export type PrimitiveRole = 'symbol' | 'number' | 'leg' | 'description'
+export type PrimitiveRole = 'symbol' | 'number' | 'leg' | 'description' | 'special'
 type Tagged = { role: PrimitiveRole; owner?: string }
 
 export type LineCap = 'butt' | 'round' | 'square'
@@ -22,8 +22,11 @@ export type Primitive =
   /** A circle line, or a filled disc when `filled` (then `lineWidth` is not used). */
   | ({ type: 'circle'; center: Point; radius: number; lineWidth: number; filled?: boolean } & Tagged)
   | ({ type: 'polyline'; points: Point[]; lineWidth: number; closed: boolean } & StrokeStyle & Tagged)
-  /** Lines and beziers, stroked with `lineWidth`, or filled (even-odd rule) when `filled`. */
-  | ({ type: 'path'; commands: PathCommand[]; lineWidth: number; filled?: boolean } & StrokeStyle & Tagged)
+  /**
+   * Lines and beziers, stroked with `lineWidth`, or filled (even-odd rule) when `filled`; `tint` fills
+   * with that share of the colour (714: 50 % purple), mixed with white as printed.
+   */
+  | ({ type: 'path'; commands: PathCommand[]; lineWidth: number; filled?: boolean; tint?: number } & StrokeStyle & Tagged)
   /**
    * Text centred on `at`. `height` is the height of a digit (ISOM: "Arial, 4.0 mm" means 4.0 mm digits,
    * a font size of about 5.6 mm), so numbers have the specified size whatever font a backend uses.
