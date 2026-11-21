@@ -76,14 +76,37 @@ export function useEvents(clubId: string) {
   })
 }
 
+// Saves still on their way after the editor closed, per event.
+const closing = new Map<string, Promise<void>>()
+
+/** The editor closed while saving: opening the event again waits until `saved` settles. */
+export function finishSaving(eventId: string, saved: Promise<void>) {
+  const all = Promise.all([closing.get(eventId), saved]).then(
+    () => undefined,
+    () => undefined,
+  )
+  closing.set(eventId, all)
+  void all.then(() => {
+    if (closing.get(eventId) === all) closing.delete(eventId)
+  })
+}
+
+/** Settles once the saves of a closed editor are done (at once when there are none). */
+export const savesFinished = (eventId: string): Promise<void> => closing.get(eventId) ?? Promise.resolve()
+
 /** `null` when the event does not exist or the user has no access. */
 export function useEvent(eventId: string) {
   return useQuery({
     queryKey: eventKeys.detail(eventId),
-    // The editor holds its own copy while editing; never refetch it behind the user's back.
+    // The editor holds its own copy while editing; never refetch it behind the user's back. Once the
+    // editor has closed, the copy is dropped, so opening the event again loads what was saved last.
     staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 0,
     refetchOnWindowFocus: false,
-    queryFn: async (): Promise<EventDetail | null> => fetchEvent(eventId),
+    queryFn: async (): Promise<EventDetail | null> => {
+      await savesFinished(eventId)
+      return fetchEvent(eventId)
+    },
   })
 }
 
