@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { signInWithGoogle } from '../auth/useSession.ts'
 import { BrandMark } from '../components/BrandMark.tsx'
 import { Button } from '../components/ui.tsx'
@@ -16,10 +17,16 @@ export function SignedOutPage({ message }: { message?: string }) {
           {t('app.title')}
         </div>
         <p className="m-0 text-body">{t('app.tagline')}</p>
+        {!message && <p className="m-0 text-[14px] text-muted">{t('auth.about')}</p>}
         <p className="m-0">{message ?? t('auth.signInPrompt')}</p>
         <Button variant="primary" size="lg" onClick={() => void signInWithGoogle()}>
           {t('auth.signInWithGoogle')}
         </Button>
+        {!message && (
+          <Link to="/help" className="self-start text-[14px]">
+            {t('auth.howItWorks')}
+          </Link>
+        )}
       </div>
     </main>
   )

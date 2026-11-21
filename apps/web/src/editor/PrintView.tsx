@@ -19,6 +19,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
+import { ApiError } from '../lib/api.ts'
 import { saveFile } from '../lib/download.ts'
 import { downloadUrl, type ExportSummary, isPending, useExports, useRequestExport } from '../lib/exports.ts'
 import { formatScale } from '../lib/format.ts'
@@ -317,7 +318,11 @@ export function PrintPanel({
         ) : !saved ? (
           <span className="text-xs text-danger">{t('print.saveFirst')}</span>
         ) : null}
-        {request.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
+        {request.isError && (
+          <ErrorMessage>
+            {request.error instanceof ApiError && request.error.code === 'tooManyExports' ? t('print.tooMany') : t('common.error')}
+          </ErrorMessage>
+        )}
       </div>
       <section aria-labelledby="course-data-heading" className="flex flex-col items-start gap-1.5 border-t border-line px-3 py-3">
         <h3 id="course-data-heading" className="m-0 text-[13px] font-semibold">

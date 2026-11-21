@@ -96,7 +96,7 @@ describe('maps page', () => {
     // The file picker suggests .ocd and .pdf, but people can still choose any file.
     const user = userEvent.setup({ applyAccept: false })
     await user.upload(screen.getByLabelText('Map file'), new File(['x'], 'map.omap'))
-    expect(screen.getByText('Choose an OCAD (.ocd) or PDF file.')).toBeInTheDocument()
+    expect(screen.getByText(/^Choose an OCAD \(\.ocd\) or PDF file\. From OpenOrienteering Mapper/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
   })
 
