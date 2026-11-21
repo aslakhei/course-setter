@@ -5,6 +5,7 @@ import { testEvent } from '../course/test-doc.ts'
 import type { Primitive } from '../render/primitives.ts'
 import {
   changePaper,
+  changePrintSize,
   defaultPrintSettings,
   pageGroundArea,
   pagePosition,
@@ -182,6 +183,32 @@ describe('changePaper', () => {
 
   it('keeps a sheet near the top-left where it was', () => {
     expect(change([30, 40], 'A3', 'portrait').layout).toEqual([{ kind: 'descriptions', at: [30, 40] }])
+  })
+})
+
+describe('changePrintSize', () => {
+  // 2 mm in from the bottom-right corner of the A4 portrait map area, with 6 mm cells (48 × 24 mm).
+  const corner = (cell: number, rows: number) => [205 - cell * 0.025 - 8 * cell - 2, 292 - cell * 0.025 - rows * cell - 2]
+  const placed = () => setPrintSettings(kilometre(), 'K', settings({ layout: [{ kind: 'descriptions', at: corner(6, 4) as Point }] }))
+
+  it('keeps a sheet in its corner when the cells get bigger', () => {
+    const course = courseById(changePrintSize(placed(), 'K', 'Test', { descriptionCellSize: 7 }), 'K')
+    expect(course.descriptionCellSize).toBe(7)
+    const [x, y] = corner(7, 4)
+    expect(course.print?.layout[0]?.at[0]).toBeCloseTo(x as number, 9)
+    expect(course.print?.layout[0]?.at[1]).toBeCloseTo(y as number, 9)
+  })
+
+  it('keeps the page centre and the sheet at another scale', () => {
+    const course = courseById(changePrintSize(placed(), 'K', 'Test', { printScale: 7500 }), 'K')
+    expect(course.printScale).toBe(7500)
+    expect(course.print).toEqual(courseById(placed(), 'K').print)
+  })
+
+  it('only changes the course when it has no print settings of its own', () => {
+    const course = courseById(changePrintSize(kilometre(), 'K', 'Test', { printScale: 5000 }), 'K')
+    expect(course.printScale).toBe(5000)
+    expect(course).not.toHaveProperty('print')
   })
 })
 

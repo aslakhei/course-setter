@@ -2,6 +2,7 @@ import {
   addCourse,
   type Course,
   changePaper,
+  changePrintSize,
   deleteControl,
   deleteSpecial,
   type EventDoc,
@@ -310,6 +311,8 @@ function Editor({
             onPaper={(paper, orientation) =>
               setPrint(printCourse, changePaper(doc, printCourse, event.name, printSettings, paper, orientation))
             }
+            onScale={printScale => edit(changePrintSize(doc, printCourse.id, event.name, { printScale }))}
+            onCellSize={descriptionCellSize => edit(changePrintSize(doc, printCourse.id, event.name, { descriptionCellSize }))}
             onReset={() => setPrint(printCourse, null)}
             onBack={() => setParams({})}
           />

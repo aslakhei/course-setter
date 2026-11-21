@@ -3,6 +3,7 @@
 import {
   type Course,
   courseLength,
+  DEFAULT_CELL_SIZE,
   type EventDoc,
   ORIENTATIONS,
   type Orientation,
@@ -16,7 +17,7 @@ import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
 import { downloadUrl, type ExportSummary, isPending, useExports, useRequestExport } from '../lib/exports.ts'
 import { formatScale } from '../lib/format.ts'
 import { formatKm } from './CoursePanel.tsx'
-import { formatPaper } from './print.ts'
+import { CELL_SIZES, formatPaper, PRINT_SCALES } from './print.ts'
 import type { SaveStatus } from './useAutosave.ts'
 
 function Segmented<T extends string>({
@@ -56,6 +57,8 @@ export function PrintToolbar({
   settings,
   onCourse,
   onPaper,
+  onScale,
+  onCellSize,
   onReset,
   onBack,
 }: {
@@ -64,10 +67,15 @@ export function PrintToolbar({
   settings: PrintSettings
   onCourse: (courseId: string) => void
   onPaper: (paper: Paper, orientation: Orientation) => void
+  onScale: (scale: number) => void
+  onCellSize: (size: number) => void
   onReset: () => void
   onBack: () => void
 }) {
   const { t } = useTranslation()
+  const scales: readonly number[] = PRINT_SCALES.includes(course.printScale as (typeof PRINT_SCALES)[number])
+    ? PRINT_SCALES
+    : [...PRINT_SCALES, course.printScale].sort((a, b) => a - b)
   return (
     <div
       role="toolbar"
@@ -107,7 +115,38 @@ export function PrintToolbar({
         text={o => t(`print.${o}`)}
         onChange={o => onPaper(settings.paper, o)}
       />
-      <span className="text-[13px] text-muted">{formatScale(course.printScale)}</span>
+      <label htmlFor="print-scale" className="text-[13px] text-muted">
+        {t('print.scale')}
+      </label>
+      <select
+        id="print-scale"
+        className={fieldClass}
+        value={course.printScale}
+        title={t('print.scaleHelp')}
+        onChange={e => onScale(Number(e.target.value))}
+      >
+        {scales.map(s => (
+          <option key={s} value={s}>
+            {formatScale(s)}
+          </option>
+        ))}
+      </select>
+      <label htmlFor="print-cell-size" className="text-[13px] text-muted">
+        {t('print.cellSize')}
+      </label>
+      <select
+        id="print-cell-size"
+        className={fieldClass}
+        value={course.descriptionCellSize ?? DEFAULT_CELL_SIZE}
+        title={t('print.cellSizeHelp')}
+        onChange={e => onCellSize(Number(e.target.value))}
+      >
+        {CELL_SIZES.map(s => (
+          <option key={s} value={s}>
+            {t('print.cellSizeOption', { size: s })}
+          </option>
+        ))}
+      </select>
       <Button size="sm" onClick={onReset} disabled={!course.print} title={t('print.resetHelp')}>
         {t('print.reset')}
       </Button>

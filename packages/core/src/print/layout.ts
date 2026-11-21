@@ -2,8 +2,10 @@
 // the map it shows, and everything drawn on the page in page millimetres (y up, origin at the page's
 // bottom-left corner, as in PDF). The worker draws the map into the map area and these primitives on
 // top; the print view shows the same layout, so what the setter sees is what is printed.
+import { type CourseChange, setPrintSettings, updateCourse } from '../course/commands.ts'
 import {
   type Course,
+  courseById,
   DEFAULT_CELL_SIZE,
   type EventDoc,
   type LayoutElement,
@@ -213,10 +215,26 @@ export function placeDescriptions(doc: EventDoc, course: Course, title: string, 
 }
 
 /**
- * The settings on other paper or the other way round. The page keeps its centre, and the description
- * sheet keeps its distance from the nearest side and the nearest top or bottom of the map area, so a
- * sheet in a corner stays in that corner.
+ * The settings with the description sheet moved from where it is on one page to the same place on
+ * another (other paper, or a sheet of another size): it keeps its distance from the nearest side and
+ * the nearest top or bottom of the map area, so a sheet in a corner stays in that corner.
  */
+function keepSheetPlace(
+  doc: EventDoc,
+  title: string,
+  from: { course: Course; settings: PrintSettings },
+  to: { course: Course; settings: PrintSettings },
+): PrintSettings {
+  const element = from.settings.layout.find(e => e.kind === 'descriptions')
+  if (!element) return to.settings
+  const a = sheetRange(doc, from.course, title, from.settings)
+  const b = sheetRange(doc, to.course, title, to.settings)
+  const keep = (v: number, a: { min: number; max: number }, b: { min: number; max: number }) =>
+    v - a.min <= a.max - v ? b.min + (v - a.min) : b.max - (a.max - v)
+  return placeDescriptions(doc, to.course, title, to.settings, [keep(element.at[0], a.x, b.x), keep(element.at[1], a.y, b.y)])
+}
+
+/** The settings on other paper or the other way round: the page keeps its centre, the description sheet its corner. */
 export function changePaper(
   doc: EventDoc,
   course: Course,
@@ -225,12 +243,23 @@ export function changePaper(
   paper: Paper,
   orientation: Orientation,
 ): PrintSettings {
-  const next = { ...settings, paper, orientation }
-  const element = settings.layout.find(e => e.kind === 'descriptions')
-  if (!element) return next
-  const from = sheetRange(doc, course, title, settings)
-  const to = sheetRange(doc, course, title, next)
-  const keep = (v: number, a: { min: number; max: number }, b: { min: number; max: number }) =>
-    v - a.min <= a.max - v ? b.min + (v - a.min) : b.max - (a.max - v)
-  return placeDescriptions(doc, course, title, next, [keep(element.at[0], from.x, to.x), keep(element.at[1], from.y, to.y)])
+  return keepSheetPlace(doc, title, { course, settings }, { course, settings: { ...settings, paper, orientation } })
+}
+
+/**
+ * The event with a course printed at another scale or with another description cell size. A course
+ * placed by hand keeps its page centre, and its description sheet stays in its corner.
+ */
+export function changePrintSize(
+  doc: EventDoc,
+  courseId: string,
+  title: string,
+  change: Pick<CourseChange, 'printScale' | 'descriptionCellSize'>,
+): EventDoc {
+  const next = updateCourse(doc, courseId, change)
+  const before = courseById(doc, courseId)
+  if (!before.print) return next
+  const after = courseById(next, courseId)
+  const settings = keepSheetPlace(next, title, { course: before, settings: before.print }, { course: after, settings: before.print })
+  return setPrintSettings(next, courseId, settings)
 }

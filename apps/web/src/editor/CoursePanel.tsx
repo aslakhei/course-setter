@@ -7,7 +7,6 @@ import {
   courseLength,
   courseStops,
   coursesUsing,
-  DEFAULT_CELL_SIZE,
   deleteControl,
   deleteCourse,
   deleteSpecial,
@@ -24,7 +23,6 @@ import {
 import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, fieldClass } from '../components/ui.tsx'
-import { formatScale } from '../lib/format.ts'
 import { DescriptionsTab } from './DescriptionsTab.tsx'
 import { ALL_CONTROLS, type EditorState } from './state.ts'
 
@@ -257,9 +255,6 @@ function PoolList({ doc, selected, onSelect }: { doc: EventDoc; selected: string
   )
 }
 
-const PRINT_SCALES = [4000, 5000, 7500, 10000, 15000] as const
-const CELL_SIZES = [5, 5.5, 6, 6.5, 7] as const
-
 function CourseSettings({
   doc,
   course,
@@ -276,9 +271,6 @@ function CourseSettings({
   useEffect(() => setName(course.name), [course.name])
   const [climb, setClimb] = useState(course.climb == null ? '' : String(course.climb))
   useEffect(() => setClimb(course.climb == null ? '' : String(course.climb)), [course.climb])
-  const scales = PRINT_SCALES.includes(course.printScale as (typeof PRINT_SCALES)[number])
-    ? PRINT_SCALES
-    : [...PRINT_SCALES, course.printScale]
   return (
     <div className="flex flex-col gap-2 px-3 py-3">
       <label htmlFor="course-name" className="text-[13px] font-semibold">
@@ -292,23 +284,7 @@ function CourseSettings({
         onChange={e => setName(e.target.value)}
         onBlur={() => name.trim() && name.trim() !== course.name && onEdit(updateCourse(doc, course.id, { name }))}
       />
-      <label htmlFor="course-print-scale" className="text-[13px] font-semibold">
-        {t('editor.settings.printScale')}
-      </label>
-      <select
-        id="course-print-scale"
-        className={fieldClass}
-        value={course.printScale}
-        onChange={e => onEdit(updateCourse(doc, course.id, { printScale: Number(e.target.value) }))}
-      >
-        {scales.map(s => (
-          <option key={s} value={s}>
-            {formatScale(s)}
-          </option>
-        ))}
-      </select>
-      <span className="text-xs text-muted">{t('editor.settings.printScaleHelp')}</span>
-      <label htmlFor="course-climb" className="mt-1 text-[13px] font-semibold">
+      <label htmlFor="course-climb" className="text-[13px] font-semibold">
         {t('editor.settings.climb')}
       </label>
       <input
@@ -325,25 +301,6 @@ function CourseSettings({
       />
       <span id="course-climb-help" className="text-xs text-muted">
         {t('editor.settings.climbHelp')}
-      </span>
-      <label htmlFor="course-cell-size" className="mt-1 text-[13px] font-semibold">
-        {t('editor.settings.cellSize')}
-      </label>
-      <select
-        id="course-cell-size"
-        className={fieldClass}
-        value={course.descriptionCellSize ?? DEFAULT_CELL_SIZE}
-        onChange={e => onEdit(updateCourse(doc, course.id, { descriptionCellSize: Number(e.target.value) }))}
-        aria-describedby="course-cell-size-help"
-      >
-        {CELL_SIZES.map(s => (
-          <option key={s} value={s}>
-            {t('editor.settings.cellSizeOption', { size: s })}
-          </option>
-        ))}
-      </select>
-      <span id="course-cell-size-help" className="text-xs text-muted">
-        {t('editor.settings.cellSizeHelp')}
       </span>
       <Button
         variant="danger"

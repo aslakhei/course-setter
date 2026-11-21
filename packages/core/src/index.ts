@@ -107,6 +107,7 @@ export {
 } from './descriptions/symbols.ts'
 export {
   changePaper,
+  changePrintSize,
   DEFAULT_MARGIN,
   defaultPrintSettings,
   groundToPage,

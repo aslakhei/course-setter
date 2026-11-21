@@ -336,13 +336,8 @@
     "usedIn_other": "In {{courses}}",
     "settings": {
       "name": "Course name",
-      "printScale": "Print scale",
-      "printScaleHelp": "The scale the course is printed at. Symbol sizes follow it.",
       "climb": "Climb (m)",
       "climbHelp": "Shown on the description sheet, rounded to 5 m. Leave empty to leave it out.",
-      "cellSize": "Description sheet cell size",
-      "cellSizeOption": "{{size}} mm",
-      "cellSizeHelp": "Size of each square on the printed description sheet (IOF: 5 to 7 mm).",
       "delete": "Delete course",
       "deleteConfirm": "Delete the course {{course}}? Its controls stay in the event."
     },
@@ -428,6 +423,11 @@
       "portrait": "{{paper}} portrait",
       "landscape": "{{paper}} landscape"
     },
+    "scale": "Scale",
+    "scaleHelp": "The scale the course is printed at. Course symbols follow it, on the map too.",
+    "cellSize": "Descriptions",
+    "cellSizeOption": "{{size}} mm",
+    "cellSizeHelp": "Size of each square on the printed description sheet (IOF: 5 to 7 mm)",
     "reset": "Reset page",
     "resetHelp": "Place the page and the description sheet automatically again",
     "hint": "Drag the page to choose what is printed. Drag the description sheet to a free spot.",
