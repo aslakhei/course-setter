@@ -1,7 +1,7 @@
 import { addControl, type EventDoc, emptyDoc } from '@course-setter/core'
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SaveConflict } from '../lib/events.ts'
+import { SaveConflict, savesFinished } from '../lib/events.ts'
 import { AUTOSAVE_DELAY_MS, useAutosave } from './useAutosave.ts'
 
 vi.mock('../lib/supabase.ts', () => ({ supabase: {} }))
@@ -81,5 +81,54 @@ describe('autosave', () => {
     await act(() => vi.advanceTimersByTimeAsync(10_000))
     expect(save).toHaveBeenCalledTimes(2)
     expect(result.current.status).toBe('saved')
+  })
+
+  it('saves at once when the editor closes with unsaved changes, and opening the event waits for it', async () => {
+    let finish = () => {}
+    const save = vi.fn((_id: string, _doc: EventDoc, rev: number) => new Promise<number>(r => (finish = () => r(rev + 1))))
+    const { rerender, unmount } = setup(save)
+    const one = edit(base, 1)
+    rerender({ doc: one })
+    unmount()
+    expect(save).toHaveBeenCalledWith('e1', one, 1)
+    let opened = false
+    void savesFinished('e1').then(() => (opened = true))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(opened).toBe(false)
+    finish()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(opened).toBe(true)
+  })
+
+  it('saves changes made during a save right after it once the editor has closed', async () => {
+    const finish: (() => void)[] = []
+    const save = vi.fn((_id: string, _doc: EventDoc, rev: number) => new Promise<number>(r => finish.push(() => r(rev + 1))))
+    const { rerender, unmount } = setup(save)
+    const one = edit(base, 1)
+    rerender({ doc: one })
+    await act(() => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS))
+    expect(save).toHaveBeenCalledTimes(1)
+    const two = edit(one, 2)
+    rerender({ doc: two })
+    unmount()
+    finish[0]?.()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save).toHaveBeenLastCalledWith('e1', two, 2)
+    let opened = false
+    void savesFinished('e1').then(() => (opened = true))
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(opened).toBe(false)
+    finish[1]?.()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(opened).toBe(true)
+  })
+
+  it('does not save when the editor closes with everything saved', async () => {
+    const save = vi.fn(async (_id: string, _doc: EventDoc, rev: number) => rev + 1)
+    const { unmount } = setup(save)
+    unmount()
+    await act(() => vi.advanceTimersByTimeAsync(AUTOSAVE_DELAY_MS))
+    expect(save).not.toHaveBeenCalled()
   })
 })

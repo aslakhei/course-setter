@@ -1,9 +1,9 @@
 // Autosave: the document is saved 1.5 s after the last change, against the revision it was based on.
-// Edits made while a save is on its way are saved right after it. When someone else saved in between,
+// Edits made while a save is on its way are saved after it. When someone else saved in between,
 // saving stops and the conflict is handed to the editor; failures (offline) are retried.
 import type { EventDoc } from '@course-setter/core'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { SaveConflict, saveEvent } from '../lib/events.ts'
+import { finishSaving, SaveConflict, saveEvent } from '../lib/events.ts'
 
 export const AUTOSAVE_DELAY_MS = 1500
 const RETRY_MS = 10_000
@@ -29,19 +29,14 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
   const revision = useRef(initialRevision)
   const savedDoc = useRef(doc)
   const latest = useRef(doc)
-  const saving = useRef(false)
   const blocked = useRef(false)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const active = useRef<Promise<void> | null>(null)
+  const closed = useRef(false)
   latest.current = doc
 
-  const run = useCallback(async () => {
-    clearTimeout(timer.current)
-    if (saving.current || blocked.current) return
-    if (latest.current === savedDoc.current) {
-      setStatus('saved') // e.g. an edit was undone before it was saved
-      return
-    }
-    saving.current = true
+  /** Save the latest document once; false when it could not be saved. */
+  const saveLatest = useCallback(async (): Promise<boolean> => {
     setStatus('saving')
     const toSave = latest.current
     try {
@@ -49,6 +44,7 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
       savedDoc.current = toSave
       setSavedAt(new Date())
       setStatus(latest.current === toSave ? 'saved' : 'unsaved')
+      return true
     } catch (err) {
       if (err instanceof SaveConflict) {
         blocked.current = true
@@ -56,14 +52,36 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
         setStatus('conflict')
       } else {
         setStatus('failed')
-        timer.current = setTimeout(() => void run(), RETRY_MS)
       }
-    } finally {
-      saving.current = false
+      return false
     }
-    // Changes made during the save.
-    if (!blocked.current && latest.current !== savedDoc.current) timer.current = setTimeout(() => void run(), AUTOSAVE_DELAY_MS)
   }, [eventId, save])
+
+  /** Save now; while a save is on its way, the one already running (which saves these changes after it). */
+  const run = useCallback(
+    function run(): Promise<void> {
+      clearTimeout(timer.current)
+      if (blocked.current) return Promise.resolve()
+      const saveAll = async () => {
+        if (latest.current === savedDoc.current) {
+          setStatus('saved') // e.g. an edit was undone before it was saved
+          return
+        }
+        let ok = await saveLatest()
+        // After the editor has closed, changes made during the save are saved straight away.
+        while (ok && closed.current && !blocked.current && latest.current !== savedDoc.current) ok = await saveLatest()
+        if (closed.current || blocked.current) return
+        if (!ok) timer.current = setTimeout(() => void run(), RETRY_MS)
+        // Changes made during the save.
+        else if (latest.current !== savedDoc.current) timer.current = setTimeout(() => void run(), AUTOSAVE_DELAY_MS)
+      }
+      active.current ??= saveAll().finally(() => {
+        active.current = null
+      })
+      return active.current
+    },
+    [saveLatest],
+  )
 
   useEffect(() => {
     if (blocked.current) return
@@ -78,17 +96,21 @@ export function useAutosave(eventId: string, doc: EventDoc, initialRevision: num
     timer.current = setTimeout(() => void run(), AUTOSAVE_DELAY_MS)
   }, [doc, run])
 
-  // Leaving with unsaved changes: the browser asks first.
+  // Closing the editor (going elsewhere in the app) saves what is not saved yet, and opening the event
+  // again waits for it. Leaving the page with unsaved changes: the browser asks first.
   useEffect(() => {
+    closed.current = false
     const warn = (e: BeforeUnloadEvent) => {
       if (latest.current !== savedDoc.current) e.preventDefault()
     }
     window.addEventListener('beforeunload', warn)
     return () => {
       window.removeEventListener('beforeunload', warn)
+      closed.current = true
       clearTimeout(timer.current)
+      if (!blocked.current && (active.current || latest.current !== savedDoc.current)) finishSaving(eventId, run())
     }
-  }, [])
+  }, [eventId, run])
 
   const keepMine = useCallback(() => {
     if (!conflict) return
