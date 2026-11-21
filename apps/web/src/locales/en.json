@@ -174,7 +174,11 @@
   "settings": {
     "heading": "Club settings",
     "nameHelp": "Shown to members and on invite links.",
-    "adminsOnly": "Only admins can change the club settings."
+    "adminsOnly": "Only admins can change the club settings.",
+    "deleteHeading": "Delete club",
+    "deleteHelp": "Deletes the club for everyone, with its maps, events, PDFs and invite links. This cannot be undone.",
+    "deleteConfirm": "Type “{{name}}” to confirm",
+    "delete": "Delete club"
   },
   "invite": {
     "heading": "Join a club",
@@ -488,5 +492,20 @@
       "pdfNote": "Do not upload the PDF from Print to Livelox as a course overlay: it has the map in it. Livelox draws the courses from the IOF XML file, without cut circles and lines, out-of-bounds markings or moved control numbers.",
       "more": "More in <docs>Livelox's own help on adding courses</docs>."
     }
+  },
+  "account": {
+    "heading": "Your account",
+    "signedInAs": "Signed in as",
+    "fromGoogle": "Signed in with Google. Your name and picture come from your Google account.",
+    "dataHeading": "Your data",
+    "dataHelp": "Download everything Course setter stores about you: your account, your clubs and what you have made or saved in them, as a JSON file.",
+    "download": "Download my data",
+    "deleteHeading": "Delete account",
+    "deleteGone": "Your account, your club memberships and your PDFs are deleted.",
+    "deleteStays": "Maps and events you made stay with their clubs, without your name.",
+    "deleteAlone": "A club where you are the only member is deleted, with its maps and events.",
+    "deleteSure": "I understand that this cannot be undone",
+    "delete": "Delete my account",
+    "onlyAdmin": "You are the only admin of {{clubs}}. Make another member admin on the club’s Members page, or delete the club in its settings, first."
   }
 }

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { Link, Route, Routes } from 'react-router'
 import { AppShell } from './components/AppShell.tsx'
 import { Loading } from './components/ui.tsx'
+import { AccountPage } from './pages/AccountPage.tsx'
 import { ClubEventsPage } from './pages/ClubEventsPage.tsx'
 import { ClubLayout } from './pages/ClubLayout.tsx'
 import { ClubMapsPage } from './pages/ClubMapsPage.tsx'
@@ -56,6 +57,7 @@ export function App() {
           <Route path="members" element={<ClubMembersPage />} />
           <Route path="settings" element={<ClubSettingsPage />} />
         </Route>
+        <Route path="account" element={<AccountPage />} />
         <Route path="help/livelox" element={<LiveloxHelpPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
