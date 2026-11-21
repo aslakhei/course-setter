@@ -326,8 +326,14 @@ isOneToOne: false
 "create_event":
 { Args: { "club": string,"event_date"?: string,"event_name": string,"map_version": string }; Returns: string
                            },
+"delete_club":
+{ Args: { "club": string }; Returns: undefined
+                           },
 "delete_map_version":
 { Args: { "map_version_id": string }; Returns: undefined
+                           },
+"delete_my_account":
+{ Args: Record<PropertyKey, never>; Returns: undefined
                            },
 "fail_job":
 { Args: { "job_error": string,"job_id": number }; Returns: undefined
@@ -342,6 +348,9 @@ isOneToOne: false
                            },
 "move_event_to_version":
 { Args: { "doc": Json,"event": string,"expected_revision": number,"map_version": string }; Returns: number
+                           },
+"my_data":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "request_export":
 { Args: { "course_ids": (string)[],"event": string,"separate"?: boolean }; Returns: string

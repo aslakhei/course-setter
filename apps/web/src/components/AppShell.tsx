@@ -49,12 +49,15 @@ export function AppShell() {
             buttonClassName="rounded-full"
             button={<Avatar name={name} url={avatarUrl} seed={user.id} size={32} />}
           >
-            {() => (
+            {close => (
               <>
                 <div className="border-b border-line px-3 pt-1 pb-2">
                   <div className="font-semibold">{name}</div>
                   {user.email && <div className="text-[13px] text-muted">{user.email}</div>}
                 </div>
+                <Link to="/account" onClick={close} className={menuItemClass}>
+                  {t('account.heading')}
+                </Link>
                 <a href={NOTICES_URL} target="_blank" rel="noreferrer" className={menuItemClass}>
                   {t('nav.licences')}
                 </a>
