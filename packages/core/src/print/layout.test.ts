@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { addControl, addCourse, insertCourseControl, setPrintSettings } from '../course/commands.ts'
-import { CourseError, courseById, type EventDoc, emptyDoc, eventDocSchema, type Point, type PrintSettings } from '../course/doc.ts'
+import {
+  ALL_CONTROLS,
+  CourseError,
+  courseById,
+  type EventDoc,
+  emptyDoc,
+  eventDocSchema,
+  type Point,
+  type PrintSettings,
+} from '../course/doc.ts'
 import { testEvent } from '../course/test-doc.ts'
+import { allControlsSheet } from '../descriptions/sheet.ts'
 import type { Primitive } from '../render/primitives.ts'
 import {
   changePaper,
@@ -13,6 +23,7 @@ import {
   pageToPaperOffset,
   placeDescriptions,
   printPage,
+  showDescriptions,
 } from './layout.ts'
 
 /** A course at 1:10 000 with two controls 1 km apart, east-west. */
@@ -232,5 +243,46 @@ describe('setPrintSettings', () => {
     expect(bad({ margin: -1 })).toBe('invalid_print')
     expect(bad({ center: [Number.NaN, 0] })).toBe('invalid_print')
     expect(bad({ paper: 'B5' as 'A4' })).toBe('invalid_print')
+  })
+})
+
+describe('the all-controls page', () => {
+  const texts = (ps: Primitive[]) => ps.flatMap(p => (p.type === 'text' ? [p.text] : []))
+
+  it('prints every control with its code, at the first course scale by default, with a sheet of every control by code', () => {
+    const doc = testEvent()
+    const all = courseById(doc, ALL_CONTROLS)
+    expect(all).toMatchObject({ name: 'All controls', printScale: 15000, controls: [] })
+    const page = printPage(doc, all, 'Test')
+    expect(texts(page.course).sort()).toEqual(['31', '32', '33'])
+    const sheet = allControlsSheet(doc, 'Test')
+    expect(sheet[1]).toMatchObject({ kind: 'header', name: 'All controls' })
+    expect(sheet.slice(2).map(l => (l.kind === 'control' ? (l.start ? 'start' : l.code) : l.kind))).toEqual(['start', '31', '32', '33'])
+    expect(page.descriptions).not.toBeNull()
+  })
+
+  it('keeps its page, scale and cell size in the event, like a course', () => {
+    let doc = setPrintSettings(testEvent(), ALL_CONTROLS, settings({ paper: 'A3', layout: [] }))
+    doc = changePrintSize(doc, ALL_CONTROLS, 'Test', { printScale: 7500, descriptionCellSize: 5 })
+    expect(doc.allControls).toEqual({ printScale: 7500, descriptionCellSize: 5, print: settings({ paper: 'A3', layout: [] }) })
+    expect(courseById(doc, ALL_CONTROLS)).toMatchObject({ printScale: 7500, descriptionCellSize: 5, print: { paper: 'A3' } })
+    expect(eventDocSchema.parse(JSON.parse(JSON.stringify(doc)))).toEqual(doc)
+    expect(courseById(setPrintSettings(doc, ALL_CONTROLS, null), ALL_CONTROLS)).not.toHaveProperty('print')
+    // It is not a course.
+    expect(doc.courses.map(c => c.id)).toEqual(['A', 'B'])
+    expect(() => eventDocSchema.parse({ ...doc, courses: [{ ...doc.courses[0], id: ALL_CONTROLS }] })).toThrow()
+  })
+})
+
+describe('showDescriptions', () => {
+  it('takes the description sheet off the page and puts it back in the best corner', () => {
+    const doc = kilometre()
+    const course = courseById(doc, 'K')
+    const s = defaultPrintSettings(doc, course, 'Test')
+    const off = showDescriptions(doc, course, 'Test', s, false)
+    expect(off.layout).toEqual([])
+    expect(printPage(doc, course, 'Test', off).descriptions).toBeNull()
+    expect(showDescriptions(doc, course, 'Test', off, true).layout).toEqual(s.layout)
+    expect(showDescriptions(doc, course, 'Test', s, true)).toBe(s)
   })
 })

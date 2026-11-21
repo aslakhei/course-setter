@@ -3,7 +3,7 @@
 // rasterised); OCAD maps are rendered for the print area only, at 600 dpi as a palette PNG.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { type Bounds, courseById, type EventDoc, groundToPage, printPage, printSettingsOf } from '@course-setter/core'
+import { type Bounds, courseById, type EventDoc, groundToPage, printPage, printSettingsOf, safeFileName } from '@course-setter/core'
 import { addPrintPage, FONT_DIGIT_HEIGHT, type MapLayer } from '@course-setter/core/pdf'
 import fontkit from '@pdf-lib/fontkit'
 import { zipSync } from 'fflate'
@@ -40,13 +40,6 @@ export type ExportInput = {
 
 export type ExportFile = { fileName: string; contentType: string; bytes: Uint8Array }
 
-/** A file name without characters file systems refuse. */
-export const safeName = (name: string) =>
-  [...name]
-    .map(ch => (ch.charCodeAt(0) < 32 || '\\/:*?"<>|'.includes(ch) ? '-' : ch))
-    .join('')
-    .trim() || 'course'
-
 /** The map, ready to be placed on pages (OCAD: rendered per page; PDF: its page placed as it is). */
 type MapFile = { kind: 'pdf' | 'ocad'; scale: number; file: Buffer; source: MapSource }
 
@@ -59,18 +52,18 @@ export async function makeExport(input: ExportInput): Promise<ExportFile> {
     const pdf = await newPdf()
     for (const course of courses) await addCourse(pdf, input, map, course.id)
     const name = courses.length === 1 ? `${input.eventName} - ${courses[0]?.name}` : input.eventName
-    return { fileName: `${safeName(name)}.pdf`, contentType: 'application/pdf', bytes: await pdf.save() }
+    return { fileName: `${safeFileName(name)}.pdf`, contentType: 'application/pdf', bytes: await pdf.save() }
   }
   const files: Record<string, Uint8Array> = {}
   for (const course of courses) {
     const pdf = await newPdf()
     await addCourse(pdf, input, map, course.id)
-    let name = `${safeName(course.name)}.pdf`
-    for (let n = 2; files[name]; n++) name = `${safeName(course.name)} (${n}).pdf`
+    let name = `${safeFileName(course.name)}.pdf`
+    for (let n = 2; files[name]; n++) name = `${safeFileName(course.name)} (${n}).pdf`
     files[name] = await pdf.save()
   }
   // PDFs are compressed already: store them.
-  return { fileName: `${safeName(input.eventName)}.zip`, contentType: 'application/zip', bytes: zipSync(files, { level: 0 }) }
+  return { fileName: `${safeFileName(input.eventName)}.zip`, contentType: 'application/zip', bytes: zipSync(files, { level: 0 }) }
 }
 
 async function newPdf(): Promise<Doc> {

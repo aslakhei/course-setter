@@ -2,6 +2,8 @@
 // editor keeps every state for undo/redo. Invalid edits throw CourseError.
 import { cellSymbol } from '../descriptions/symbols.ts'
 import {
+  ALL_CONTROLS,
+  allControlsCourse,
   type BoundaryStyle,
   type ControlKind,
   type Course,
@@ -23,6 +25,14 @@ import {
 import { nextFreeCode } from './numbering.ts'
 
 function withCourse(doc: EventDoc, courseId: string, change: (course: Course) => Course): EventDoc {
+  if (courseId === ALL_CONTROLS) {
+    // Only how it is printed is kept: the page has no stops of its own.
+    const { printScale, descriptionCellSize, print } = change(allControlsCourse(doc))
+    return {
+      ...doc,
+      allControls: { printScale, ...(descriptionCellSize !== undefined ? { descriptionCellSize } : {}), ...(print ? { print } : {}) },
+    }
+  }
   courseById(doc, courseId)
   return { ...doc, courses: doc.courses.map(c => (c.id === courseId ? change(c) : c)) }
 }

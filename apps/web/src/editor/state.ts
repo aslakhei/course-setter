@@ -2,6 +2,7 @@
 // and the selected control. Everything here is pure, so it is tested without a browser; the map and
 // panels only turn clicks into these calls.
 import {
+  ALL_CONTROLS,
   addControl,
   addSpecial,
   CONTROL_KINDS,
@@ -32,7 +33,7 @@ import {
 
 /** Select, place a control of a kind, place or draw a special symbol of a kind, or bend legs. */
 export type Tool = 'select' | ControlKind | SpecialKind | 'bend'
-export const ALL_CONTROLS = 'all'
+export { ALL_CONTROLS }
 
 /** A course stop placed with one click (a marked route is drawn instead). */
 export const isControlTool = (tool: Tool): tool is Exclude<ControlKind, 'markedRoute'> =>

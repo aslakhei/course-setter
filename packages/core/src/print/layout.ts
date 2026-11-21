@@ -214,6 +214,14 @@ export function placeDescriptions(doc: EventDoc, course: Course, title: string, 
   return { ...settings, layout: [...others, placed] }
 }
 
+/** The settings with the description sheet on the page (in the corner that hides the least of the course) or off it. */
+export function showDescriptions(doc: EventDoc, course: Course, title: string, settings: PrintSettings, show: boolean): PrintSettings {
+  const others = settings.layout.filter(e => e.kind !== 'descriptions')
+  if (!show) return { ...settings, layout: others }
+  if (others.length < settings.layout.length) return settings
+  return { ...settings, layout: [...others, { kind: 'descriptions', at: bestCorner(doc, course, title, settings) }] }
+}
+
 /**
  * The settings with the description sheet moved from where it is on one page to the same place on
  * another (other paper, or a sheet of another size): it keeps its distance from the nearest side and

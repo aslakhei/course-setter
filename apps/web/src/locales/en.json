@@ -428,24 +428,31 @@
     "cellSize": "Descriptions",
     "cellSizeOption": "{{size}} mm",
     "cellSizeHelp": "Size of each square on the printed description sheet (IOF: 5 to 7 mm)",
+    "descriptions": "Description sheet",
     "reset": "Reset page",
     "resetHelp": "Place the page and the description sheet automatically again",
     "hint": "Drag the page to choose what is printed. Drag the description sheet to a free spot.",
     "mapLabel": "Map with the printed page: drag the page or the description sheet to move it",
     "panel": "Print",
-    "selected": "{{count}} of {{total}} courses",
+    "selected": "{{count}} of {{total}} selected",
     "summary": "{{paper}} · {{scale}} · {{length}} km",
+    "summaryAll": "{{paper}} · {{scale}} · {{count}} controls",
     "shown": "Shown",
     "show": "Show",
     "showCourse": "Show the page of {{name}}",
     "files": "Files",
-    "onePdf": "One PDF, a page per course",
-    "zip": "A PDF per course (zip)",
+    "onePdf": "One PDF, a page each",
+    "zip": "A PDF per page (zip)",
     "make_one": "Make PDF",
-    "make_other": "Make PDF of {{count}} courses",
-    "chooseCourse": "Choose at least one course.",
+    "make_other": "Make PDF of {{count}} pages",
+    "chooseCourse": "Choose at least one page.",
     "waitForSave": "Saving your changes first…",
     "saveFirst": "Your changes are not saved yet, so the PDF cannot be made.",
+    "courseData": "Course data (IOF XML)",
+    "courseDataHelp": "Every course with its controls, for Livelox, Purple Pen and other orienteering software.",
+    "downloadXml": "Download IOF XML",
+    "leftOut": "Left out, as they have fewer than two stops: {{courses}}",
+    "liveloxHelp": "How to put a training on Livelox",
     "recent": "Your recent PDFs (kept for 24 hours)",
     "none": "No PDFs yet.",
     "making": "Making a PDF of {{courses}}…",
@@ -453,5 +460,33 @@
     "download": "Download",
     "downloadLabel": "Download {{name}}",
     "downloadFailed": "Could not download the file. Make a new PDF if it has expired."
+  },
+  "help": {
+    "livelox": {
+      "heading": "Put a training on Livelox",
+      "intro": "Livelox shows the routes runners took, from their GPS watches or phones, on the map, so you can compare route choices after the training. Adding an event is free; you need a Livelox account.",
+      "download": {
+        "title": "Download the course data",
+        "body": "Open the event, choose <strong>Print</strong> and then <strong>Download IOF XML</strong> under Course data. The file holds every course with its controls."
+      },
+      "event": {
+        "title": "Create the event in Livelox",
+        "body": "Log in at livelox.com and choose <strong>Manage › Event</strong> in the menu at the top, then <strong>Add an event</strong>. Fill in the name, the start time (the first start), the finish time (a little after the last runner is expected back) and the organising club, and save. Events in Eventor are created from Eventor instead."
+      },
+      "map": {
+        "title": "Add the map",
+        "body": "Under <strong>Maps</strong>, upload the club's map without the course on it: the OCAD file, or an image such as PNG. The map must be georeferenced; if it is not, Livelox lets you fit it onto a satellite image. Ask a club admin for the map file if you do not have it."
+      },
+      "courses": {
+        "title": "Upload the courses",
+        "body": "Under <strong>Courses</strong>, choose <strong>Choose files to upload</strong> and pick the IOF XML file. Check the courses on the <strong>Preview</strong> tab. The file places the controls on the map but does not give their real-world coordinates yet, so if they are not in place, drag the control cloud onto the map as Livelox shows you. Save; Livelox offers to make a class for each course."
+      },
+      "publish": {
+        "title": "Choose when the courses are shown",
+        "body": "The courses stay hidden until the event's start time. Under <strong>Access restrictions</strong> you can set a later publishing time, for instance after the last start, or limit the event to your club's members."
+      },
+      "pdfNote": "Do not upload the PDF from Print to Livelox as a course overlay: it has the map in it. Livelox draws the courses from the IOF XML file, without cut circles and lines, out-of-bounds markings or moved control numbers.",
+      "more": "More in <docs>Livelox's own help on adding courses</docs>."
+    }
   }
 }
