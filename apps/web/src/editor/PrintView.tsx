@@ -19,6 +19,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
+import { saveFile } from '../lib/download.ts'
 import { downloadUrl, type ExportSummary, isPending, useExports, useRequestExport } from '../lib/exports.ts'
 import { formatScale } from '../lib/format.ts'
 import { formatKm } from './CoursePanel.tsx'
@@ -370,14 +371,4 @@ export function PrintPanel({
       </section>
     </aside>
   )
-}
-
-/** Hand the browser a file to save. */
-function saveFile(name: string, blob: Blob) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = name
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
