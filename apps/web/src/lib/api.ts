@@ -12,12 +12,18 @@ export type Member = { userId: string; role: ClubRole; joinedAt: string; name: s
 export type Invite = { id: string; token: string; createdAt: string; expiresAt: string; revokedAt: string | null }
 export type InviteInfo = { clubId: string; clubName: string; status: 'valid' | 'expired' | 'revoked'; alreadyMember: boolean }
 
+const CODES: Record<string, ApiError['code']> = {
+  last_admin: 'lastAdmin',
+  invalid_invite: 'invalidInvite',
+  too_many_exports: 'tooManyExports',
+}
+
 /** An error the UI can explain: `code` picks the message, anything else shows as "something went wrong". */
 export class ApiError extends Error {
-  readonly code: 'lastAdmin' | 'invalidInvite' | 'unknown'
+  readonly code: 'lastAdmin' | 'invalidInvite' | 'tooManyExports' | 'unknown'
   constructor(error: PostgrestError) {
     super(error.message)
-    this.code = error.hint === 'last_admin' ? 'lastAdmin' : error.hint === 'invalid_invite' ? 'invalidInvite' : 'unknown'
+    this.code = CODES[error.hint] ?? 'unknown'
   }
 }
 

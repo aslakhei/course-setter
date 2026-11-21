@@ -1,12 +1,12 @@
 import { useTranslation } from 'react-i18next'
-import { Link, Outlet, useParams } from 'react-router'
-import { signOut, useSession } from '../auth/useSession.ts'
+import { Link, Outlet, useLocation, useParams } from 'react-router'
+import { signInWithGoogle, signOut, useSession } from '../auth/useSession.ts'
 import { useMyClubs } from '../lib/api.ts'
 import { NOTICES_URL } from '../lib/links.ts'
 import { SignedOutPage } from '../pages/SignedOutPage.tsx'
 import { BrandMark } from './BrandMark.tsx'
 import { Menu, menuItemClass } from './Menu.tsx'
-import { Avatar, Loading } from './ui.tsx'
+import { Avatar, Button, Loading } from './ui.tsx'
 
 function Chevron() {
   return (
@@ -20,9 +20,11 @@ function Chevron() {
 export function AppShell() {
   const { t } = useTranslation()
   const session = useSession()
+  const { pathname } = useLocation()
 
   if (session === undefined) return <Loading label={t('common.loading')} />
-  if (session === null) return <SignedOutPage />
+  // The help pages can be read before signing in.
+  if (session === null) return pathname === '/help' || pathname.startsWith('/help/') ? <PublicShell /> : <SignedOutPage />
 
   const user = session.user
   const name = (user.user_metadata.full_name as string | undefined) ?? (user.user_metadata.name as string | undefined) ?? user.email ?? ''
@@ -58,6 +60,9 @@ export function AppShell() {
                 <Link to="/account" onClick={close} className={menuItemClass}>
                   {t('account.heading')}
                 </Link>
+                <Link to="/help" onClick={close} className={menuItemClass}>
+                  {t('nav.help')}
+                </Link>
                 <a href={NOTICES_URL} target="_blank" rel="noreferrer" className={menuItemClass}>
                   {t('nav.licences')}
                 </a>
@@ -67,6 +72,30 @@ export function AppShell() {
               </>
             )}
           </Menu>
+        </div>
+      </header>
+      <Outlet />
+    </div>
+  )
+}
+
+/** Pages anyone can read (help): the brand and a sign-in button above the page. */
+function PublicShell() {
+  const { t } = useTranslation()
+  return (
+    <div className="min-h-screen">
+      <header className="border-b border-line bg-white">
+        <div className="mx-auto flex h-12 max-w-[1200px] items-center gap-3 px-5">
+          <Link to="/" className="flex items-center gap-2 text-[15px] font-bold text-ink no-underline hover:text-ink">
+            <span className="text-brand-600">
+              <BrandMark />
+            </span>
+            {t('app.title')}
+          </Link>
+          <span className="grow" />
+          <Button size="sm" variant="primary" onClick={() => void signInWithGoogle()}>
+            {t('help.signIn')}
+          </Button>
         </div>
       </header>
       <Outlet />

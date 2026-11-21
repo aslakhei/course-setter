@@ -99,5 +99,16 @@ select is_empty($$ select * from public.exports $$, 'leaving the club hides one'
 select is_empty($$ select * from storage.objects where bucket_id = 'exports' $$, 'and their files');
 reset role;
 
+-- At most 20 exports an hour per person.
+insert into public.exports (event_id, club_id, requested_by, revision, course_ids)
+select pg_temp.event(), current_setting('test.club')::uuid, pg_temp.uid(1), 2, array['A'] from generate_series(1, 20);
+select pg_temp.sign_in(1);
+select throws_ok($$ select public.request_export(pg_temp.event(), array['A']) $$, '54000', null, 'the 21st export within an hour is refused');
+reset role;
+update public.exports set created_at = now() - interval '61 minutes' where requested_by = pg_temp.uid(1);
+select pg_temp.sign_in(1);
+select lives_ok($$ select public.request_export(pg_temp.event(), array['A']) $$, 'an hour later it is fine again');
+reset role;
+
 select * from finish();
 rollback;

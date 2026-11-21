@@ -16,13 +16,16 @@
     "signInWithGoogle": "Sign in with Google",
     "signOut": "Sign out",
     "signInPrompt": "Sign in with your Google account to see your clubs.",
-    "accountMenu": "Account: {{name}}"
+    "accountMenu": "Account: {{name}}",
+    "howItWorks": "How it works",
+    "about": "A club’s admins upload its OCAD or PDF maps once. Members then set courses with control descriptions in the browser and print them as PDFs for the training, or send them to Livelox."
   },
   "nav": {
     "switchClub": "Switch club",
     "allClubs": "All clubs",
     "licences": "Source code and licences",
-    "clubs": "Clubs"
+    "clubs": "Clubs",
+    "help": "Help"
   },
   "roles": {
     "admin": "Admin",
@@ -75,10 +78,10 @@
     "failed": "Version {{number}} ({{file}}) could not be processed:",
     "errors": {
       "not_ocad": "the file is not an OCAD map.",
-      "unsupported_ocad_version": "this OCAD format version is not supported. Save the map as OCAD 2018 or OCAD 12 and upload it again.",
+      "unsupported_ocad_version": "this OCAD format version cannot be read. Course setter reads OCAD 10, 11, 12 and 2018 files: open the map in OCAD, save it as OCAD 2018 and upload it again.",
       "not_pdf": "the file is not a PDF.",
-      "unreadable_file": "the file could not be read. It may be damaged.",
-      "empty_map": "the map is empty.",
+      "unreadable_file": "the file could not be read. It may be damaged: open it in OCAD or a PDF reader to check, save it again and upload it again.",
+      "empty_map": "the map is empty: the OCAD file has no objects, or the PDF page is blank.",
       "processing_failed": "something went wrong while processing it. Try uploading it again."
     },
     "notFound": "This map does not exist, or it has no version you can see yet.",
@@ -94,7 +97,7 @@
       "scaleHelp": "A PDF does not store its scale. Give the scale the map is drawn at, for example 15000 for 1:15 000.",
       "ocadScale": "The scale is read from the OCAD file.",
       "badScale": "Give the scale as a whole number between 500 and 100 000.",
-      "wrongType": "Choose an OCAD (.ocd) or PDF file.",
+      "wrongType": "Choose an OCAD (.ocd) or PDF file. From OpenOrienteering Mapper, export the map as PDF or save it as OCAD first.",
       "tooLarge": "The file is {{size}}; the limit is 50 MB.",
       "submit": "Upload",
       "uploading": "Uploading…",
@@ -463,7 +466,8 @@
     "failed": "Could not make the PDF of {{courses}}",
     "download": "Download",
     "downloadLabel": "Download {{name}}",
-    "downloadFailed": "Could not download the file. Make a new PDF if it has expired."
+    "downloadFailed": "Could not download the file. Make a new PDF if it has expired.",
+    "tooMany": "You have made 20 PDFs in the last hour, the most there is room for. Try again a little later."
   },
   "help": {
     "livelox": {
@@ -491,7 +495,39 @@
       },
       "pdfNote": "Do not upload the PDF from Print to Livelox as a course overlay: it has the map in it. Livelox draws the courses from the IOF XML file, without cut circles and lines, out-of-bounds markings or moved control numbers.",
       "more": "More in <docs>Livelox's own help on adding courses</docs>."
-    }
+    },
+    "start": {
+      "heading": "Getting started",
+      "intro": "Course setter is for setting orienteering courses on your club’s maps and printing them at the right scale. A club’s admins upload the maps once; members set courses in the browser and print them as PDFs.",
+      "club": {
+        "title": "Join or create your club",
+        "body": "Someone in the club creates it under <strong>Your clubs</strong> and becomes its admin. Admins invite the others with a link from the club’s <strong>Members</strong> page (<strong>Create link</strong>); a link works for 14 days. A club can have several admins."
+      },
+      "map": {
+        "title": "Upload the map (admins)",
+        "body": "On <strong>Maps</strong>, upload the club’s OCAD file (OCAD 10, 11, 12 or 2018) or a PDF of the map. A PDF does not say its scale, so give the scale it is drawn at. Processing takes a minute or two. When the map is updated, upload the new file as a new version of the same map: events can then move to it with their controls kept in place."
+      },
+      "event": {
+        "title": "Create an event",
+        "body": "On <strong>Events</strong>, give the training a name and choose the map. An event is seen by the person who made it, the club’s admins and whoever they invite with <strong>Invite</strong> in the editor."
+      },
+      "courses": {
+        "title": "Set the courses",
+        "body": "Choose <strong>New course</strong>, then <strong>Start</strong>, <strong>Control</strong> or <strong>Finish</strong> in the tool bar and click on the map. Controls are shared between courses: click a control that is already there to use it in this course too. Drag to move things; Ctrl+Z undoes. Fill in the control descriptions on the <strong>Descriptions</strong> tab, and add crossing points, marked routes and out-of-bounds areas from the tool bar. The print scale and the description size are chosen when printing. Everything is saved as you go."
+      },
+      "print": {
+        "title": "Print",
+        "body": "Choose <strong>Print</strong>. Drag the page over the map to choose what is printed, and the description sheet to a free spot; choose paper, orientation, scale and description size. Tick the courses to print, and <strong>All controls</strong> for whoever puts out the controls, then <strong>Make PDF</strong>. The PDF is ready to download in a few seconds to a minute."
+      },
+      "printTip": "Print the PDF at actual size (100 %). “Fit to page” or “shrink to fit” in the print dialog makes the map smaller, and then the scale is wrong.",
+      "livelox": {
+        "title": "Show the routes in Livelox",
+        "body": "Download the course data as IOF XML from the print view and upload it to Livelox. See <livelox>how to put a training on Livelox</livelox>."
+      },
+      "account": "You can download what is stored about you, or delete your account, on <strong>Your account</strong> in the menu under your picture."
+    },
+    "signIn": "Sign in",
+    "back": "Back to Course setter"
   },
   "account": {
     "heading": "Your account",
