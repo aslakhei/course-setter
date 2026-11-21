@@ -15,6 +15,11 @@ import {
 } from '@course-setter/core'
 import type { TFunction } from 'i18next'
 
+/** Print scales to choose from (a course on another scale keeps it as a choice). */
+export const PRINT_SCALES = [4000, 5000, 7500, 10000, 15000] as const
+/** Description sheet cell sizes in mm (IOF: 5 to 7). */
+export const CELL_SIZES = [5, 5.5, 6, 6.5, 7] as const
+
 /** "A4 landscape" */
 export const formatPaper = (paper: Paper, orientation: Orientation, t: TFunction) => t(`print.paperName.${orientation}`, { paper })
 

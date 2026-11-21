@@ -168,4 +168,21 @@ test('the print view: place the page and the description sheet, keep them, and d
   await page.getByRole('button', { name: 'Back to editing' }).click()
   await expect(page.getByTestId('editor-map')).toBeVisible()
   await expect(page).not.toHaveURL(/view=print/)
+
+  // Scale and description size are chosen on the page. Leaving the event straight after a change saves
+  // it, and opening the event again starts from it, without a conflict.
+  await page.getByRole('button', { name: 'Print', exact: true }).click()
+  await toolbar.getByRole('combobox', { name: 'Scale' }).selectOption('10000')
+  await toolbar.getByRole('combobox', { name: 'Descriptions' }).selectOption('7')
+  await page.getByRole('link', { name: 'Events', exact: true }).click()
+  await page.getByRole('link', { name: 'Tuesday training' }).first().click()
+  await page.getByRole('button', { name: 'Print', exact: true }).click()
+  await expect(page.getByTestId('print-page-label')).toHaveText(/^H21 · A3 landscape · 1:10\s000$/)
+  await expect(toolbar.getByRole('combobox', { name: 'Descriptions' })).toHaveValue('7')
+  const { data } = await admin.from('events').select('doc').eq('club_id', clubId).single()
+  const saved = data?.doc as EventDoc | undefined
+  expect(saved?.courses.find(c => c.name === 'H21')).toMatchObject({ printScale: 10000, descriptionCellSize: 7 })
+  await toolbar.getByRole('combobox', { name: 'Descriptions' }).selectOption('6.5')
+  await waitChangeSaved(page)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
 })
