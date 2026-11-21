@@ -1,5 +1,7 @@
 import {
+  ALL_CONTROLS,
   addCourse,
+  allControlsCourse,
   type Course,
   changePaper,
   changePrintSize,
@@ -17,6 +19,7 @@ import {
   setPrintSettings,
   setRoute,
   setSpecialPoints,
+  showDescriptions,
   transformBetween,
 } from '@course-setter/core'
 import { useQueryClient } from '@tanstack/react-query'
@@ -117,7 +120,11 @@ function Editor({
   // The print view (?view=print): a course's page on the map, and making PDFs. It shows the course being
   // edited, or the first one.
   const [params, setParams] = useSearchParams()
-  const printCourse = course ?? doc.courses[0] ?? null
+  // In the all-controls view, the page of every control (for setting them out).
+  const allPage = useMemo(() => allControlsCourse(doc), [doc])
+  const hasControls = doc.controls.length > 0
+  const printCourse = course ?? (hasControls ? allPage : (doc.courses[0] ?? null))
+  const printPages = useMemo(() => [...doc.courses, ...(hasControls ? [allPage] : [])], [doc.courses, hasControls, allPage])
   const grid = version.tiles as NonNullable<typeof version.tiles>
   // An empty course's page is centred on the map, as the worker does.
   const settingsOf = useCallback(
@@ -129,11 +136,16 @@ function Editor({
   )
   // Worked out once per change: the defaults of a course without its own settings are a new object each time.
   const printSettings = useMemo(() => (printCourse ? settingsOf(printCourse) : null), [printCourse, settingsOf])
+  // The IOF XML file: positions in mm on the map, at the map's scale.
+  const courseData = useMemo(
+    () => ({ eventName: event.name, date: event.date, mapScale, extent: grid.extent }),
+    [event.name, event.date, mapScale, grid],
+  )
   const printing = params.get('view') === 'print' && printCourse !== null && printSettings !== null
   const setPrint = (c: Course, settings: PrintSettings | null) => edit(setPrintSettings(doc, c.id, settings))
   const openPrint = () => {
     dispatch({ type: 'tool', tool: 'select' })
-    if (!course && printCourse) dispatch({ type: 'course', courseId: printCourse.id })
+    if (!course && printCourse && printCourse.id !== ALL_CONTROLS) dispatch({ type: 'course', courseId: printCourse.id })
     setParams({ view: 'print' })
   }
 
@@ -296,7 +308,7 @@ function Editor({
           <span className="grow" />
           <SaveState status={autosave.status} savedAt={autosave.savedAt} />
           {!printing && (
-            <Button onClick={openPrint} disabled={doc.courses.length === 0}>
+            <Button onClick={openPrint} disabled={printCourse === null}>
               {t('print.open')}
             </Button>
           )}
@@ -304,7 +316,7 @@ function Editor({
         </div>
         {printing ? (
           <PrintToolbar
-            doc={doc}
+            pages={printPages}
             course={printCourse}
             settings={printSettings}
             onCourse={courseId => dispatch({ type: 'course', courseId })}
@@ -313,6 +325,7 @@ function Editor({
             }
             onScale={printScale => edit(changePrintSize(doc, printCourse.id, event.name, { printScale }))}
             onCellSize={descriptionCellSize => edit(changePrintSize(doc, printCourse.id, event.name, { descriptionCellSize }))}
+            onDescriptions={show => setPrint(printCourse, showDescriptions(doc, printCourse, event.name, printSettings, show))}
             onReset={() => setPrint(printCourse, null)}
             onBack={() => setParams({})}
           />
@@ -369,9 +382,11 @@ function Editor({
           <PrintPanel
             eventId={event.id}
             doc={doc}
+            pages={printPages}
             shown={printCourse}
             saveStatus={autosave.status}
             settingsOf={settingsOf}
+            courseData={courseData}
             onShow={courseId => dispatch({ type: 'course', courseId })}
           />
         ) : (

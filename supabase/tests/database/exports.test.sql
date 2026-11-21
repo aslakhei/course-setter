@@ -40,11 +40,12 @@ select results_eq(
 );
 select throws_ok($$ select public.request_export(pg_temp.event(), array['Z']) $$, '22023', null, 'only courses of the event');
 select throws_ok($$ select public.request_export(pg_temp.event(), array[]::text[]) $$, '22023', null, 'at least one course');
+select throws_ok($$ select public.request_export(pg_temp.event(), array['all']) $$, '22023', null, 'no all-controls page without controls');
 select throws_ok($$ insert into public.exports (event_id, club_id, revision, course_ids) values (pg_temp.event(), current_setting('test.club')::uuid, 1, array['A']) $$, '42501', null, 'exports are only made through request_export');
 reset role;
 select results_eq(
-  $$ select type, payload ->> 'export_id' from public.jobs where type = 'export_pdf' $$,
-  $$ values ('export_pdf', current_setting('test.export')) $$,
+  $$ select type from public.jobs where payload ->> 'export_id' = current_setting('test.export') $$,
+  $$ values ('export_pdf') $$,
   'an export_pdf job is queued'
 );
 
@@ -82,6 +83,12 @@ reset role;
 update public.exports set expires_at = now() - interval '1 minute' where id = current_setting('test.export')::uuid;
 select pg_temp.sign_in(2);
 select is_empty($$ select * from storage.objects where bucket_id = 'exports' $$, 'an expired export can no longer be downloaded');
+reset role;
+
+-- The all-controls page, once the event has controls.
+select pg_temp.sign_in(2);
+select public.save_event(pg_temp.event(), '{"schemaVersion": 1, "controls": [{"id": "c", "kind": "control", "code": 31, "position": [0, 0]}], "courses": [{"id": "A"}]}', 2);
+select lives_ok($$ select public.request_export(pg_temp.event(), array['A', 'all']) $$, 'a course and the all-controls page');
 reset role;
 
 -- Losing access to the event hides the export.

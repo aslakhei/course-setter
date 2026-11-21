@@ -1,6 +1,7 @@
 // Printing courses on real map files, rendered with mupdf and measured: the course lines up with the map
 // and is at scale, PDF maps stay vector, OCAD maps come out as an image of the print area.
 import {
+  ALL_CONTROLS,
   addControl,
   addCourse,
   courseById,
@@ -20,7 +21,7 @@ import { describe, expect, it } from 'vitest'
 import { loadOcad } from '../maps/ocad.ts'
 import { PT_PER_MM } from '../maps/source.ts'
 import { fixture } from '../maps/test-helpers.ts'
-import { makeExport, ocadRegion, safeName } from './render.ts'
+import { makeExport, ocadRegion } from './render.ts'
 
 const PX_PER_MM = 8
 
@@ -146,6 +147,31 @@ describe('printing on a PDF map', () => {
     expect(Object.keys(files).sort()).toEqual(['Course K.pdf', 'Course L.pdf'])
     expect((await PDFDocument.load(files['Course L.pdf'] as Uint8Array)).getPageCount()).toBe(1)
   })
+
+  it('prints the all-controls page: every control, also those in no course', async () => {
+    let doc = addControl(dotEvent(), { id: 'c', kind: 'control', position: [1500, 1500] })
+    const settings = { paper: 'A4' as const, orientation: 'landscape' as const, center: [1500, 1000] as Point, margin: 5, layout: [] }
+    doc = setPrintSettings(doc, ALL_CONTROLS, settings)
+    const file = await makeExport({
+      doc,
+      eventName: 'Night',
+      courseIds: [ALL_CONTROLS],
+      separate: false,
+      map: { kind: 'pdf', scale: 10000, file: await dotMap() },
+    })
+    expect(file.fileName).toBe('Night - All controls.pdf')
+    // At 1:10 000 on A4 landscape, the page centre (148.5, 105) mm is 1500, 1000 m on the ground.
+    const raster = rasterise(file.bytes)
+    for (const [x, y] of [
+      [1000, 1000],
+      [2000, 1000],
+      [1500, 1500],
+    ] as Point[]) {
+      const at: Point = [148.5 + (x - 1500) / 10, 105 + (y - 1000) / 10]
+      const ring = centroid(raster, at[0], at[1], 4.3, isPurple)
+      expect(Math.hypot(ring[0] - at[0], ring[1] - at[1])).toBeLessThan(0.3)
+    }
+  })
 })
 
 describe('printing on an OCAD map', () => {
@@ -249,12 +275,5 @@ describe('ocadRegion', () => {
     const huge = { origin: [0, 10000] as Point, widthMm: 2000, heightMm: 2000, scale: 10000 }
     const r = ocadRegion(huge, { minX: 0, maxX: 4200, minY: 5800, maxY: 10000 }, 10000, 600)
     expect((r?.width ?? 0) * (r?.height ?? 0)).toBeLessThanOrEqual(50_500_000)
-  })
-})
-
-describe('safeName', () => {
-  it('keeps names readable and safe as file names', () => {
-    expect(safeName('H21: long/short')).toBe('H21- long-short')
-    expect(safeName('  ')).toBe('course')
   })
 })

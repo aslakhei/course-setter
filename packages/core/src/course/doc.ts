@@ -150,6 +150,22 @@ const course = z.object({
 
 export const DEFAULT_CELL_SIZE = 6
 
+/**
+ * The page of every control with its code (for setting out the controls), printed like a course: its
+ * id stands among course ids wherever a course is printed, and courseById gives it as a course.
+ */
+export const ALL_CONTROLS = 'all'
+export const ALL_CONTROLS_NAME = 'All controls'
+const DEFAULT_PRINT_SCALE = 10000
+
+/** How the all-controls page is printed, as on a course (absent fields: the defaults). */
+const allControls = z.object({
+  /** Absent: the first course's print scale. */
+  printScale: z.number().int().min(500).max(100000).optional(),
+  descriptionCellSize: z.number().min(5).max(7).optional(),
+  print: printSettings.optional(),
+})
+
 export const eventDocSchema = z
   .object({
     schemaVersion: z.literal(SCHEMA_VERSION),
@@ -157,6 +173,7 @@ export const eventDocSchema = z
     controls: z.array(control),
     courses: z.array(course),
     specials: z.array(special).default([]),
+    allControls: allControls.optional(),
   })
   .superRefine((doc, ctx) => {
     const ids = new Set<string>()
@@ -177,6 +194,7 @@ export const eventDocSchema = z
     })
     const courseIds = new Set<string>()
     doc.courses.forEach((c, i) => {
+      if (c.id === ALL_CONTROLS) ctx.addIssue({ code: 'custom', path: ['courses', i, 'id'], message: `${ALL_CONTROLS} is not a course id` })
       if (courseIds.has(c.id)) ctx.addIssue({ code: 'custom', path: ['courses', i, 'id'], message: `duplicate course id ${c.id}` })
       courseIds.add(c.id)
       c.controls.forEach((id, j) => {
@@ -201,6 +219,7 @@ export type Description = z.infer<typeof description>
 export type Special = z.infer<typeof special>
 export type PrintSettings = z.infer<typeof printSettings>
 export type LayoutElement = z.infer<typeof layoutElement>
+export type AllControls = z.infer<typeof allControls>
 export type EventDoc = z.infer<typeof eventDocSchema>
 
 /** Where the course arrives at a stop: a marked route's first point, otherwise its position. */
@@ -302,12 +321,29 @@ export function specialById(doc: EventDoc, id: string): Special {
   return found
 }
 
-/** Whether a special symbol shows on a course (null: the all-controls view, which shows every one). */
+/** Whether a special symbol shows on a course (null or ALL_CONTROLS: the all-controls view, which shows every one). */
 export function specialShownOn(special: Special, courseId: string | null): boolean {
-  return courseId === null || !special.courses || special.courses.includes(courseId)
+  return courseId === null || courseId === ALL_CONTROLS || !special.courses || special.courses.includes(courseId)
 }
 
+/** The all-controls page as a course: no stops of its own (it draws every control), printed as set in doc.allControls. */
+export function allControlsCourse(doc: EventDoc): Course {
+  const { printScale, descriptionCellSize, print } = doc.allControls ?? {}
+  return {
+    id: ALL_CONTROLS,
+    name: ALL_CONTROLS_NAME,
+    controls: [],
+    printScale: printScale ?? doc.courses[0]?.printScale ?? DEFAULT_PRINT_SCALE,
+    bends: {},
+    numberPositions: {},
+    ...(descriptionCellSize !== undefined ? { descriptionCellSize } : {}),
+    ...(print ? { print } : {}),
+  }
+}
+
+/** A course, or with ALL_CONTROLS the all-controls page. */
 export function courseById(doc: EventDoc, id: string): Course {
+  if (id === ALL_CONTROLS) return allControlsCourse(doc)
   const found = doc.courses.find(c => c.id === id)
   if (!found) throw new CourseError('unknown_course', `No course ${id}`)
   return found

@@ -10,6 +10,7 @@ import { ClubMembersPage } from './pages/ClubMembersPage.tsx'
 import { ClubOverviewPage } from './pages/ClubOverviewPage.tsx'
 import { ClubSettingsPage } from './pages/ClubSimplePages.tsx'
 import { ClubsPage } from './pages/ClubsPage.tsx'
+import { LiveloxHelpPage } from './pages/HelpPage.tsx'
 import { InvitePage } from './pages/InvitePage.tsx'
 
 // The map page brings OpenLayers; load it only when a map is opened.
@@ -55,6 +56,7 @@ export function App() {
           <Route path="members" element={<ClubMembersPage />} />
           <Route path="settings" element={<ClubSettingsPage />} />
         </Route>
+        <Route path="help/livelox" element={<LiveloxHelpPage />} />
         <Route path="*" element={<NotFound />} />
       </Route>
       <Route path="invite/:token" element={<InvitePage />} />

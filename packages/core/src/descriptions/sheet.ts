@@ -1,7 +1,7 @@
 // The control description sheet of a course (IOF Control Descriptions 2024, symbols only): which rows it
 // has, and the rows drawn as primitives in paper mm. Line widths, the thick lines and the text sizes
 // follow the IOF specification as Purple Pen draws it (DescriptionRenderer.cs).
-import { type Course, controlById, type Description, type EventDoc } from '../course/doc.ts'
+import { ALL_CONTROLS, ALL_CONTROLS_NAME, type Course, controlById, type Description, type EventDoc } from '../course/doc.ts'
 import { courseLength, legLengths, routeLength } from '../course/length.ts'
 import { courseStops } from '../course/numbering.ts'
 import { clearance, symbolSizes } from '../course/symbols.ts'
@@ -39,6 +39,7 @@ const TOUCH_MM = 1.0
  * last control, otherwise 14.2. Distances are rounded to 10 m.
  */
 export function descriptionSheet(doc: EventDoc, course: Course, title: string): SheetLine[] {
+  if (course.id === ALL_CONTROLS) return allControlsSheet(doc, title)
   const climb = course.climb == null ? null : `${Math.round(course.climb / 5) * 5} m`
   const lines: SheetLine[] = [
     { kind: 'title', text: title },
@@ -95,6 +96,26 @@ export function descriptionSheet(doc: EventDoc, course: Course, title: string): 
     }
   })
   return lines
+}
+
+/** The all-controls page's sheet: every start, then every control by code, each with its description. */
+export function allControlsSheet(doc: EventDoc, title: string): SheetLine[] {
+  const starts = doc.controls.filter(c => c.kind === 'start')
+  const controls = doc.controls.filter(c => c.kind === 'control').sort((a, b) => (a.code ?? 0) - (b.code ?? 0))
+  return [
+    { kind: 'title', text: title },
+    { kind: 'header', name: ALL_CONTROLS_NAME, length: '', climb: null },
+    ...[...starts, ...controls].map(
+      (c): SheetLine => ({
+        kind: 'control',
+        controlId: c.id,
+        start: c.kind === 'start',
+        number: '',
+        code: c.code === null ? '' : String(c.code),
+        cells: c.description ?? {},
+      }),
+    ),
+  ]
 }
 
 /** Line widths and text sizes as fractions of the cell size. */

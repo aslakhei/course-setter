@@ -151,18 +151,44 @@ test('the print view: place the page and the description sheet, keep them, and d
   await waitChangeSaved(page)
   expect((await savedPrint(clubId, 'H21'))?.layout).toEqual(moved.layout)
 
-  // One PDF with both courses.
+  // One PDF with both courses and the page of every control.
   const panel = page.getByRole('complementary', { name: 'Print' })
   await panel.getByRole('checkbox', { name: /^D16/ }).check()
-  await expect(panel.getByText('2 of 2 courses')).toBeVisible()
-  await panel.getByRole('button', { name: 'Make PDF of 2 courses' }).click()
-  await expect(panel.getByText('Making a PDF of H21, D16…')).toBeVisible()
+  await panel.getByRole('checkbox', { name: /^All controls/ }).check()
+  await expect(panel.getByText('3 of 3 selected')).toBeVisible()
+  await panel.getByRole('button', { name: 'Make PDF of 3 pages' }).click()
+  await expect(panel.getByText('Making a PDF of H21, D16, All controls…')).toBeVisible()
   const download = panel.getByRole('button', { name: 'Download Tuesday training.pdf' })
   await expect(download).toBeVisible({ timeout: 90_000 })
   const [file] = await Promise.all([page.waitForEvent('download'), download.click()])
   expect(file.suggestedFilename()).toBe('Tuesday training.pdf')
   const bytes = readFileSync(await file.path())
   expect(bytes.subarray(0, 5).toString()).toBe('%PDF-')
+
+  // The course data as IOF XML, made in the browser, and the Livelox how-to.
+  const [xmlFile] = await Promise.all([page.waitForEvent('download'), panel.getByRole('button', { name: 'Download IOF XML' }).click()])
+  expect(xmlFile.suggestedFilename()).toBe('Tuesday training.xml')
+  const xml = readFileSync(await xmlFile.path(), 'utf8')
+  expect(xml).toContain('<CourseData xmlns="http://www.orienteering.org/datastandard/3.0" iofVersion="3.0"')
+  expect([...xml.matchAll(/<Course>\s*<Name>([^<]+)<\/Name>/g)].map(m => m[1])).toEqual(['H21', 'D16'])
+  // D16 has no finish yet, but a start and a control are two stops: it is in the file.
+  await expect(panel.getByText(/^Left out/)).toHaveCount(0)
+  const [help] = await Promise.all([
+    page.waitForEvent('popup'),
+    panel.getByRole('link', { name: 'How to put a training on Livelox' }).click(),
+  ])
+  await expect(help.getByRole('heading', { name: 'Put a training on Livelox' })).toBeVisible()
+  await help.close()
+
+  // The page of every control: chosen like a course, its sheet can be left off, and it is kept in the event.
+  const pageOf = toolbar.getByRole('combobox', { name: 'Page of' })
+  await pageOf.selectOption({ label: 'All controls' })
+  await expect(page.getByTestId('print-page-label')).toHaveText(/^All controls · /)
+  await toolbar.getByRole('checkbox', { name: 'Description sheet' }).uncheck()
+  await waitChangeSaved(page)
+  const { data: withAll } = await admin.from('events').select('doc').eq('club_id', clubId).single()
+  expect((withAll?.doc as EventDoc | undefined)?.allControls?.print?.layout).toEqual([])
+  await pageOf.selectOption({ label: 'H21' })
 
   // Back to editing.
   await page.getByRole('button', { name: 'Back to editing' }).click()

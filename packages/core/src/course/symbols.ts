@@ -8,7 +8,7 @@
 // far course lines stop short of a crossing point), the values are taken from the specifications'
 // drawings and match Purple Pen.
 import type { Primitive } from '../render/primitives.ts'
-import { type Course, controlById, type EventDoc, entryPoint, exitPoint, legKey, type Point, type Standard } from './doc.ts'
+import { ALL_CONTROLS, type Course, controlById, type EventDoc, entryPoint, exitPoint, legKey, type Point, type Standard } from './doc.ts'
 import { courseStops } from './numbering.ts'
 
 export type { Primitive, PrimitiveRole } from '../render/primitives.ts'
@@ -252,6 +252,7 @@ function numberPosition(center: Point, legDirections: Point[], s: SymbolSizes, t
 
 /** All symbols of one course, in print paper mm at the course's print scale. */
 export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
+  if (course.id === ALL_CONTROLS) return allControlsDrawing(doc, course.printScale)
   const s = symbolSizes(doc.standard, course.printScale)
   const stops = courseStops(doc, course)
   const paper = (p: Point) => toPaperMm(p, course.printScale)

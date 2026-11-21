@@ -23,6 +23,10 @@ export {
   updateCourse,
 } from './course/commands.ts'
 export {
+  ALL_CONTROLS,
+  ALL_CONTROLS_NAME,
+  type AllControls,
+  allControlsCourse,
   BOUNDARY_STYLES,
   type BoundaryStyle,
   CONTROL_KINDS,
@@ -81,6 +85,7 @@ export {
   toPaperMm,
 } from './course/symbols.ts'
 export {
+  allControlsSheet,
   CROSSING_DIRECTIVE,
   descriptionSheet,
   drawDescriptionSheet,
@@ -105,6 +110,8 @@ export {
   drawDescriptionSymbol,
   SYMBOL_BOX_UNITS,
 } from './descriptions/symbols.ts'
+export { safeFileName } from './files.ts'
+export { type CourseData, type CourseDataOptions, courseDataXml } from './iof/xml.ts'
 export {
   changePaper,
   changePrintSize,
@@ -120,6 +127,7 @@ export {
   placeDescriptions,
   printPage,
   printSettingsOf,
+  showDescriptions,
 } from './print/layout.ts'
 export { type CanvasOptions, type CanvasTarget, type DeviceTransform, drawPrimitives, paperToDevice } from './render/canvas.ts'
 export {

@@ -337,6 +337,9 @@ importers:
       mupdf:
         specifier: ^1.28.6
         version: 1.28.6
+      xmllint-wasm:
+        specifier: 5.3.0
+        version: 5.3.0(@types/node@26.6.6)
 
   spikes:
     dependencies:
@@ -2431,6 +2434,12 @@ packages:
     resolution: {integrity: sha512-iAcin401y58LckRZ0TkI4k0VSM1Qg0KGSc3i8rU+xrxe19A/BN1zHyVSJY7uoutVlaTSzYyk/v5AmkewAP7jtg==}
     engines: {node: '>=10.0.0'}
 
+  xmllint-wasm@5.3.0:
+    resolution: {integrity: sha512-sEgRXdf2t13eYCFCURmCE6h2hwleEOIS9VL/jOh9JJJnez2YXIooi2Ghm05/JZEPXyPawN8sMASPVZlmh8Sd6A==}
+    engines: {node: '>=16'}
+    peerDependencies:
+      '@types/node': '>=16'
+
   youch-core@0.3.3:
     resolution: {integrity: sha512-ho7XuGjLaJ2hWHoK8yFnsUGy2Y5uDpqSTq1FkHLK4/oqKtyUU1AFbOOxY4IpC9f0fTLjwYbslUz0Po5BpD1wrA==}
 
@@ -3520,7 +3529,6 @@ snapshots:
       '@napi-rs/canvas': 1.1.1
     transitivePeerDependencies:
       - '@noble/hashes'
-    optional: true
 
   jsdom@31.0.1(@noble/hashes@1.8.0):
     dependencies:
@@ -4113,6 +4121,10 @@ snapshots:
   xmlchars@2.2.0: {}
 
   xmldom@0.6.0: {}
+
+  xmllint-wasm@5.3.0(@types/node@26.6.6):
+    dependencies:
+      '@types/node': 26.6.6
 
   youch-core@0.3.3:
     dependencies:

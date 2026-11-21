@@ -1,7 +1,10 @@
 // The print view's toolbar (which course's page is shown, paper, orientation) and panel (which courses
 // to print, one PDF or one per course, making the PDF and downloading recent ones).
 import {
+  ALL_CONTROLS,
   type Course,
+  type CourseDataOptions,
+  courseDataXml,
   courseLength,
   DEFAULT_CELL_SIZE,
   type EventDoc,
@@ -10,9 +13,11 @@ import {
   PAPERS,
   type Paper,
   type PrintSettings,
+  safeFileName,
 } from '@course-setter/core'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
 import { downloadUrl, type ExportSummary, isPending, useExports, useRequestExport } from '../lib/exports.ts'
 import { formatScale } from '../lib/format.ts'
@@ -52,23 +57,26 @@ function Segmented<T extends string>({
 }
 
 export function PrintToolbar({
-  doc,
+  pages,
   course,
   settings,
   onCourse,
   onPaper,
   onScale,
   onCellSize,
+  onDescriptions,
   onReset,
   onBack,
 }: {
-  doc: EventDoc
+  /** The courses, and the all-controls page when there are controls. */
+  pages: Course[]
   course: Course
   settings: PrintSettings
   onCourse: (courseId: string) => void
   onPaper: (paper: Paper, orientation: Orientation) => void
   onScale: (scale: number) => void
   onCellSize: (size: number) => void
+  onDescriptions: (show: boolean) => void
   onReset: () => void
   onBack: () => void
 }) {
@@ -93,7 +101,7 @@ export function PrintToolbar({
         {t('print.pageOf')}
       </label>
       <select id="print-course" className={fieldClass} value={course.id} onChange={e => onCourse(e.target.value)}>
-        {doc.courses.map(c => (
+        {pages.map(c => (
           <option key={c.id} value={c.id}>
             {c.name}
           </option>
@@ -147,6 +155,15 @@ export function PrintToolbar({
           </option>
         ))}
       </select>
+      <label className="flex items-center gap-1.5 text-[13px]">
+        <input
+          type="checkbox"
+          className="size-4 accent-brand-600"
+          checked={settings.layout.some(e => e.kind === 'descriptions')}
+          onChange={e => onDescriptions(e.target.checked)}
+        />
+        {t('print.descriptions')}
+      </label>
       <Button size="sm" onClick={onReset} disabled={!course.print} title={t('print.resetHelp')}>
         {t('print.reset')}
       </Button>
@@ -161,13 +178,19 @@ const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '
 export function PrintPanel({
   eventId,
   doc,
+  pages,
   shown,
   saveStatus,
   settingsOf,
+  courseData,
   onShow,
 }: {
   eventId: string
   doc: EventDoc
+  /** The courses, and the all-controls page when there are controls. */
+  pages: Course[]
+  /** What the IOF XML file needs besides the courses. */
+  courseData: Omit<CourseDataOptions, 'createTime' | 'creator'>
   /** The course whose page is on the map. */
   shown: Course
   saveStatus: SaveStatus
@@ -181,9 +204,14 @@ export function PrintPanel({
   const exports = useExports(eventId)
   const request = useRequestExport(eventId)
   const [downloadError, setDownloadError] = useState(false)
+  const leftOut = useMemo(() => courseDataXml(doc, courseData).skipped, [doc, courseData])
+  const downloadXml = () => {
+    const { xml } = courseDataXml(doc, courseData)
+    saveFile(`${safeFileName(courseData.eventName)}.xml`, new Blob([xml], { type: 'application/xml' }))
+  }
 
   // In the event's order; courses deleted meanwhile drop out.
-  const courseIds = doc.courses.filter(c => chosen.has(c.id)).map(c => c.id)
+  const courseIds = pages.filter(c => chosen.has(c.id)).map(c => c.id)
   const toggle = (id: string) =>
     setChosen(old => {
       const next = new Set(old)
@@ -192,7 +220,7 @@ export function PrintPanel({
     })
   const names = (ids: string[]) =>
     ids
-      .map(id => doc.courses.find(c => c.id === id)?.name)
+      .map(id => pages.find(c => c.id === id)?.name)
       .filter(Boolean)
       .join(', ')
 
@@ -214,10 +242,10 @@ export function PrintPanel({
     >
       <div className="flex items-baseline gap-2 px-3 pt-3 pb-2">
         <h2 className="m-0 text-[15px] font-semibold">{t('print.panel')}</h2>
-        <span className="text-xs text-muted">{t('print.selected', { count: courseIds.length, total: doc.courses.length })}</span>
+        <span className="text-xs text-muted">{t('print.selected', { count: courseIds.length, total: pages.length })}</span>
       </div>
       <ul className="m-0 list-none p-0">
-        {doc.courses.map(c => {
+        {pages.map(c => {
           const s = settingsOf(c)
           const isShown = c.id === shown.id
           return (
@@ -232,11 +260,17 @@ export function PrintPanel({
               <label htmlFor={`print-${c.id}`} className="flex grow flex-col text-[13px]">
                 <span className={isShown ? 'font-semibold' : ''}>{c.name}</span>
                 <span className="text-xs text-muted">
-                  {t('print.summary', {
-                    paper: formatPaper(s.paper, s.orientation, t),
-                    scale: formatScale(c.printScale),
-                    length: formatKm(courseLength(doc, c)),
-                  })}
+                  {c.id === ALL_CONTROLS
+                    ? t('print.summaryAll', {
+                        paper: formatPaper(s.paper, s.orientation, t),
+                        scale: formatScale(c.printScale),
+                        count: doc.controls.filter(x => x.kind === 'control').length,
+                      })
+                    : t('print.summary', {
+                        paper: formatPaper(s.paper, s.orientation, t),
+                        scale: formatScale(c.printScale),
+                        length: formatKm(courseLength(doc, c)),
+                      })}
                 </span>
               </label>
               {isShown ? (
@@ -284,6 +318,17 @@ export function PrintPanel({
         ) : null}
         {request.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
       </div>
+      <section aria-labelledby="course-data-heading" className="flex flex-col items-start gap-1.5 border-t border-line px-3 py-3">
+        <h3 id="course-data-heading" className="m-0 text-[13px] font-semibold">
+          {t('print.courseData')}
+        </h3>
+        <span className="text-xs text-muted">{t('print.courseDataHelp')}</span>
+        <Button onClick={downloadXml}>{t('print.downloadXml')}</Button>
+        {leftOut.length > 0 && <span className="text-xs text-muted">{t('print.leftOut', { courses: leftOut.join(', ') })}</span>}
+        <Link to="/help/livelox" target="_blank" className="text-[13px]">
+          {t('print.liveloxHelp')}
+        </Link>
+      </section>
       <section aria-label={t('print.recent')} className="mt-auto flex flex-col gap-2 border-t border-line px-3 py-2.5">
         <h3 className="m-0 text-xs font-normal text-muted">{t('print.recent')}</h3>
         {exports.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
@@ -325,4 +370,14 @@ export function PrintPanel({
       </section>
     </aside>
   )
+}
+
+/** Hand the browser a file to save. */
+function saveFile(name: string, blob: Blob) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
