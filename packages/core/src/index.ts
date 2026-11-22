@@ -129,10 +129,19 @@ export {
   printSettingsOf,
   showDescriptions,
 } from './print/layout.ts'
-export { type CanvasOptions, type CanvasTarget, type DeviceTransform, drawPrimitives, paperToDevice } from './render/canvas.ts'
+export {
+  type CanvasOptions,
+  type CanvasTarget,
+  type DeviceTransform,
+  drawPrimitives,
+  paperToDevice,
+  setTextLineFont,
+  withoutLigatures,
+} from './render/canvas.ts'
 export {
   ARIAL_DIGIT_HEIGHT,
   type Bounds,
+  isColor,
   type LineCap,
   type LineJoin,
   MITER_LIMIT,
@@ -162,6 +171,19 @@ export {
   scaleOf,
   type VersionFrame,
 } from './similarity.ts'
+export { FONT_FEATURES, FONT_IDS, FONTS, type FontFile, type FontId } from './text/fonts.ts'
+export {
+  breakLines,
+  DEFAULT_LINE_HEIGHT,
+  fontExtent,
+  layoutText,
+  MM_PER_PT,
+  type TextAlign,
+  type TextBlock,
+  type TextLayout,
+  textPrimitives,
+  textWidth,
+} from './text/lines.ts'
 export {
   type Extent,
   FINEST_PAPER_MM_PER_PX,

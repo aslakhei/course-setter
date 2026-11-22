@@ -2,13 +2,20 @@
 // symbols are all built from these, and every backend (Canvas 2D in the editor, pdf-lib for print) draws
 // the same list, so what the setter sees is what gets printed.
 import type { Point } from '../similarity.ts'
+import type { FontId } from '../text/fonts.ts'
+import { fontExtent, textWidth } from '../text/lines.ts'
 
 /**
- * What a primitive draws: a control's symbol, its number, a course line, or part of a control description.
- * `owner` is the control it belongs to (for highlighting and dragging in the editor).
+ * What a primitive draws: a control's symbol, its number, a course line, part of a control description,
+ * or something on the printed page around the map (a title, a logo, a frame). `owner` is the control or
+ * page element it belongs to (for highlighting and dragging in the editor).
  */
-export type PrimitiveRole = 'symbol' | 'number' | 'leg' | 'description' | 'special'
-type Tagged = { role: PrimitiveRole; owner?: string }
+export type PrimitiveRole = 'symbol' | 'number' | 'leg' | 'description' | 'special' | 'layout'
+/**
+ * `color` (#rrggbb) draws the primitive in its own colour instead of the one the backend is given (the
+ * course's purple, the description sheet's black); `opacity` (0–1, default 1) lets what is below show through.
+ */
+type Tagged = { role: PrimitiveRole; owner?: string; color?: string; opacity?: number }
 
 export type LineCap = 'butt' | 'round' | 'square'
 export type LineJoin = 'miter' | 'round' | 'bevel'
@@ -33,6 +40,16 @@ export type Primitive =
    * Text wider than `maxWidth` (mm) is drawn smaller, to 95 % of it, as Purple Pen does.
    */
   | ({ type: 'text'; at: Point; text: string; height: number; bold?: boolean; maxWidth?: number } & Tagged)
+  /**
+   * One line of text in a font of the fixed set, starting at `at` on its baseline, at font size `size` mm.
+   * Lines are broken and aligned by core (text/lines.ts), so a backend draws them as they are.
+   */
+  | ({ type: 'textLine'; at: Point; text: string; font: FontId; size: number } & Tagged)
+  /** An image (a club logo, a sponsor) stretched to fill `box`; the host gives the backend the image for `asset`. */
+  | ({ type: 'image'; box: Bounds; asset: string } & Tagged)
+
+/** Whether a string is a colour primitives take: #rrggbb. */
+export const isColor = (s: string): boolean => /^#[0-9a-f]{6}$/i.test(s)
 
 /** Height of a digit in Arial as a fraction of the font size (glyph "1": 1472 of 2048 units). */
 export const ARIAL_DIGIT_HEIGHT = 1472 / 2048
@@ -67,7 +84,14 @@ export function primitivesBounds(primitives: Primitive[]): Bounds | null {
     if (p.type === 'circle') add(p.center, p.radius + (p.filled ? 0 : p.lineWidth / 2))
     else if (p.type === 'polyline') for (const q of p.points) add(q, (p.lineWidth / 2) * (p.join === 'miter' || !p.join ? MITER_LIMIT : 1))
     else if (p.type === 'path') for (const q of pathPoints(p.commands)) add(q, p.filled ? 0 : (p.lineWidth / 2) * MITER_LIMIT)
-    else {
+    else if (p.type === 'textLine') {
+      const { ascent, descent } = fontExtent(p.font, p.size)
+      add([p.at[0], p.at[1] - descent], 0)
+      add([p.at[0] + textWidth(p.text, p.font, p.size), p.at[1] + ascent], 0)
+    } else if (p.type === 'image') {
+      add([p.box.minX, p.box.minY], 0)
+      add([p.box.maxX, p.box.maxY], 0)
+    } else {
       // Text: a generous box, the font size is digit height / 0.72 and digits are about 0.56 of it wide.
       const size = p.height / ARIAL_DIGIT_HEIGHT
       const half = Math.min(size * 0.6 * p.text.length, p.maxWidth ?? Number.POSITIVE_INFINITY) / 2
@@ -87,6 +111,11 @@ export function transformPrimitives(primitives: Primitive[], factor: number, [dx
     if (p.type === 'polyline') return { ...p, points: p.points.map(t), lineWidth: p.lineWidth * factor, ...dash(p.dash) }
     if (p.type === 'text')
       return { ...p, at: t(p.at), height: p.height * factor, ...(p.maxWidth !== undefined ? { maxWidth: p.maxWidth * factor } : {}) }
+    if (p.type === 'textLine') return { ...p, at: t(p.at), size: p.size * factor }
+    if (p.type === 'image') {
+      const [[minX, minY], [maxX, maxY]] = [t([p.box.minX, p.box.minY]), t([p.box.maxX, p.box.maxY])]
+      return { ...p, box: { minX, minY, maxX, maxY } }
+    }
     const commands = p.commands.map((c): PathCommand => {
       if (c[0] === 'Z') return c
       if (c[0] === 'C') {

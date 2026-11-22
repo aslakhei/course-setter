@@ -12,7 +12,10 @@ import {
   LineJoinStyle,
   lineTo,
   moveTo,
+  PDFEmbeddedPage,
   type PDFFont,
+  type PDFImage,
+  type PDFName,
   PDFOperator,
   PDFOperatorNames,
   type PDFPage,
@@ -21,6 +24,7 @@ import {
   rgb,
   setDashPattern,
   setFillingColor,
+  setGraphicsState,
   setLineCap,
   setLineJoin,
   setLineWidth,
@@ -28,6 +32,7 @@ import {
   stroke,
 } from 'pdf-lib'
 import type { Point } from '../similarity.ts'
+import type { FontId } from '../text/fonts.ts'
 import { ARIAL_DIGIT_HEIGHT, type LineCap, type LineJoin, MITER_LIMIT, type PathCommand, type Primitive } from './primitives.ts'
 
 export const PT_PER_MM = 72 / 25.4
@@ -44,6 +49,39 @@ export type PdfOptions = {
   boldFont?: PDFFont
   /** Digit height of `font` as a fraction of its size. */
   digitHeight?: number
+  /** Fonts for text lines, embedded with FONT_FEATURES (see text/fonts.ts); a line in a font not given throws. */
+  fonts?: Partial<Record<FontId, PDFFont>>
+  /** The embedded image (PNG, JPG) or PDF page for an image primitive's asset; null throws MissingAssetError. */
+  images?: (asset: string) => PDFImage | PDFEmbeddedPage | null
+}
+
+/** An image primitive whose asset the caller has no image for: a PDF never leaves a logo out silently. */
+export class MissingAssetError extends Error {
+  readonly code = 'missing_asset'
+  readonly asset: string
+  constructor(asset: string) {
+    super(`No image for asset ${asset}`)
+    this.asset = asset
+  }
+}
+
+/** A #rrggbb colour as a pdf-lib colour. */
+export function pdfColor(hex: string): Color {
+  const n = Number.parseInt(hex.slice(1), 16)
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
+
+/** One graphics state per page and opacity, shared by every primitive drawn with it. */
+const opacityStates = new WeakMap<PDFPage, Map<number, PDFName>>()
+function opacityState(page: PDFPage, opacity: number): PDFName {
+  const states = opacityStates.get(page) ?? new Map<number, PDFName>()
+  opacityStates.set(page, states)
+  let name = states.get(opacity)
+  if (!name) {
+    name = page.node.newExtGState('Opacity', page.doc.context.obj({ Type: 'ExtGState', ca: opacity, CA: opacity }))
+    states.set(opacity, name)
+  }
+  return name
 }
 
 /** `share` of a colour on white paper: CMYK and grey ink scaled down, RGB mixed with white. */
@@ -61,12 +99,13 @@ export function drawPrimitivesOnPage(page: PDFPage, primitives: Primitive[], opt
   const [ox, oy] = options.origin
   const x = (mm: number) => ox + mm * PT_PER_MM
   const y = (mm: number) => oy + mm * PT_PER_MM
-  const ops: PDFOperator[] = [
-    pushGraphicsState(),
-    setStrokingColor(options.color),
-    setFillingColor(options.color),
-    PDFOperator.of(PDFOperatorNames.SetLineMiterLimit, [asPDFNumber(MITER_LIMIT)]),
-  ]
+  let ops: PDFOperator[] = [pushGraphicsState(), PDFOperator.of(PDFOperatorNames.SetLineMiterLimit, [asPDFNumber(MITER_LIMIT)])]
+  // Text and images go through pdf-lib's own drawing calls: what is collected so far is written first,
+  // so everything is drawn in the order of the primitives.
+  const flush = () => {
+    page.pushOperators(...ops)
+    ops = []
+  }
   const trace = (commands: PathCommand[]) => {
     for (const c of commands) {
       if (c[0] === 'M') ops.push(moveTo(x(c[1]), y(c[2])))
@@ -98,48 +137,80 @@ export function drawPrimitivesOnPage(page: PDFPage, primitives: Primitive[], opt
       ['Z'],
     ]
   }
-  const texts: Extract<Primitive, { type: 'text' }>[] = []
+  // The colour last set for shapes (pdf-lib's text and image calls keep theirs to themselves).
+  let current: string | null = null
 
   for (const p of primitives) {
+    const color = p.color ? pdfColor(p.color) : options.color
+    const opacity = p.opacity ?? 1
+    const translucent = opacity < 1 ? { opacity } : {}
+
+    if (p.type === 'text') {
+      // Centred on the middle of the digits, as in the Canvas backend.
+      flush()
+      const font = p.bold ? (options.boldFont ?? options.font) : options.font
+      let digit = p.height * PT_PER_MM
+      let size = digit / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT)
+      let width = font.widthOfTextAtSize(p.text, size)
+      const max = p.maxWidth === undefined ? Number.POSITIVE_INFINITY : p.maxWidth * PT_PER_MM
+      if (width > max) {
+        const k = (max / width) * 0.95
+        digit *= k
+        size *= k
+        width *= k
+      }
+      page.drawText(p.text, { x: x(p.at[0]) - width / 2, y: y(p.at[1]) - digit / 2, size, font, color, ...translucent })
+      continue
+    }
+    if (p.type === 'textLine') {
+      const font = options.fonts?.[p.font]
+      if (!font) throw new Error(`No PDF font given for ${p.font}`)
+      flush()
+      page.drawText(p.text, { x: x(p.at[0]), y: y(p.at[1]), size: p.size * PT_PER_MM, font, color, ...translucent })
+      continue
+    }
+    if (p.type === 'image') {
+      const image = options.images?.(p.asset) ?? null
+      if (!image) throw new MissingAssetError(p.asset)
+      flush()
+      const box = {
+        x: x(p.box.minX),
+        y: y(p.box.minY),
+        width: (p.box.maxX - p.box.minX) * PT_PER_MM,
+        height: (p.box.maxY - p.box.minY) * PT_PER_MM,
+        ...translucent,
+      }
+      if (image instanceof PDFEmbeddedPage) page.drawPage(image, box)
+      else page.drawImage(image, box)
+      continue
+    }
+
+    const key = p.color ?? ''
+    if (key !== current) {
+      ops.push(setStrokingColor(color), setFillingColor(color))
+      current = key
+    }
+    if (opacity < 1) ops.push(pushGraphicsState(), setGraphicsState(opacityState(page, opacity)))
     if (p.type === 'circle') {
       trace(circle(p.center, p.radius))
       if (p.filled) ops.push(PDFOperator.of(PDFOperatorNames.FillNonZero))
       else strokeWith(p.lineWidth)
     } else if (p.type === 'polyline') {
       const [first, ...rest] = p.points
-      if (!first) continue
-      trace([['M', first[0], first[1]], ...rest.map((q): PathCommand => ['L', q[0], q[1]]), ...(p.closed ? [['Z'] as PathCommand] : [])])
-      strokeWith(p.lineWidth, p.cap, p.join, p.dash)
-    } else if (p.type === 'path') {
+      if (first) {
+        trace([['M', first[0], first[1]], ...rest.map((q): PathCommand => ['L', q[0], q[1]]), ...(p.closed ? [['Z'] as PathCommand] : [])])
+        strokeWith(p.lineWidth, p.cap, p.join, p.dash)
+      }
+    } else if (p.filled && p.tint !== undefined && p.tint < 1) {
       trace(p.commands)
-      if (p.filled && p.tint !== undefined && p.tint < 1) {
-        ops.push(
-          setFillingColor(tinted(options.color, p.tint)),
-          PDFOperator.of(PDFOperatorNames.FillEvenOdd),
-          setFillingColor(options.color),
-        )
-      } else if (p.filled) ops.push(PDFOperator.of(PDFOperatorNames.FillEvenOdd))
-      else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
+      ops.push(setFillingColor(tinted(color, p.tint)), PDFOperator.of(PDFOperatorNames.FillEvenOdd), setFillingColor(color))
     } else {
-      texts.push(p)
+      trace(p.commands)
+      if (p.filled) ops.push(PDFOperator.of(PDFOperatorNames.FillEvenOdd))
+      else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
     }
+    if (opacity < 1) ops.push(popGraphicsState())
   }
   ops.push(popGraphicsState())
-  page.pushOperators(...ops)
-
-  // Centred on the middle of the digits, as in the Canvas backend.
-  for (const t of texts) {
-    const font = t.bold ? (options.boldFont ?? options.font) : options.font
-    let digit = t.height * PT_PER_MM
-    let size = digit / (options.digitHeight ?? ARIAL_DIGIT_HEIGHT)
-    let width = font.widthOfTextAtSize(t.text, size)
-    const max = t.maxWidth === undefined ? Number.POSITIVE_INFINITY : t.maxWidth * PT_PER_MM
-    if (width > max) {
-      const k = (max / width) * 0.95
-      digit *= k
-      size *= k
-      width *= k
-    }
-    page.drawText(t.text, { x: x(t.at[0]) - width / 2, y: y(t.at[1]) - digit / 2, size, font, color: options.color })
-  }
+  flush()
 }

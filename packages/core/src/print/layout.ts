@@ -68,7 +68,19 @@ function sheetOf(doc: EventDoc, course: Course, title: string) {
 function covered(primitives: Primitive[], box: Bounds): number {
   let n = 0
   for (const p of primitives) {
-    const points = p.type === 'circle' ? [p.center] : p.type === 'text' ? [p.at] : p.type === 'polyline' ? p.points : pathPoints(p.commands)
+    const points: Point[] =
+      p.type === 'circle'
+        ? [p.center]
+        : p.type === 'text' || p.type === 'textLine'
+          ? [p.at]
+          : p.type === 'polyline'
+            ? p.points
+            : p.type === 'image'
+              ? [
+                  [p.box.minX, p.box.minY],
+                  [p.box.maxX, p.box.maxY],
+                ]
+              : pathPoints(p.commands)
     for (const [x, y] of points) if (x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY) n++
   }
   return n

@@ -2,6 +2,7 @@
 // snapshot tests (@napi-rs/canvas in Node). It computes device positions itself instead of setting a
 // canvas transform, so it draws correctly into a context whatever transform the host already uses.
 import type { Point } from '../similarity.ts'
+import { FONTS, type FontId } from '../text/fonts.ts'
 import { ARIAL_DIGIT_HEIGHT, type LineCap, type LineJoin, MITER_LIMIT, type PathCommand, type Primitive } from './primitives.ts'
 
 /** The parts of CanvasRenderingContext2D the backend uses (so any compatible canvas works). */
@@ -19,6 +20,7 @@ export interface CanvasTarget {
   translate(x: number, y: number): void
   rotate(angle: number): void
   fillText(text: string, x: number, y: number): void
+  drawImage(image: object, x: number, y: number, width: number, height: number): void
   globalAlpha: number
   measureText(text: string): { width: number }
   setLineDash(segments: number[]): void
@@ -31,6 +33,9 @@ export interface CanvasTarget {
   font: string
   textAlign: string
   textBaseline: string
+  /** Set to turn kerning and ligatures off where the canvas supports it (text lines are measured without them). */
+  fontKerning?: string
+  textRendering?: string
 }
 
 /**
@@ -49,7 +54,32 @@ export type CanvasOptions = {
   font?: string
   /** Digit height of `font` as a fraction of its size. */
   digitHeight?: number
+  /**
+   * The image for an image primitive's asset (an HTMLImageElement, ImageBitmap …), or null while it is not
+   * loaded: then a grey box with a cross stands in its place.
+   */
+  images?: (asset: string) => object | null
 }
+
+const PLACEHOLDER = { fill: '#ece9ee', line: '#a59fa9' }
+
+/**
+ * Sets up `ctx` to draw a text line in `font` at `px` pixels: the family the host registered the font
+ * file under (FONTS), kerning off, and `textRendering` set to what turns ligatures off in Chrome and Skia.
+ */
+export function setTextLineFont(ctx: CanvasTarget, font: FontId, px: number): void {
+  const { weight, family } = FONTS[font]
+  ctx.font = `${weight} ${px}px "${family}"`
+  ctx.fontKerning = 'none'
+  ctx.textRendering = 'optimizeSpeed'
+}
+
+/**
+ * The text with a zero-width non-joiner between characters, so no browser joins letters into ligatures
+ * (fi, ffl) even where `textRendering` is ignored: core measures each character on its own.
+ */
+const ZWNJ = String.fromCodePoint(0x200c)
+export const withoutLigatures = (text: string): string => [...text].join(ZWNJ)
 
 /**
  * A transform drawing paper mm at `pxPerMm`, y up, with paper point `origin` at the bottom-left corner of
@@ -86,9 +116,11 @@ export function drawPrimitives(ctx: CanvasTarget, primitives: Primitive[], optio
   }
 
   ctx.save()
-  ctx.strokeStyle = options.color
-  ctx.fillStyle = options.color
   for (const p of primitives) {
+    const color = p.color ?? options.color
+    ctx.strokeStyle = color
+    ctx.fillStyle = color
+    ctx.globalAlpha = p.opacity ?? 1
     ctx.beginPath()
     if (p.type === 'circle') {
       ctx.arc(...at(p.center[0], p.center[1]), p.radius * scale, 0, 2 * Math.PI)
@@ -103,10 +135,44 @@ export function drawPrimitives(ctx: CanvasTarget, primitives: Primitive[], optio
       trace(p.commands)
       if (p.filled) {
         // A tint over white is the colour at that opacity (and with Multiply, the same over the map).
-        ctx.globalAlpha = p.tint ?? 1
+        ctx.globalAlpha = (p.opacity ?? 1) * (p.tint ?? 1)
         ctx.fill('evenodd')
-        ctx.globalAlpha = 1
       } else strokeWith(p.lineWidth, p.cap, p.join, p.dash)
+    } else if (p.type === 'textLine') {
+      ctx.save()
+      ctx.translate(...at(p.at[0], p.at[1]))
+      ctx.rotate(angle)
+      setTextLineFont(ctx, p.font, p.size * scale)
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+      ctx.fillText(withoutLigatures(p.text), 0, 0)
+      ctx.restore()
+    } else if (p.type === 'image') {
+      // From the box's top-left corner (y up: its top edge), along the page's axes.
+      const [w, h] = [(p.box.maxX - p.box.minX) * scale, (p.box.maxY - p.box.minY) * scale]
+      const image = options.images?.(p.asset) ?? null
+      ctx.save()
+      ctx.translate(...at(p.box.minX, p.box.maxY))
+      ctx.rotate(angle)
+      if (image) ctx.drawImage(image, 0, 0, w, h)
+      else {
+        ctx.moveTo(0, 0)
+        ctx.lineTo(w, 0)
+        ctx.lineTo(w, h)
+        ctx.lineTo(0, h)
+        ctx.closePath()
+        ctx.fillStyle = PLACEHOLDER.fill
+        ctx.fill()
+        ctx.moveTo(0, 0)
+        ctx.lineTo(w, h)
+        ctx.moveTo(w, 0)
+        ctx.lineTo(0, h)
+        ctx.strokeStyle = PLACEHOLDER.line
+        ctx.lineWidth = Math.max(1, minWidth)
+        ctx.setLineDash([])
+        ctx.stroke()
+      }
+      ctx.restore()
     } else {
       // Centred on the middle of the digits: the baseline lies half a digit height below `at`.
       let digitPx = Math.max(minWidth, p.height * scale)
