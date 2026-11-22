@@ -27,7 +27,7 @@ import { formatKm } from './CoursePanel.tsx'
 import { CELL_SIZES, formatPaper, PRINT_SCALES } from './print.ts'
 import type { SaveStatus } from './useAutosave.ts'
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   name,
   label,
   options,
@@ -69,6 +69,8 @@ export function PrintToolbar({
   onDescriptions,
   onReset,
   onBack,
+  mode,
+  onMode,
 }: {
   /** The courses, and the all-controls page when there are controls. */
   pages: Course[]
@@ -81,6 +83,9 @@ export function PrintToolbar({
   onDescriptions: (show: boolean) => void
   onReset: () => void
   onBack: () => void
+  /** Placing the page on the map, or editing its layout. */
+  mode: 'page' | 'layout'
+  onMode: (mode: 'page' | 'layout') => void
 }) {
   const { t } = useTranslation()
   const scales: readonly number[] = PRINT_SCALES.includes(course.printScale as (typeof PRINT_SCALES)[number])
@@ -99,6 +104,14 @@ export function PrintToolbar({
         {t('print.back')}
       </Button>
       <span aria-hidden="true" className="h-5 w-px bg-line" />
+      <Segmented
+        name="print-mode"
+        label={t('layout.modeLabel')}
+        options={['page', 'layout'] as const}
+        value={mode}
+        text={m => t(`layout.mode.${m}`)}
+        onChange={onMode}
+      />
       <label htmlFor="print-course" className="text-[13px] text-muted">
         {t('print.pageOf')}
       </label>
@@ -170,7 +183,7 @@ export function PrintToolbar({
         {t('print.reset')}
       </Button>
       <span className="grow" />
-      <span className="text-[13px] text-muted">{t('print.hint')}</span>
+      <span className="text-[13px] text-muted">{mode === 'layout' ? t('layout.hint') : t('print.hint')}</span>
     </div>
   )
 }

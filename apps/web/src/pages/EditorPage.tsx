@@ -5,22 +5,28 @@ import {
   type Course,
   changePaper,
   changePrintSize,
+  defaultPrintSettings,
   deleteControl,
   deleteSpecial,
   type EventDoc,
+  fieldValues,
   moveControl,
   moveDocToVersion,
   type PageContext,
   type Point,
   type PrintSettings,
+  pageSize,
   parseDoc,
+  printPage,
   printSettingsOf,
   removeCourseControl,
+  removeLayoutElement,
   setNumberPosition,
   setPrintSettings,
   setRoute,
   setSpecialPoints,
   showDescriptions,
+  specForBox,
   transformBetween,
 } from '@course-setter/core'
 import { useQueryClient } from '@tanstack/react-query'
@@ -32,7 +38,10 @@ import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
 import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
-import { PrintMap } from '../editor/PrintMap.tsx'
+import { LayoutPanel, MAP_LAYER } from '../editor/LayoutPanel.tsx'
+import { LayoutProperties } from '../editor/LayoutProperties.tsx'
+import { type AppliesTo, nudged, placeElement, setHidden, shownElement } from '../editor/layout.ts'
+import { type LayoutEditing, PrintMap } from '../editor/PrintMap.tsx'
 import { PrintPanel, PrintToolbar } from '../editor/PrintView.tsx'
 import {
   addBend,
@@ -156,6 +165,33 @@ function Editor({
   )
   const printing = params.get('view') === 'print' && printCourse !== null && printSettings !== null
   const setPrint = (c: Course, settings: PrintSettings | null) => edit(setPrintSettings(doc, c.id, settings))
+  // Layout mode (?view=print&mode=layout): the page's elements, edited on the page.
+  const layoutMode = printing && params.get('mode') === 'layout'
+  const [layoutSelected, setLayoutSelected] = useState<string | null>(null)
+  const [appliesTo, setAppliesTo] = useState<AppliesTo>('all')
+  const shownPage = useMemo(
+    () => (printCourse && printSettings ? printPage(doc, printCourse, event.name, printSettings, pageContext) : null),
+    [doc, printCourse, printSettings, event.name, pageContext],
+  )
+  const layoutEditing = useMemo((): LayoutEditing | null => {
+    if (!layoutMode || !printCourse || !printSettings) return null
+    const size = pageSize(printSettings.paper, printSettings.orientation)
+    return {
+      selected: layoutSelected,
+      onSelect: setLayoutSelected,
+      place: (id, box) => {
+        const spec = shownElement(doc, printSettings, id)
+        return spec ? placeElement(doc, printCourse, printSettings, appliesTo, specForBox(spec, box, size)) : doc
+      },
+      onEdit: next => dispatch({ type: 'edit', doc: next }),
+      aspectOf: id => {
+        const placed = shownPage?.elements.find(e => e.id === id)
+        if (placed?.kind !== 'image') return undefined
+        const b = placed.box
+        return (b.maxX - b.minX) / (b.maxY - b.minY)
+      },
+    }
+  }, [layoutMode, printCourse, printSettings, layoutSelected, doc, appliesTo, shownPage])
   const openPrint = () => {
     dispatch({ type: 'tool', tool: 'select' })
     if (!course && printCourse && printCourse.id !== ALL_CONTROLS) dispatch({ type: 'course', courseId: printCourse.id })
@@ -212,7 +248,38 @@ function Editor({
         (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
       if (typing || target.closest('[role="dialog"]')) return
       const mod = e.ctrlKey || e.metaKey
-      // The print view has nothing to delete or draw: only undo and redo.
+      // Layout mode: arrow keys move the selected element (Shift: 5 mm), Delete removes it (only this
+      // course: hides it there), Escape lets go of it.
+      if (layoutMode && !mod && printCourse && printSettings && layoutSelected && layoutSelected !== MAP_LAYER) {
+        const spec = shownElement(doc, printSettings, layoutSelected)
+        const step = e.shiftKey ? 5 : 1
+        const arrows: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, step],
+          ArrowDown: [0, -step],
+        }
+        const delta = arrows[e.key]
+        if (spec && delta && !spec.locked) {
+          e.preventDefault()
+          edit(placeElement(doc, printCourse, printSettings, appliesTo, nudged(spec, delta)))
+          return
+        }
+        if (spec && (e.key === 'Delete' || e.key === 'Backspace')) {
+          e.preventDefault()
+          if (!printSettings.ownLayout && appliesTo === 'course') edit(setHidden(doc, printCourse, printSettings, 'course', spec.id, true))
+          else {
+            edit(removeLayoutElement(doc, printCourse.id, printSettings, spec.id))
+            setLayoutSelected(null)
+          }
+          return
+        }
+        if (e.key === 'Escape') {
+          setLayoutSelected(null)
+          return
+        }
+      }
+      // The print view has nothing else to delete or draw: only undo and redo.
       if (printing && !mod) return
       // Drawing a line or area: Enter finishes it, Backspace takes back the last point, Escape drops it.
       if (state.draft.length > 0) {
@@ -256,7 +323,7 @@ function Editor({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [state, course, doc, edit, t, printing])
+  }, [state, course, doc, edit, t, printing, layoutMode, printCourse, printSettings, layoutSelected, appliesTo])
 
   const takeTheirs = async () => {
     setResolving(true)
@@ -339,8 +406,17 @@ function Editor({
             onScale={printScale => edit(changePrintSize(doc, printCourse.id, event.name, { printScale }))}
             onCellSize={descriptionCellSize => edit(changePrintSize(doc, printCourse.id, event.name, { descriptionCellSize }))}
             onDescriptions={show => setPrint(printCourse, showDescriptions(doc, printCourse, event.name, printSettings, show))}
-            onReset={() => setPrint(printCourse, null)}
+            onReset={() => {
+              // The page's placement goes back to the defaults; the course's layout changes stay.
+              const { overrides, ownLayout } = printSettings
+              if (!overrides && !ownLayout) return setPrint(printCourse, null)
+              const centre: Point = [(grid.extent.minX + grid.extent.maxX) / 2, (grid.extent.minY + grid.extent.maxY) / 2]
+              const defaults = defaultPrintSettings(doc, printCourse, event.name, centre)
+              setPrint(printCourse, { ...defaults, ...(overrides ? { overrides } : {}), ...(ownLayout ? { ownLayout } : {}) })
+            }}
             onBack={() => setParams({})}
+            mode={layoutMode ? 'layout' : 'page'}
+            onMode={m => setParams(m === 'layout' ? { view: 'print', mode: 'layout' } : { view: 'print' })}
           />
         ) : (
           <Toolbar
@@ -356,6 +432,20 @@ function Editor({
         )}
       </header>
       <div className="flex min-h-0 grow flex-wrap border-t border-line">
+        {layoutMode && (
+          <LayoutPanel
+            doc={doc}
+            course={printCourse}
+            settings={printSettings}
+            appliesTo={appliesTo}
+            selected={layoutSelected}
+            onSelect={setLayoutSelected}
+            onEdit={next => edit(next)}
+            descriptionsShown={printSettings.layout.some(e => e.kind === 'descriptions')}
+            values={fieldValues(doc, printCourse, event.name, pageContext)}
+            onDescriptions={show => setPrint(printCourse, showDescriptions(doc, printCourse, event.name, printSettings, show))}
+          />
+        )}
         <main className="relative min-h-[360px] min-w-0 flex-[999_1_560px]">
           {printing ? (
             <PrintMap
@@ -368,6 +458,7 @@ function Editor({
               context={pageContext}
               settings={printSettings}
               onChange={settings => setPrint(printCourse, settings)}
+              layout={layoutEditing}
             />
           ) : (
             <EditorMap
@@ -392,7 +483,20 @@ function Editor({
             />
           )}
         </main>
-        {printing ? (
+        {layoutMode && shownPage ? (
+          <LayoutProperties
+            doc={doc}
+            course={printCourse}
+            settings={printSettings}
+            size={shownPage.size}
+            placed={shownPage.elements}
+            appliesTo={appliesTo}
+            onAppliesTo={setAppliesTo}
+            selected={layoutSelected}
+            onSelect={setLayoutSelected}
+            onEdit={next => edit(next)}
+          />
+        ) : printing ? (
           <PrintPanel
             eventId={event.id}
             doc={doc}
