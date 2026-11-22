@@ -111,8 +111,13 @@ export const printLayoutSchema = z
     elements: z.array(layoutElementSchema).max(100),
     /** White areas, drawn over the map and under the course. */
     whiteAreas: z.array(whiteAreaSchema).max(100).optional(),
-    /** The map area's corners rounded with this radius, mm. */
-    mapArea: z.object({ radius: z.number().min(0).max(30) }).optional(),
+    /**
+     * The map area's corners rounded with this radius (mm), and a line round it (a frame in the club
+     * colour that fits any paper and orientation).
+     */
+    mapArea: z
+      .object({ radius: z.number().min(0).max(30).optional(), stroke: z.object({ color, width: z.number().min(0.1).max(5) }).optional() })
+      .optional(),
   })
   .superRefine((layout, ctx) => {
     const ids = new Set<string>()

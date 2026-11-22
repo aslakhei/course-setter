@@ -13,6 +13,7 @@ import {
   shownPath,
   useDeleteAsset,
   useLibrary,
+  useSetSponsor,
   useSignedUrls,
   useUploadAsset,
 } from '../lib/assets.ts'
@@ -37,6 +38,7 @@ export function ImageLibrary({
   titleId,
   help,
   canEdit,
+  sponsors = false,
 }: {
   scope: AssetScope
   title: string
@@ -44,11 +46,14 @@ export function ImageLibrary({
   help: string
   /** May upload and delete (club admins for the club library, everyone for their own). */
   canEdit: boolean
+  /** Images can be marked as sponsors (the club library). */
+  sponsors?: boolean
 }) {
   const { t } = useTranslation()
   const library = useLibrary(scope)
   const upload = useUploadAsset(scope)
   const remove = useDeleteAsset(scope)
+  const setSponsor = useSetSponsor(scope.scope === 'club' ? scope.clubId : '')
   const [file, setFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [formKey, setFormKey] = useState(0)
@@ -118,6 +123,18 @@ export function ImageLibrary({
                       </span>
                     )}
                   </span>
+                  {sponsors && canEdit && a.status === 'ready' && (
+                    <label className="flex items-center gap-1.5 text-xs">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-brand-600"
+                        checked={a.sponsor}
+                        aria-label={t('images.sponsorLabel', { name: a.name })}
+                        onChange={e => setSponsor.mutate({ assetId: a.id, sponsor: e.target.checked })}
+                      />
+                      {t('images.sponsor')}
+                    </label>
+                  )}
                   {canEdit && (
                     <Button
                       size="sm"

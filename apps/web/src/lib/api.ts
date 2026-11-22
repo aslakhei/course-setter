@@ -7,7 +7,8 @@ import { supabase } from './supabase.ts'
 
 export type ClubRole = Database['public']['Enums']['club_role']
 export type MyClub = { id: string; name: string; role: ClubRole }
-export type Club = { id: string; name: string }
+/** A club and its branding for print templates (logo: a club library image; colours #rrggbb). */
+export type Club = { id: string; name: string; logoAssetId: string | null; colour: string | null; colour2: string | null }
 export type Member = { userId: string; role: ClubRole; joinedAt: string; name: string; avatarUrl: string | null }
 export type Invite = { id: string; token: string; createdAt: string; expiresAt: string; revokedAt: string | null }
 export type InviteInfo = { clubId: string; clubName: string; status: 'valid' | 'expired' | 'revoked'; alreadyMember: boolean }
@@ -61,7 +62,10 @@ export function useMyClubs(userId: string) {
 export function useClub(clubId: string) {
   return useQuery({
     queryKey: keys.club(clubId),
-    queryFn: async (): Promise<Club | null> => check(await supabase.from('clubs').select('id, name').eq('id', clubId).maybeSingle()),
+    queryFn: async (): Promise<Club | null> => {
+      const row = check(await supabase.from('clubs').select('id, name, logo_asset_id, colour, colour2').eq('id', clubId).maybeSingle())
+      return row && { id: row.id, name: row.name, logoAssetId: row.logo_asset_id, colour: row.colour, colour2: row.colour2 }
+    },
   })
 }
 
@@ -121,6 +125,24 @@ export function useCreateClub() {
   return useMutation({
     mutationFn: async (name: string) => check(await supabase.rpc('create_club', { club_name: name })),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['my-clubs'] }),
+  })
+}
+
+/** Set the club's logo and colours (admins); null clears one. */
+export function useSetBranding(clubId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (b: { logoAssetId: string | null; colour: string | null; colour2: string | null }) => {
+      check(
+        await supabase.rpc('set_club_branding', {
+          club: clubId,
+          ...(b.logoAssetId ? { logo_asset_id: b.logoAssetId } : {}),
+          ...(b.colour ? { colour: b.colour } : {}),
+          ...(b.colour2 ? { colour2: b.colour2 } : {}),
+        }),
+      )
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.club(clubId) }),
   })
 }
 
