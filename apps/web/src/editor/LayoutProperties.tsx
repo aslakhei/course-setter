@@ -3,7 +3,9 @@
 // layout of its own. Text and number fields save when they lose focus or on Enter, so typing makes one
 // step of undo, not one per key.
 import {
+  ALIGNMENTS,
   ANCHORS,
+  alignBoxes,
   type Bounds,
   type Course,
   detachLayout,
@@ -25,6 +27,8 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, fieldClass } from '../components/ui.tsx'
+import { shownPath, useAssetRows, useSignedUrls } from '../lib/assets.ts'
+import { type ChosenImage, ImagePicker } from './ImagePicker.tsx'
 import { MAP_LAYER } from './LayoutPanel.tsx'
 import {
   type AppliesTo,
@@ -36,6 +40,8 @@ import {
   isBold,
   pinnedText,
   placeElement,
+  placeMany,
+  removeMany,
   SWATCHES,
   shownElement,
 } from './layout.ts'
@@ -51,9 +57,12 @@ export type LayoutPropertiesProps = {
   placed: PlacedElement[]
   appliesTo: AppliesTo
   onAppliesTo: (to: AppliesTo) => void
-  selected: string | null
-  onSelect: (id: string | null) => void
+  /** The selected elements' ids (or the map). */
+  selected: string[]
+  onSelect: (id: string | null, additive?: boolean) => void
   onEdit: (doc: EventDoc) => void
+  clubId: string
+  eventId: string
 }
 
 /** A text field or area that keeps what is typed and saves it on blur or Enter (Ctrl+Enter in an area). */
@@ -238,7 +247,36 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
     </div>
   )
 
-  if (selected === MAP_LAYER) {
+  const [picking, setPicking] = useState(false)
+  const single = selected.length === 1 ? (selected[0] ?? null) : null
+  const singleSpec = single && single !== MAP_LAYER ? shownElement(doc, settings, single) : undefined
+  const imageRows = useAssetRows(singleSpec?.kind === 'image' ? [singleSpec.asset] : [])
+  const imageRow = imageRows.data?.[0]
+  const thumbPath = imageRow ? shownPath(imageRow) : null
+  const thumbUrls = useSignedUrls(thumbPath && imageRow?.status === 'ready' ? [thumbPath] : [])
+  const appliesBlock = shared ? (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-body">{t('layout.appliesTo')}</span>
+      <Segmented
+        name="layout-applies"
+        label={t('layout.appliesTo')}
+        options={['all', 'course'] as const}
+        value={appliesTo}
+        text={o => (o === 'all' ? t('layout.allCourses') : t('layout.onlyCourse', { course: course.name }))}
+        onChange={props.onAppliesTo}
+      />
+      <span className="text-xs text-muted">{courseOnly ? t('layout.appliesHelpCourse') : t('layout.appliesHelpAll')}</span>
+      {courseOnly && (
+        <Button size="sm" className="self-start" onClick={() => onEdit(detachLayout(doc, course.id, settings))}>
+          {t('layout.detach', { course: course.name })}
+        </Button>
+      )}
+    </div>
+  ) : (
+    scope
+  )
+
+  if (single === MAP_LAYER) {
     const radius = (settings.ownLayout ?? doc.printLayout)?.mapArea?.radius ?? 0
     return frame(
       <>
@@ -261,8 +299,64 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
     )
   }
 
-  const spec = selected ? shownElement(doc, settings, selected) : undefined
-  const base = selected ? baseElement(doc, settings, selected) : undefined
+  // Several selected: line them up, or delete them together.
+  const many = selected
+    .filter(id => id !== MAP_LAYER)
+    .flatMap(id => {
+      const spec = shownElement(doc, settings, id)
+      const box = placed.find(p => p.id === id)?.box
+      return spec && box ? [{ spec, box }] : []
+    })
+  if (many.length > 1) {
+    const align = (how: (typeof ALIGNMENTS)[number]) => {
+      const boxes = alignBoxes(
+        many.map(m => m.box),
+        how,
+      )
+      const specs = many.filter(m => !m.spec.locked).map(m => specForBox(m.spec, boxes[many.indexOf(m)] ?? m.box, size))
+      onEdit(placeMany(doc, course, settings, appliesTo, specs))
+    }
+    return frame(
+      <>
+        <div className="flex items-center gap-2">
+          <h2 className="m-0 grow text-[15px] font-semibold">{t('layout.selectedCount', { count: many.length })}</h2>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              onEdit(
+                removeMany(
+                  doc,
+                  course,
+                  settings,
+                  appliesTo,
+                  many.map(m => m.spec.id),
+                ),
+              )
+              if (!courseOnly) props.onSelect(null)
+            }}
+          >
+            {t('layout.deleteAll')}
+          </Button>
+        </div>
+        {appliesBlock}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-body">{t('layout.alignTitle')}</span>
+          <div className="grid grid-cols-3 gap-1.5">
+            {ALIGNMENTS.map(how => (
+              <Button key={how} size="sm" onClick={() => align(how)}>
+                {t(`layout.alignTo.${how}`)}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <span className="text-xs text-muted">{t('layout.multiHelp')}</span>
+      </>,
+    )
+  }
+
+  const spec = singleSpec
+  const base = single ? baseElement(doc, settings, single) : undefined
   if (!spec || !base) return frame(<p className="m-0 text-[13px] text-muted">{t('layout.nothing')}</p>)
   const box: Bounds | undefined = placed.find(p => p.id === spec.id)?.box
 
@@ -309,27 +403,7 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
         </Button>
       </div>
 
-      {shared ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-body">{t('layout.appliesTo')}</span>
-          <Segmented
-            name="layout-applies"
-            label={t('layout.appliesTo')}
-            options={['all', 'course'] as const}
-            value={appliesTo}
-            text={o => (o === 'all' ? t('layout.allCourses') : t('layout.onlyCourse', { course: course.name }))}
-            onChange={props.onAppliesTo}
-          />
-          <span className="text-xs text-muted">{courseOnly ? t('layout.appliesHelpCourse') : t('layout.appliesHelpAll')}</span>
-          {courseOnly && (
-            <Button size="sm" className="self-start" onClick={() => onEdit(detachLayout(doc, course.id, settings))}>
-              {t('layout.detach', { course: course.name })}
-            </Button>
-          )}
-        </div>
-      ) : (
-        scope
-      )}
+      {appliesBlock}
 
       <fieldset disabled={courseOnly} className="m-0 flex flex-col gap-3 border-0 p-0 disabled:opacity-60">
         {spec.kind === 'text' && (
@@ -533,6 +607,37 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
           </>
         )}
 
+        {spec.kind === 'image' && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-12 w-20 shrink-0 items-center justify-center overflow-hidden rounded border border-line bg-subtle">
+                {thumbPath && thumbUrls.data?.get(thumbPath) && (
+                  <img src={thumbUrls.data.get(thumbPath)} alt="" className="max-h-full max-w-full object-contain" />
+                )}
+              </span>
+              <span className="min-w-0 truncate text-[13px]">{imageRow?.name ?? t('layout.image')}</span>
+            </div>
+            {!imageRow && imageRows.data && <span className="text-xs text-muted">{t('layout.imageMissing')}</span>}
+            {imageRow && imageRow.status !== 'ready' && <span className="text-xs text-muted">{t('layout.imageWaiting')}</span>}
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" onClick={() => setPicking(true)}>
+                {t('layout.replaceImage')}
+              </Button>
+              <Button
+                size="sm"
+                disabled={!imageRow?.width || !imageRow?.height}
+                onClick={() =>
+                  imageRow?.width &&
+                  imageRow.height &&
+                  place({ ...spec, size: [spec.size[0], Math.round((spec.size[0] * imageRow.height * 100) / imageRow.width) / 100] })
+                }
+              >
+                {t('layout.naturalSize')}
+              </Button>
+            </div>
+          </div>
+        )}
+
         {spec.kind === 'scaleBar' && (
           <ColorField
             id="layout-color"
@@ -660,6 +765,21 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
           }
         />
       </div>
+      {picking && (
+        <ImagePicker
+          clubId={props.clubId}
+          eventId={props.eventId}
+          onClose={() => setPicking(false)}
+          onChoose={(image: ChosenImage) => {
+            setPicking(false)
+            update(e => {
+              if (e.kind !== 'image') return e
+              const height = image.aspect ? Math.round((e.size[0] / image.aspect) * 100) / 100 : e.size[1]
+              return { ...e, asset: image.id, size: [e.size[0], height] }
+            })
+          }}
+        />
+      )}
     </>,
   )
 }

@@ -6,7 +6,17 @@ import { Avatar, Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
 import type { Member } from '../lib/api.ts'
 import { type EventDetail, type SaveConflict, useEventMembers, useInviteToEvent, useRemoveFromEvent } from '../lib/events.ts'
 
-function Modal({ titleId, children, onClose }: { titleId: string; children: ReactNode; onClose?: () => void }) {
+export function Modal({
+  titleId,
+  children,
+  onClose,
+  wide,
+}: {
+  titleId: string
+  children: ReactNode
+  onClose?: () => void
+  wide?: boolean
+}) {
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     box.current?.querySelector<HTMLElement>('button, select, input')?.focus()
@@ -21,7 +31,7 @@ function Modal({ titleId, children, onClose }: { titleId: string; children: Reac
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="flex w-full max-w-md flex-col gap-3 rounded-md border border-line bg-white p-5 shadow-lg"
+        className={`flex max-h-[90vh] w-full flex-col gap-3 overflow-auto rounded-md border border-line bg-white p-5 shadow-lg ${wide ? 'max-w-3xl' : 'max-w-md'}`}
       >
         {children}
       </div>

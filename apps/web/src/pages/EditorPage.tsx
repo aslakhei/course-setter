@@ -20,7 +20,6 @@ import {
   printPage,
   printSettingsOf,
   removeCourseControl,
-  removeLayoutElement,
   setNumberPosition,
   setPrintSettings,
   setRoute,
@@ -40,7 +39,7 @@ import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
 import { LayoutPanel, MAP_LAYER } from '../editor/LayoutPanel.tsx'
 import { LayoutProperties } from '../editor/LayoutProperties.tsx'
-import { type AppliesTo, nudged, placeElement, setHidden, shownElement } from '../editor/layout.ts'
+import { type AppliesTo, nextSelection, nudged, placeElement, placeMany, removeMany, shownElement } from '../editor/layout.ts'
 import { type LayoutEditing, PrintMap } from '../editor/PrintMap.tsx'
 import { PrintPanel, PrintToolbar } from '../editor/PrintView.tsx'
 import {
@@ -167,7 +166,11 @@ function Editor({
   const setPrint = (c: Course, settings: PrintSettings | null) => edit(setPrintSettings(doc, c.id, settings))
   // Layout mode (?view=print&mode=layout): the page's elements, edited on the page.
   const layoutMode = printing && params.get('mode') === 'layout'
-  const [layoutSelected, setLayoutSelected] = useState<string | null>(null)
+  const [layoutSelected, setLayoutSelected] = useState<string[]>([])
+  const selectLayout = useCallback(
+    (id: string | null, additive = false) => setLayoutSelected(old => nextSelection(old, id, additive, MAP_LAYER)),
+    [],
+  )
   const [appliesTo, setAppliesTo] = useState<AppliesTo>('all')
   const shownPage = useMemo(
     () => (printCourse && printSettings ? printPage(doc, printCourse, event.name, printSettings, pageContext) : null),
@@ -178,7 +181,7 @@ function Editor({
     const size = pageSize(printSettings.paper, printSettings.orientation)
     return {
       selected: layoutSelected,
-      onSelect: setLayoutSelected,
+      onSelect: selectLayout,
       place: (id, box) => {
         const spec = shownElement(doc, printSettings, id)
         return spec ? placeElement(doc, printCourse, printSettings, appliesTo, specForBox(spec, box, size)) : doc
@@ -191,7 +194,7 @@ function Editor({
         return (b.maxX - b.minX) / (b.maxY - b.minY)
       },
     }
-  }, [layoutMode, printCourse, printSettings, layoutSelected, doc, appliesTo, shownPage])
+  }, [layoutMode, printCourse, printSettings, layoutSelected, selectLayout, doc, appliesTo, shownPage])
   const openPrint = () => {
     dispatch({ type: 'tool', tool: 'select' })
     if (!course && printCourse && printCourse.id !== ALL_CONTROLS) dispatch({ type: 'course', courseId: printCourse.id })
@@ -248,10 +251,11 @@ function Editor({
         (target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(target.type))
       if (typing || target.closest('[role="dialog"]')) return
       const mod = e.ctrlKey || e.metaKey
-      // Layout mode: arrow keys move the selected element (Shift: 5 mm), Delete removes it (only this
-      // course: hides it there), Escape lets go of it.
-      if (layoutMode && !mod && printCourse && printSettings && layoutSelected && layoutSelected !== MAP_LAYER) {
-        const spec = shownElement(doc, printSettings, layoutSelected)
+      // Layout mode: arrow keys move the selected elements (Shift: 5 mm), Delete removes them (only this
+      // course: hides them there), Escape lets go of them.
+      const chosen = layoutSelected.filter(id => id !== MAP_LAYER)
+      if (layoutMode && !mod && printCourse && printSettings && chosen.length > 0) {
+        const specs = chosen.flatMap(id => shownElement(doc, printSettings, id) ?? [])
         const step = e.shiftKey ? 5 : 1
         const arrows: Record<string, [number, number]> = {
           ArrowLeft: [-step, 0],
@@ -260,22 +264,36 @@ function Editor({
           ArrowDown: [0, -step],
         }
         const delta = arrows[e.key]
-        if (spec && delta && !spec.locked) {
+        const movable = specs.filter(spec => !spec.locked)
+        if (delta && movable.length > 0) {
           e.preventDefault()
-          edit(placeElement(doc, printCourse, printSettings, appliesTo, nudged(spec, delta)))
+          edit(
+            placeMany(
+              doc,
+              printCourse,
+              printSettings,
+              appliesTo,
+              movable.map(spec => nudged(spec, delta)),
+            ),
+          )
           return
         }
-        if (spec && (e.key === 'Delete' || e.key === 'Backspace')) {
+        if (specs.length > 0 && (e.key === 'Delete' || e.key === 'Backspace')) {
           e.preventDefault()
-          if (!printSettings.ownLayout && appliesTo === 'course') edit(setHidden(doc, printCourse, printSettings, 'course', spec.id, true))
-          else {
-            edit(removeLayoutElement(doc, printCourse.id, printSettings, spec.id))
-            setLayoutSelected(null)
-          }
+          edit(
+            removeMany(
+              doc,
+              printCourse,
+              printSettings,
+              appliesTo,
+              specs.map(spec => spec.id),
+            ),
+          )
+          if (printSettings.ownLayout || appliesTo === 'all') setLayoutSelected([])
           return
         }
         if (e.key === 'Escape') {
-          setLayoutSelected(null)
+          setLayoutSelected([])
           return
         }
       }
@@ -439,7 +457,9 @@ function Editor({
             settings={printSettings}
             appliesTo={appliesTo}
             selected={layoutSelected}
-            onSelect={setLayoutSelected}
+            onSelect={selectLayout}
+            clubId={event.clubId}
+            eventId={event.id}
             onEdit={next => edit(next)}
             descriptionsShown={printSettings.layout.some(e => e.kind === 'descriptions')}
             values={fieldValues(doc, printCourse, event.name, pageContext)}
@@ -493,7 +513,9 @@ function Editor({
             appliesTo={appliesTo}
             onAppliesTo={setAppliesTo}
             selected={layoutSelected}
-            onSelect={setLayoutSelected}
+            onSelect={selectLayout}
+            clubId={event.clubId}
+            eventId={event.id}
             onEdit={next => edit(next)}
           />
         ) : printing ? (

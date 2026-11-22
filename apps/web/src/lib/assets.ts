@@ -163,20 +163,52 @@ export function useSignedUrls(paths: string[]) {
 }
 
 /**
+ * The images with these ids that the signed-in person may see (any status), looked at again every few
+ * seconds while one is being uploaded or checked (an image just added to a layout).
+ */
+export function useAssetRows(ids: string[]) {
+  return useQuery({
+    queryKey: assetKeys.images(ids),
+    enabled: ids.length > 0,
+    queryFn: async (): Promise<LayoutAsset[]> => {
+      const { data, error } = await supabase.from('layout_assets').select(columns).in('id', ids)
+      if (error) throw new ApiError(error)
+      return (data ?? []).map(toAsset)
+    },
+    refetchInterval: query => (query.state.data?.some(busy) ? 3000 : false),
+  })
+}
+
+/**
+ * A copy of an image in an event's own images, for a layout of that event: a personal image is only
+ * its owner's to see, a copy in the event is everyone's with access to the event. The file is copied in
+ * Storage (the owner may read it; the event path accepts it) and checked again like any upload.
+ */
+export function useCopyToEvent(eventId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (asset: LayoutAsset): Promise<string> => {
+      const started = await supabase.rpc('start_asset_upload', { scope: 'event', asset_name: asset.name, kind: asset.kind, event: eventId })
+      if (started.error) throw new ApiError(started.error)
+      const reserved = started.data[0]
+      if (!reserved) throw new Error('start_asset_upload returned nothing')
+      const copied = await supabase.storage.from('layout-assets').copy(asset.originalPath, reserved.upload_path)
+      if (copied.error) throw new Error(copied.error.message)
+      const finished = await supabase.rpc('finish_asset_upload', { asset_id: reserved.asset_id })
+      if (finished.error) throw new ApiError(finished.error)
+      return reserved.asset_id
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: assetKeys.library({ scope: 'event', eventId }) }),
+  })
+}
+
+/**
  * The images with these ids that the signed-in person may see, loaded and ready to draw on a canvas
  * (missing ones stay out: the print view draws a placeholder for them). `loaded` changes when one comes in.
  */
 export function useAssetImages(ids: string[]): { images: Map<string, HTMLImageElement>; loaded: number } {
-  const rows = useQuery({
-    queryKey: assetKeys.images(ids),
-    enabled: ids.length > 0,
-    queryFn: async (): Promise<LayoutAsset[]> => {
-      const { data, error } = await supabase.from('layout_assets').select(columns).in('id', ids).eq('status', 'ready')
-      if (error) throw new ApiError(error)
-      return (data ?? []).map(toAsset)
-    },
-  })
-  const assets = rows.data ?? []
+  const rows = useAssetRows(ids)
+  const assets = (rows.data ?? []).filter(a => a.status === 'ready')
   const paths = assets.flatMap(a => {
     const p = shownPath(a)
     return p ? [p] : []
