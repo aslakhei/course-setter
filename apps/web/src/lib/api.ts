@@ -16,11 +16,12 @@ const CODES: Record<string, ApiError['code']> = {
   last_admin: 'lastAdmin',
   invalid_invite: 'invalidInvite',
   too_many_exports: 'tooManyExports',
+  too_many_images: 'tooManyImages',
 }
 
 /** An error the UI can explain: `code` picks the message, anything else shows as "something went wrong". */
 export class ApiError extends Error {
-  readonly code: 'lastAdmin' | 'invalidInvite' | 'tooManyExports' | 'unknown'
+  readonly code: 'lastAdmin' | 'invalidInvite' | 'tooManyExports' | 'tooManyImages' | 'unknown'
   constructor(error: PostgrestError) {
     super(error.message)
     this.code = CODES[error.hint] ?? 'unknown'

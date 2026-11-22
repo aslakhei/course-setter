@@ -107,7 +107,7 @@ select is_empty($$ select 1 from public.map_versions where club_id = any (pg_tem
 select results_eq(
   $$ select f ->> 'name' from public.jobs j, jsonb_array_elements(j.payload -> 'files') f
      where j.type = 'delete_files' and f ->> 'name' not like '%/e/x/%'
-       and split_part(f ->> 'name', '/', 1)::uuid = any (pg_temp.ours()) order by 1 $$,
+       and case when f ->> 'name' ~ '^[0-9a-f-]{36}/' then split_part(f ->> 'name', '/', 1)::uuid end = any (pg_temp.ours()) order by 1 $$,
   $$ select unnest(array[pg_temp.club('a') || '/m/v/a.ocd', pg_temp.club('c') || '/m/v/c.ocd', pg_temp.club('c') || '/m/v/tiles.pmtiles']) order by 1 $$,
   'and all their files are queued for removal'
 );

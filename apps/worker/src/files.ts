@@ -1,9 +1,9 @@
-// The delete_files job (see migration account_and_club_deletion): remove files Storage will not let SQL
-// delete, after a club or an account is deleted. Files already gone are fine, so a retry is harmless.
+// The delete_files job (see migrations account_and_club_deletion and create_layout_assets): remove files
+// Storage will not let SQL delete, after a club, an account or an image is deleted. Files already gone are fine, so a retry is harmless.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JobHandler } from './jobs.ts'
 
-const BUCKETS = new Set(['map-originals', 'map-tiles', 'exports'])
+const BUCKETS = new Set(['map-originals', 'map-tiles', 'exports', 'layout-assets'])
 /** Names per remove request. */
 const CHUNK = 100
 

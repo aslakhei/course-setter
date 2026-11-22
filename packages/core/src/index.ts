@@ -121,6 +121,7 @@ export {
   fieldValues,
   fillFields,
   formatScaleText,
+  layoutAssetIds,
   layoutFor,
   type PageContext,
   type PlacedElement,

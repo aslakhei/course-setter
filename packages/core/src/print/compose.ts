@@ -2,7 +2,7 @@
 // course's own layout), fields filled in for the course, each element placed by its anchor and drawn as
 // primitives in page mm (y up), and the map area that is left for the map.
 
-import { ALL_CONTROLS, type Course, controlById, type EventDoc, type Point, type PrintSettings } from '../course/doc.ts'
+import { ALL_CONTROLS, type Course, controlById, courseById, type EventDoc, type Point, type PrintSettings } from '../course/doc.ts'
 import { courseLength } from '../course/length.ts'
 import type { Bounds, PathCommand, Primitive } from '../render/primitives.ts'
 import { layoutText, textPrimitives } from '../text/lines.ts'
@@ -90,6 +90,13 @@ export function layoutFor(doc: EventDoc, settings: PrintSettings | undefined): P
       return [{ ...e, ...(o.offset ? { offset: o.offset } : {}), ...(o.size ? { size: o.size } : {}) }]
     }),
   }
+}
+
+/** The images (asset ids) the layouts of these courses show, each once: what an export of them needs. */
+export function layoutAssetIds(doc: EventDoc, courseIds: string[]): string[] {
+  const ids = new Set<string>()
+  for (const id of courseIds) for (const e of layoutFor(doc, courseById(doc, id).print).elements) if (e.kind === 'image') ids.add(e.asset)
+  return [...ids]
 }
 
 /** An element on the page: its box (page mm, y up) and what it draws, a white backing box first. */

@@ -213,6 +213,44 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"layout_assets": {
+                  Row: {
+                    "bytes": number | null,"club_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"height": number | null,"id": string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id": string | null,"preview_path": string | null,"status": Database["public"]['Enums']["asset_status"],"uploaded_by": string | null,"width": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id"?: string | null,"preview_path"?: string | null,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
+                  }
+                  Update: {
+                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind"?: Database["public"]['Enums']["asset_kind"],"name"?: string,"original_path"?: string,"owner_id"?: string | null,"preview_path"?: string | null,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "layout_assets_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "layout_assets_event_id_club_id_fkey"
+      columns: ["event_id","club_id"]
+isOneToOne: false
+      referencedRelation: "events"
+      referencedColumns: ["id","club_id"]
+    },{
+      foreignKeyName: "layout_assets_owner_id_fkey"
+      columns: ["owner_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "layout_assets_uploaded_by_fkey"
+      columns: ["uploaded_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"map_versions": {
                   Row: {
                     "club_id": string,"contour_interval": number | null,"created_at": string,"created_by": string | null,"deleted_at": string | null,"error_code": string | null,"error_message": string | null,"file_name": string,"frame": Json | null,"georef": Json | null,"id": string,"kind": Database["public"]['Enums']["map_kind"],"map_id": string,"map_year": number | null,"mapper": string | null,"ocad_version": string | null,"original_path": string,"paper_height_mm": number | null,"paper_width_mm": number | null,"previous_version_id": string | null,"processed_at": string | null,"scale": number | null,"status": Database["public"]['Enums']["map_version_status"],"tiles": Json | null,"tiles_path": string | null,"transform_from_previous": Json | null,"transform_method": string | null,"transform_rms_m": number | null,"version": number
@@ -329,14 +367,25 @@ isOneToOne: false
 "delete_club":
 { Args: { "club": string }; Returns: undefined
                            },
+"delete_layout_asset":
+{ Args: { "asset_id": string }; Returns: undefined
+                           },
 "delete_map_version":
 { Args: { "map_version_id": string }; Returns: undefined
                            },
 "delete_my_account":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
+"event_layout_assets":
+{ Args: { "event": string,"ids": (string)[] }; Returns: {
+              "height": number,"id": string,"kind": Database["public"]['Enums']["asset_kind"],"original_path": string,"width": number
+            }[]
+                           },
 "fail_job":
 { Args: { "job_error": string,"job_id": number }; Returns: undefined
+                           },
+"finish_asset_upload":
+{ Args: { "asset_id": string }; Returns: undefined
                            },
 "finish_map_upload":
 { Args: { "map_version_id": string }; Returns: undefined
@@ -364,6 +413,11 @@ isOneToOne: false
 "set_map_version_details":
 { Args: { "contour_interval"?: number,"map_version_id": string,"map_year"?: number,"mapper"?: string }; Returns: undefined
                            },
+"start_asset_upload":
+{ Args: { "asset_name": string,"club"?: string,"event"?: string,"kind": Database["public"]['Enums']["asset_kind"],"scope": string }; Returns: {
+              "asset_id": string,"upload_path": string
+            }[]
+                           },
 "start_map_upload":
 { Args: { "club": string,"file_name": string,"kind": Database["public"]['Enums']["map_kind"],"map_id"?: string,"map_name"?: string,"scale"?: number }; Returns: {
               "upload_path": string,"version_id": string
@@ -371,7 +425,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "club_role": "admin"|"member","export_status": "queued"|"running"|"ready"|"failed"|"expired","job_status": "queued"|"running"|"done"|"failed","map_kind": "ocad"|"pdf","map_version_status": "uploading"|"processing"|"needs_alignment"|"ready"|"failed"|"deleted"
+            "asset_kind": "png"|"jpeg"|"svg"|"pdf","asset_status": "uploading"|"processing"|"ready"|"failed","club_role": "admin"|"member","export_status": "queued"|"running"|"ready"|"failed"|"expired","job_status": "queued"|"running"|"done"|"failed","map_kind": "ocad"|"pdf","map_version_status": "uploading"|"processing"|"needs_alignment"|"ready"|"failed"|"deleted"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -487,7 +541,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "club_role": ["admin", "member"],"export_status": ["queued", "running", "ready", "failed", "expired"],"job_status": ["queued", "running", "done", "failed"],"map_kind": ["ocad", "pdf"],"map_version_status": ["uploading", "processing", "needs_alignment", "ready", "failed", "deleted"]
+            "asset_kind": ["png", "jpeg", "svg", "pdf"],"asset_status": ["uploading", "processing", "ready", "failed"],"club_role": ["admin", "member"],"export_status": ["queued", "running", "ready", "failed", "expired"],"job_status": ["queued", "running", "done", "failed"],"map_kind": ["ocad", "pdf"],"map_version_status": ["uploading", "processing", "needs_alignment", "ready", "failed", "deleted"]
           }
         }
 } as const

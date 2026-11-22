@@ -34,6 +34,7 @@ import View from 'ol/View.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
+import { useAssetImages } from '../lib/assets.ts'
 import { loadFonts } from '../lib/fonts.ts'
 import { formatScale } from '../lib/format.ts'
 import { COURSE_PURPLE, primitiveLayer } from './courseLayer.ts'
@@ -94,6 +95,15 @@ export function PrintMap(props: Props) {
   const page = useMemo(() => printPage(doc, course, title, shown, context), [doc, course, title, shown, context])
   // The layout's fonts, loaded once each; the layout is drawn again when they are in.
   const [fontsReady, setFontsReady] = useState(0)
+  // The layout's images (ones this person may not see, or not loaded yet, show as placeholders).
+  const assetIds = useMemo(
+    () => [...new Set(page.elements.flatMap(e => e.primitives.flatMap(p => (p.type === 'image' ? [p.asset] : []))))].sort(),
+    [page],
+  )
+  const assetIdsKey = assetIds.join(',')
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the same ids, not a new array, keep the images
+  const stableIds = useMemo(() => assetIds, [assetIdsKey])
+  const { images, loaded } = useAssetImages(stableIds)
   const latest = useRef({ props, page, shown })
   latest.current = { props, page, shown }
 
@@ -213,9 +223,10 @@ export function PrintMap(props: Props) {
         ),
         printScale: course.printScale,
         paint: { color: '#000' },
+        images: id => images.get(id) ?? null,
       },
     ])
-  }, [layers, course, shown, page, fontsReady])
+  }, [layers, course, shown, page, fontsReady, images, loaded])
 
   // The page: dimmed surroundings, white margin (and bands), the sheet on its white box, and the frame.
   useEffect(() => {
