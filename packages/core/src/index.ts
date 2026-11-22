@@ -127,6 +127,23 @@ export {
   type PlacedElement,
 } from './print/compose.ts'
 export {
+  addLayoutElement,
+  detachLayout,
+  duplicateLayoutElement,
+  type ElementOverride,
+  hasOwnLayout,
+  moveSpec,
+  type NewElementKind,
+  newElement,
+  reattachLayout,
+  removeLayoutElement,
+  reorderLayoutElement,
+  setElementOverride,
+  setMapAreaRadius,
+  specForBox,
+  updateLayoutElement,
+} from './print/edit.ts'
+export {
   ANCHORS,
   type Anchor,
   type ElementOverrides,
@@ -136,6 +153,22 @@ export {
   printLayoutSchema,
   SHAPES,
 } from './print/elements.ts'
+export {
+  ALIGNMENTS,
+  type Alignment,
+  alignBoxes,
+  elementAt,
+  type Guides,
+  HANDLES,
+  type Handle,
+  handleAt,
+  handlePoints,
+  resizeBox,
+  type SnapTargets,
+  snapMove,
+  snapResize,
+  snapTargets,
+} from './print/geometry.ts'
 export {
   changePaper,
   changePrintSize,
