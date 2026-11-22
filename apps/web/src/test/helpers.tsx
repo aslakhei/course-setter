@@ -11,7 +11,7 @@ export const mo: Member = { userId: 'u-mo', role: 'member', joinedAt: '2026-11-1
 
 export function clubContext(me: Member, members: Member[] = [ada, mo]): ClubContext {
   return {
-    club: { id: 'club-1', name: 'Skogly OK', logoAssetId: null, colour: null, colour2: null },
+    club: { id: 'club-1', name: 'Skogly OK', logoAssetId: null, colour: null, colour2: null, colour3: null },
     members,
     me,
     isAdmin: me.role === 'admin',

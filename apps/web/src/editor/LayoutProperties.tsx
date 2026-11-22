@@ -12,6 +12,7 @@ import {
   duplicateLayoutElement,
   type EventDoc,
   FIELDS,
+  MAX_MAP_BANDS,
   mapNodes,
   NORTH_ARROW_STYLES,
   type PageElementSpec,
@@ -21,6 +22,7 @@ import {
   reattachLayout,
   removeLayoutElement,
   SHAPES,
+  setMapAreaBands,
   setMapAreaRadius,
   setMapAreaStroke,
   specForBox,
@@ -382,6 +384,8 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
     const mapArea = (settings.ownLayout ?? doc.printLayout)?.mapArea
     const radius = mapArea?.radius ?? 0
     const stroke = mapArea?.stroke
+    const bands = mapArea?.bands ?? []
+    const setBands = (next: { color: string; width: number }[]) => onEdit(setMapAreaBands(doc, course.id, settings, next))
     return frame(
       <>
         <h2 className="m-0 text-[15px] font-semibold">{t('layout.map')}</h2>
@@ -424,6 +428,39 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
             </Field>
           </>
         )}
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-1 p-0 text-[13px] font-semibold">{t('layout.mapBands')}</legend>
+          <span className="text-xs text-muted">{t('layout.mapBandsHelp')}</span>
+          {bands.map((band, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: bands have no ids; their place is what they are
+            <div key={i} className="flex flex-wrap items-end gap-2 border-l-2 border-line-soft pl-2">
+              <ColorField
+                id={`layout-map-band-${i}`}
+                label={t('layout.mapBand', { number: i + 1 })}
+                value={band.color}
+                onChange={color => setBands(bands.map((b, j) => (j === i ? { ...b, color } : b)))}
+              />
+              <Field label={t('layout.lineWidth')} htmlFor={`layout-map-band-width-${i}`}>
+                <CommitNumber
+                  id={`layout-map-band-width-${i}`}
+                  value={band.width}
+                  min={0.2}
+                  max={10}
+                  step={0.1}
+                  onCommit={width => setBands(bands.map((b, j) => (j === i ? { ...b, width } : b)))}
+                />
+              </Field>
+              <Button size="sm" onClick={() => setBands(bands.filter((_, j) => j !== i))}>
+                {t('layout.mapBandRemove')}
+              </Button>
+            </div>
+          ))}
+          {bands.length < MAX_MAP_BANDS && (
+            <Button size="sm" className="self-start" onClick={() => setBands([...bands, { color: '#000000', width: 1.5 }])}>
+              {t('layout.mapBandAdd')}
+            </Button>
+          )}
+        </fieldset>
       </>,
     )
   }

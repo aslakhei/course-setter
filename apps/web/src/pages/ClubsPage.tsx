@@ -2,7 +2,8 @@ import { type FormEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate } from 'react-router'
 import { useSession } from '../auth/useSession.ts'
-import { Button, ClubMark, ErrorMessage, fieldClass, Loading, Panel } from '../components/ui.tsx'
+import { ClubBadge } from '../components/ClubBadge.tsx'
+import { Button, ErrorMessage, fieldClass, Loading, Panel } from '../components/ui.tsx'
 import { type MyClub, useCreateClub, useMyClubs } from '../lib/api.ts'
 
 export function ClubsPage() {
@@ -32,7 +33,7 @@ export function ClubsView({ clubs, failed }: { clubs: MyClub[] | undefined; fail
                   to={`/clubs/${club.id}`}
                   className="flex items-center gap-3 px-3.5 py-2.5 text-ink no-underline hover:bg-subtle hover:text-ink"
                 >
-                  <ClubMark name={club.name} size={32} />
+                  <ClubBadge name={club.name} logoAssetId={club.logoAssetId} size={32} />
                   <span className="grow font-semibold">{club.name}</span>
                   <span className="text-[13px] text-muted">{t(`roles.${club.role}`)}</span>
                 </Link>

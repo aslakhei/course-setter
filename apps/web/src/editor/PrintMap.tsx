@@ -25,6 +25,7 @@ import {
   moveHandle,
   moveNode,
   moveNodes,
+  numberOutlines,
   type PageContext,
   type Point,
   type PrintSettings,
@@ -195,8 +196,9 @@ export function PrintMap(props: Props) {
   const { versionId, grid, tilesUrl, doc, course, title, context, settings } = props
   const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
-  // Bottom to top: the map, white areas, the course (Multiply), the dimmed surroundings and white paper,
-  // the print layout, the description sheet, the frame lines.
+  // Bottom to top: the map, white areas, white outlines round the control numbers, the course (Multiply),
+  // the dimmed surroundings and white paper, the line and bands round the map area and the print layout,
+  // the description sheet, the frame lines.
   const [layers] = useState(() => {
     // Above the frame: course, paper, orientation and scale (OpenLayers places it, so not React).
     const label = document.createElement('div')
@@ -204,6 +206,7 @@ export function PrintMap(props: Props) {
     label.setAttribute('data-testid', 'print-page-label')
     return {
       white: primitiveLayer(),
+      outlines: primitiveLayer(),
       course: primitiveLayer('course-layer'),
       under: new VectorSource(),
       elements: primitiveLayer(),
@@ -265,6 +268,7 @@ export function PrintMap(props: Props) {
       layers: [
         new TileLayer({ source: tileSource(grid, tilesUrl, projection) }),
         layers.white.layer,
+        layers.outlines.layer,
         layers.course.layer,
         new VectorLayer({ source: layers.under, updateWhileInteracting: true, updateWhileAnimating: true }),
         layers.elements.layer,
@@ -564,6 +568,9 @@ export function PrintMap(props: Props) {
     const scale = course.printScale
     const primitives = [...specialsDrawing(doc, course.id, scale), ...courseDrawing(doc, course)]
     layers.course.setDrawings([{ primitives, printScale: scale, paint: { color: COURSE_PURPLE } }])
+    layers.outlines.setDrawings(
+      doc.numberOutline ? [{ primitives: numberOutlines(primitives), printScale: scale, paint: { color: '#ffffff' } }] : [],
+    )
   }, [layers, doc, course])
 
   useEffect(() => {
@@ -592,17 +599,14 @@ export function PrintMap(props: Props) {
     ])
   }, [layers, course, shown, page])
 
-  // The print layout, above the paper (and the course, where it covers the map).
+  // The line and bands round the map area and the print layout, above the paper (and the course, where
+  // they cover the map).
   // biome-ignore lint/correctness/useExhaustiveDependencies: drawn again once the fonts have loaded
   useEffect(() => {
     const offset = pageToPaperOffset(course, shown)
     layers.elements.setDrawings([
       {
-        primitives: transformPrimitives(
-          page.elements.flatMap(e => e.primitives),
-          1,
-          offset,
-        ),
+        primitives: transformPrimitives([...page.mapOutline, ...page.elements.flatMap(e => e.primitives)], 1, offset),
         printScale: course.printScale,
         paint: { color: '#000' },
         images: id => images.get(id) ?? null,

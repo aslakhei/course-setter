@@ -1,6 +1,7 @@
-// A printed page as PDF: the map in the map area, white areas over it, the course on top in purple with
-// Multiply (so map detail shows through, as overprinting does), the print layout's elements (titles, logos, frames …)
-// and the description sheet in black on white. The worker supplies the map (an image of exactly the map
+// A printed page as PDF: the map in the map area, white areas over it, white outlines round the control
+// numbers (if the event has them), the course on top in purple with Multiply (so map detail shows
+// through, as overprinting does), the print layout's elements (titles, logos, frames …) and the
+// description sheet in black on white. The worker supplies the map (an image of exactly the map
 // area, or the original PDF map page placed at scale), the fonts and the images the layout uses.
 import {
   appendBezierCurve,
@@ -96,6 +97,19 @@ export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer 
       layout.whiteAreas.flatMap(w => w.primitives),
       { origin: [0, 0], color: WHITE, font: fonts.regular },
     )
+    page.pushOperators(popGraphicsState())
+  }
+
+  // White outlines round the control numbers, under the course (white would vanish with Multiply).
+  if (layout.numberOutlines.length) {
+    page.pushOperators(pushGraphicsState(), ...clipTo(layout.mapClip))
+    drawPrimitivesOnPage(page, layout.numberOutlines, {
+      origin: [0, 0],
+      color: WHITE,
+      font: fonts.regular,
+      boldFont: fonts.bold,
+      ...(fonts.digitHeight ? { digitHeight: fonts.digitHeight } : {}),
+    })
     page.pushOperators(popGraphicsState())
   }
 

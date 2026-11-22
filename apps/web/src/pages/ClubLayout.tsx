@@ -1,7 +1,8 @@
 import { useTranslation } from 'react-i18next'
 import { Link, NavLink, Outlet, useOutletContext, useParams } from 'react-router'
 import { useSession } from '../auth/useSession.ts'
-import { ClubMark, ErrorMessage, Loading } from '../components/ui.tsx'
+import { ClubBadge } from '../components/ClubBadge.tsx'
+import { ErrorMessage, Loading } from '../components/ui.tsx'
 import { type Club, type Member, useClub, useMembers } from '../lib/api.ts'
 
 export type ClubContext = { club: Club; members: Member[]; me: Member; isAdmin: boolean }
@@ -48,7 +49,7 @@ export function ClubLayout() {
       <div className="border-b border-line bg-white">
         <div className="mx-auto flex max-w-[1200px] flex-col gap-2 px-5 pt-3.5">
           <div className="flex flex-wrap items-center gap-3">
-            <ClubMark name={club.data.name} />
+            <ClubBadge name={club.data.name} logoAssetId={club.data.logoAssetId} />
             <h1 className="m-0 text-xl font-bold tracking-[-0.01em]">{club.data.name}</h1>
             <span className="text-[13px] text-muted">
               {t('club.memberCount', { count: members.data.length })} · {t(`roles.${me.role}`)}

@@ -13,6 +13,7 @@ export {
   setControlCode,
   setDescription,
   setLegBends,
+  setNumberOutline,
   setNumberPosition,
   setPrintSettings,
   setRoute,
@@ -79,6 +80,8 @@ export {
   courseDrawing,
   crossing,
   fittedDash,
+  NUMBER_OUTLINE,
+  numberOutlines,
   polylineLength,
   type SymbolSizes,
   symbolSizes,
@@ -142,6 +145,7 @@ export {
   removeWhiteArea,
   reorderLayoutElement,
   setElementOverride,
+  setMapAreaBands,
   setMapAreaRadius,
   setMapAreaStroke,
   specForBox,
@@ -152,6 +156,7 @@ export {
   ANCHORS,
   type Anchor,
   type ElementOverrides,
+  MAX_MAP_BANDS,
   NORTH_ARROW_STYLES,
   type PageElementSpec,
   type PrintLayout,
@@ -202,7 +207,9 @@ export { insertNode, mapNodes, moveHandle, moveNode, moveNodes, penNode, removeN
 export {
   applyLayout,
   type Branding,
-  DEFAULT_COLOURS,
+  clubColours,
+  DEFAULT_COLOUR,
+  fitImages,
   NO_BRANDING,
   parseTemplate,
   resolveTemplate,
@@ -210,7 +217,7 @@ export {
   TOKENS,
   tokenizeLayout,
 } from './print/templates.ts'
-export { UNIVERSAL_TEMPLATES, type UniversalTemplate, type UniversalTemplateId } from './print/universal.ts'
+export { UNIVERSAL_TEMPLATES, type UniversalTemplate, type UniversalTemplateId, universalLayout } from './print/universal.ts'
 export {
   type CanvasOptions,
   type CanvasTarget,

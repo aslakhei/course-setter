@@ -6,7 +6,7 @@ import { ALL_CONTROLS, type Course, controlById, courseById, type EventDoc, type
 import { courseLength } from '../course/length.ts'
 import type { Bounds, PathCommand, Primitive } from '../render/primitives.ts'
 import { layoutText, textPrimitives } from '../text/lines.ts'
-import type { PageElementSpec, PrintLayout, WhiteAreaNode } from './elements.ts'
+import { anchorAxes, type PageElementSpec, type PrintLayout, type WhiteAreaNode } from './elements.ts'
 import { northArrowDrawing, qrDrawing, roundedRect, scaleBarDrawing, shapeDrawing } from './marks.ts'
 
 /** What fields need besides the event document: the event, its club and the map (absent values print nothing). */
@@ -124,8 +124,7 @@ export type PlacedElement = { id: string; kind: PageElementSpec['kind']; box: Bo
 export function elementBox(spec: PageElementSpec, size: Point, width: number, height: number): Bounds {
   const [pageW, pageH] = size
   const [dx, dy] = spec.offset
-  const h = spec.anchor.endsWith('l') ? 'left' : spec.anchor.endsWith('r') ? 'right' : 'middle'
-  const v = spec.anchor.startsWith('t') ? 'top' : spec.anchor.startsWith('b') ? 'bottom' : 'middle'
+  const { h, v } = anchorAxes(spec.anchor)
   const left = spec.stretch ? spec.stretch[0] : h === 'left' ? dx : h === 'right' ? pageW - dx - width : (pageW - width) / 2 + dx
   // From the top edge, y down; the box is returned y up.
   const top = v === 'top' ? dy : v === 'bottom' ? pageH - dy - height : (pageH - height) / 2 + dy
@@ -167,7 +166,10 @@ function drawElement(spec: PageElementSpec, box: Bounds, values: Record<Field, s
 
 export type ComposedLayout = {
   elements: PlacedElement[]
-  /** What is left for the map: the area inside the margin, less the bands that keep the map clear of them. */
+  /**
+   * What is left for the map: the area inside the margin, less the elements that keep the map clear and
+   * the coloured bands round it.
+   */
   mapArea: Bounds
   /** The map area's outline (rounded when the layout says so), to clip the map and the course to. */
   mapClip: PathCommand[]
@@ -236,6 +238,13 @@ export function composeLayout(
       }
       return { id: spec.id, kind: spec.kind, box, primitives, locked: spec.locked === true }
     })
+  // Bands round the map take their width from the map area.
+  const bands = (layout.mapArea?.bands ?? []).reduce((sum, band) => sum + band.width, 0)
+  area.minX += bands
+  area.maxX -= bands
+  area.minY += bands
+  area.maxY -= bands
+  if (area.maxX < area.minX) area.maxX = area.minX = (area.minX + area.maxX) / 2
   if (area.maxY < area.minY) area.maxY = area.minY
   return { elements, mapArea: area, mapClip: roundedRect(area, layout.mapArea?.radius ?? 0) }
 }

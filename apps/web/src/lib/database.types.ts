@@ -53,14 +53,14 @@ isOneToOne: false
                   ]
                 },"clubs": {
                   Row: {
-                    "colour": string | null,"colour2": string | null,"created_at": string,"created_by": string | null,"id": string,"logo_asset_id": string | null,"name": string
+                    "colour": string | null,"colour2": string | null,"colour3": string | null,"created_at": string,"created_by": string | null,"id": string,"logo_asset_id": string | null,"name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "colour"?: string | null,"colour2"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name": string
+                    "colour"?: string | null,"colour2"?: string | null,"colour3"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name": string
                   }
                   Update: {
-                    "colour"?: string | null,"colour2"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name"?: string
+                    "colour"?: string | null,"colour2"?: string | null,"colour3"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name"?: string
                   }
                   Relationships: [
                     {
@@ -449,7 +449,7 @@ isOneToOne: false
 { Args: { "asset_id": string,"sponsor": boolean }; Returns: undefined
                            },
 "set_club_branding":
-{ Args: { "club": string,"colour"?: string,"colour2"?: string,"logo_asset_id"?: string }; Returns: undefined
+{ Args: { "club": string,"colour"?: string,"colour2"?: string,"colour3"?: string,"logo_asset_id"?: string }; Returns: undefined
                            },
 "set_map_version_alignment":
 { Args: { "map_version_id": string,"rms_m": number,"transform": Json }; Returns: undefined

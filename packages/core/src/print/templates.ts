@@ -3,10 +3,11 @@
 // template or the branding does not change prints already made).
 import { setPrintSettings } from '../course/commands.ts'
 import type { EventDoc, PrintSettings } from '../course/doc.ts'
-import { type PageElementSpec, type PrintLayout, printLayoutSchema } from './elements.ts'
+import { anchorAxes, type PageElementSpec, type PrintLayout, printLayoutSchema } from './elements.ts'
 
 /** Tokens a template may use where a colour or an image goes. */
-export const TOKENS = { logo: '{club.logo}', colour: '{club.colour}', colour2: '{club.colour2}' } as const
+export const TOKENS = { logo: '{club.logo}', colour: '{club.colour}', colour2: '{club.colour2}', colour3: '{club.colour3}' } as const
+const COLOUR_TOKENS = [TOKENS.colour, TOKENS.colour2, TOKENS.colour3] as const
 /** The club's n-th sponsor image (1, 2, …). */
 export const sponsorToken = (n: number) => `{club.sponsor.${n}}`
 
@@ -16,24 +17,38 @@ export type Branding = {
   logo: string | null
   colour: string | null
   colour2: string | null
+  colour3: string | null
   /** Sponsor images (asset ids), in order. */
   sponsors: string[]
 }
 
-/** Colours for clubs that have not chosen theirs: a dark blue and a yellow. */
-export const DEFAULT_COLOURS = { colour: '#1d4e89', colour2: '#f2c200' } as const
+/** The colour of clubs that have not chosen theirs: a dark blue. */
+export const DEFAULT_COLOUR = '#1d4e89'
 
-export const NO_BRANDING: Branding = { logo: null, colour: null, colour2: null, sponsors: [] }
+export const NO_BRANDING: Branding = { logo: null, colour: null, colour2: null, colour3: null, sponsors: [] }
+
+/**
+ * The club's colours in order, the ones it has set (gaps closed up), or the default colour when none:
+ * one to three. Universal templates are made for this many (`UNIVERSAL_TEMPLATES`).
+ */
+export function clubColours(branding: Branding): string[] {
+  const set = [branding.colour, branding.colour2, branding.colour3].filter((c): c is string => c !== null)
+  return set.length ? set : [DEFAULT_COLOUR]
+}
+
+/** What {club.colour}, {club.colour2} and {club.colour3} become: a colour the club lacks is its last one. */
+function colourTokens(branding: Branding): Record<string, string> {
+  const colours = clubColours(branding)
+  return Object.fromEntries(COLOUR_TOKENS.map((token, i) => [token, colours[Math.min(i, colours.length - 1)] as string]))
+}
 
 /**
  * The template with its tokens filled in from `branding` and new ids (from `newId`), checked as a print
- * layout. An image whose token has nothing behind it (no logo, fewer sponsors) is left out.
+ * layout. An image whose token has nothing behind it (no logo, fewer sponsors) is left out; a colour the
+ * club lacks is its last one (a template for three colours still prints for a club with one).
  */
 export function resolveTemplate(template: PrintLayout, branding: Branding, newId: () => string): PrintLayout {
-  const colours: Record<string, string> = {
-    [TOKENS.colour]: branding.colour ?? DEFAULT_COLOURS.colour,
-    [TOKENS.colour2]: branding.colour2 ?? DEFAULT_COLOURS.colour2,
-  }
+  const colours = colourTokens(branding)
   const filled = JSON.parse(JSON.stringify(template), (_key, value) =>
     typeof value === 'string' && Object.hasOwn(colours, value) ? colours[value] : value,
   ) as PrintLayout
@@ -74,8 +89,9 @@ export function applyLayout(doc: EventDoc, layout: PrintLayout, to: 'all' | { co
  * template takes the branding of the club it is used in (a personal template in another club, too).
  */
 export function tokenizeLayout(layout: PrintLayout, branding: Branding): PrintLayout {
-  const same = (a: string, b: string | null) => b !== null && a.toLowerCase() === b.toLowerCase()
-  const colour = (c: string) => (same(c, branding.colour) ? TOKENS.colour : same(c, branding.colour2) ? TOKENS.colour2 : c)
+  // The first token with this colour: a club with fewer colours has its last one where the others go.
+  const tokens = Object.entries(colourTokens(branding))
+  const colour = (c: string) => tokens.find(([, value]) => value.toLowerCase() === c.toLowerCase())?.[0] ?? c
   const recoloured = JSON.parse(JSON.stringify(layout), (key, value) =>
     key === 'color' && typeof value === 'string' ? colour(value) : value,
   ) as PrintLayout
@@ -95,6 +111,7 @@ export function parseTemplate(raw: unknown): PrintLayout | null {
     logo: 'logo',
     colour: '#000000',
     colour2: '#000000',
+    colour3: '#000000',
     sponsors: Array.from({ length: 100 }, (_, i) => `sponsor-${i}`),
   }
   try {
@@ -103,4 +120,28 @@ export function parseTemplate(raw: unknown): PrintLayout | null {
   } catch {
     return null
   }
+}
+
+/**
+ * The layout with each image fitted to its picture's aspect ratio (width / height, from `aspectOf`;
+ * null: not known), as large as fits in the box it had and centred in it (an image stretched across
+ * the page stays as it is). A template's box is a place for any logo; the logo itself keeps its shape.
+ */
+export function fitImages(layout: PrintLayout, aspectOf: (asset: string) => number | null): PrintLayout {
+  const elements = layout.elements.map((e): PageElementSpec => {
+    if (e.kind !== 'image') return e
+    const aspect = aspectOf(e.asset)
+    // An image stretched across the page has the page's width: it stays as it is.
+    if (!aspect || !Number.isFinite(aspect) || aspect <= 0 || e.stretch) return e
+    const [w, h] = e.size
+    const [fw, fh] = w / h > aspect ? [Math.max(0.5, h * aspect), h] : [w, Math.max(0.5, w / aspect)]
+    // Pinned to an edge, it moves in by half of what it lost; an element in the middle stays centred.
+    const { h: across, v: down } = anchorAxes(e.anchor)
+    const offset: [number, number] = [
+      e.offset[0] + (across === 'middle' ? 0 : (w - fw) / 2),
+      e.offset[1] + (down === 'middle' ? 0 : (h - fh) / 2),
+    ]
+    return { ...e, size: [fw, fh], offset }
+  })
+  return { ...layout, elements }
 }

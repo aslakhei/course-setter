@@ -1,6 +1,6 @@
 // The club's branding for print templates (admins, on the Settings tab): its logo, chosen from the
-// club images, and two colours. Universal templates fill these in, so prints look like the club's.
-import { DEFAULT_COLOURS } from '@course-setter/core'
+// club images, and one to three colours. Universal templates fill these in, so prints look like the club's.
+import { DEFAULT_COLOUR } from '@course-setter/core'
 import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { type Club, useSetBranding } from '../lib/api.ts'
@@ -9,20 +9,26 @@ import { Button, ErrorMessage, fieldClass, Panel } from './ui.tsx'
 
 const HEX = /^#[0-9a-fA-F]{6}$/
 
-/** A colour as #rrggbb; empty: the default (`fallback`) is used, shown in the swatch and as placeholder. */
+/**
+ * A colour as #rrggbb. Empty: colour 1 is the default (`fallback`, shown in the swatch and as
+ * placeholder); colours 2 and 3 are not set (`placeholder` "None", the swatch faded).
+ */
 function ColourField({
   id,
   label,
   value,
   fallback,
+  placeholder = fallback,
   onChange,
 }: {
   id: string
   label: string
   value: string
   fallback: string
+  placeholder?: string
   onChange: (v: string) => void
 }) {
+  const unset = !HEX.test(value) && placeholder !== fallback
   return (
     <div className="flex flex-col gap-1">
       <label htmlFor={id} className="text-[13px] font-semibold">
@@ -35,13 +41,13 @@ function ColourField({
           tabIndex={-1}
           value={HEX.test(value) ? value : fallback}
           onChange={e => onChange(e.target.value)}
-          className="h-8 w-9 cursor-pointer border-0 bg-transparent p-0"
+          className={`h-8 w-9 cursor-pointer border-0 bg-transparent p-0 ${unset ? 'opacity-30' : ''}`}
         />
         <input
           id={id}
           className={`${fieldClass} w-28 font-mono`}
           value={value}
-          placeholder={fallback}
+          placeholder={placeholder}
           maxLength={7}
           onChange={e => onChange(e.target.value.trim())}
         />
@@ -59,17 +65,19 @@ export function BrandingPanel({ club }: { club: Club }) {
   const [logo, setLogo] = useState<string | null>(club.logoAssetId)
   const [colour, setColour] = useState(club.colour ?? '')
   const [colour2, setColour2] = useState(club.colour2 ?? '')
+  const [colour3, setColour3] = useState(club.colour3 ?? '')
   useEffect(() => {
     setLogo(club.logoAssetId)
     setColour(club.colour ?? '')
     setColour2(club.colour2 ?? '')
-  }, [club.logoAssetId, club.colour, club.colour2])
-  const coloursOk = [colour, colour2].every(c => c === '' || HEX.test(c))
+    setColour3(club.colour3 ?? '')
+  }, [club.logoAssetId, club.colour, club.colour2, club.colour3])
+  const coloursOk = [colour, colour2, colour3].every(c => c === '' || HEX.test(c))
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!coloursOk) return
-    save.mutate({ logoAssetId: logo, colour: colour || null, colour2: colour2 || null })
+    save.mutate({ logoAssetId: logo, colour: colour || null, colour2: colour2 || null, colour3: colour3 || null })
   }
 
   return (
@@ -117,19 +125,22 @@ export function BrandingPanel({ club }: { club: Club }) {
           )}
         </fieldset>
         <div className="flex flex-wrap gap-4">
-          <ColourField
-            id="branding-colour"
-            label={t('branding.colour')}
-            value={colour}
-            fallback={DEFAULT_COLOURS.colour}
-            onChange={setColour}
-          />
+          <ColourField id="branding-colour" label={t('branding.colour')} value={colour} fallback={DEFAULT_COLOUR} onChange={setColour} />
           <ColourField
             id="branding-colour2"
             label={t('branding.colour2')}
             value={colour2}
-            fallback={DEFAULT_COLOURS.colour2}
+            fallback={HEX.test(colour) ? colour : DEFAULT_COLOUR}
+            placeholder={t('branding.none')}
             onChange={setColour2}
+          />
+          <ColourField
+            id="branding-colour3"
+            label={t('branding.colour3')}
+            value={colour3}
+            fallback={HEX.test(colour2) ? colour2 : HEX.test(colour) ? colour : DEFAULT_COLOUR}
+            placeholder={t('branding.none')}
+            onChange={setColour3}
           />
         </div>
         <span className="text-xs text-muted">{t('branding.coloursHelp')}</span>

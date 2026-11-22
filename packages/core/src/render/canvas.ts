@@ -20,6 +20,7 @@ export interface CanvasTarget {
   translate(x: number, y: number): void
   rotate(angle: number): void
   fillText(text: string, x: number, y: number): void
+  strokeText(text: string, x: number, y: number): void
   drawImage(image: object, x: number, y: number, width: number, height: number): void
   globalAlpha: number
   measureText(text: string): { width: number }
@@ -192,7 +193,13 @@ export function drawPrimitives(ctx: CanvasTarget, primitives: Primitive[], optio
       }
       ctx.textAlign = 'center'
       ctx.textBaseline = 'alphabetic'
-      ctx.fillText(p.text, 0, digitPx / 2)
+      if (p.outline) {
+        // Only the outline, stroked round the glyphs.
+        ctx.lineWidth = 2 * p.outline * scale
+        ctx.lineJoin = 'round'
+        ctx.setLineDash([])
+        ctx.strokeText(p.text, 0, digitPx / 2)
+      } else ctx.fillText(p.text, 0, digitPx / 2)
       ctx.restore()
     }
   }

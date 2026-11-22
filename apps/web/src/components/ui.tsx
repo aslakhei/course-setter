@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type ReactNode, useState } from 'react'
 
 const buttonBase =
   'inline-flex items-center justify-center gap-1.5 rounded font-[inherit] whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60'
@@ -90,10 +90,24 @@ export function Avatar({ name, url, seed, size = 24 }: { name: string; url?: str
   )
 }
 
-export function ClubMark({ name, size = 36 }: { name: string; size?: number }) {
+/** The club's logo (`logoUrl`) in a square, or its initials when it has none (or it fails to load). */
+export function ClubMark({ name, logoUrl, size = 36 }: { name: string; logoUrl?: string | null; size?: number }) {
+  const [failed, setFailed] = useState<string | null>(null)
+  if (logoUrl && failed !== logoUrl) {
+    return (
+      <span
+        data-testid="club-mark"
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-white p-0.5"
+        style={{ width: size, height: size }}
+      >
+        <img src={logoUrl} alt="" className="max-h-full max-w-full object-contain" onError={() => setFailed(logoUrl)} />
+      </span>
+    )
+  }
   return (
     <span
       aria-hidden="true"
+      data-testid="club-mark"
       className="flex shrink-0 items-center justify-center rounded-md bg-brand-600 font-bold text-white"
       style={{ width: size, height: size, fontSize: Math.round(size * 0.39) }}
     >

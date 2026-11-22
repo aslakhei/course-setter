@@ -194,6 +194,12 @@ export function setLegBends(doc: EventDoc, courseId: string, from: string, to: s
   })
 }
 
+/** Turn the white outline round the control numbers on or off, for every course. */
+export function setNumberOutline(doc: EventDoc, on: boolean): EventDoc {
+  const { numberOutline: _old, ...rest } = doc
+  return on ? { ...rest, numberOutline: true } : rest
+}
+
 /** Move a control's number in a course (offset from the control's centre in paper mm), or with null put it back where it goes by itself. */
 export function setNumberPosition(doc: EventDoc, courseId: string, controlId: string, offset: Point | null): EventDoc {
   controlById(doc, controlId)

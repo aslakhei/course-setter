@@ -1,4 +1,4 @@
--- Club branding (logo, colours) and sponsor images. Run with: pnpm db:test
+-- Club branding (logo, three colours) and sponsor images. Run with: pnpm db:test
 begin;
 create extension if not exists pgtap with schema extensions;
 select * from no_plan();
@@ -32,12 +32,12 @@ insert into public.layout_assets (id, club_id, name, kind, status, original_path
 
 select pg_temp.sign_in(1);
 select lives_ok(
-  $$ select public.set_club_branding(pg_temp.club(), 'bcbcbcbc-1111-0000-0000-000000000001', '#1F5A3A', ' #d9b44a ') $$,
-  'an admin sets the logo and colours'
+  $$ select public.set_club_branding(pg_temp.club(), 'bcbcbcbc-1111-0000-0000-000000000001', '#1F5A3A', ' #d9b44a ', '#c8102e') $$,
+  'an admin sets the logo and three colours'
 );
 select results_eq(
-  $$ select logo_asset_id, colour, colour2 from public.clubs where id = pg_temp.club() $$,
-  $$ values ('bcbcbcbc-1111-0000-0000-000000000001'::uuid, '#1F5A3A', '#d9b44a') $$,
+  $$ select logo_asset_id, colour, colour2, colour3 from public.clubs where id = pg_temp.club() $$,
+  $$ values ('bcbcbcbc-1111-0000-0000-000000000001'::uuid, '#1F5A3A', '#d9b44a', '#c8102e') $$,
   'the branding is saved'
 );
 select throws_ok(
@@ -49,6 +49,7 @@ select throws_ok(
   '22023', null, 'the logo must be the club''s own'
 );
 select throws_ok($$ select public.set_club_branding(pg_temp.club(), null, 'green') $$, '23514', null, 'colours are #rrggbb');
+select throws_ok($$ select public.set_club_branding(pg_temp.club(), null, null, null, 'red') $$, '23514', null, 'the third colour too');
 select lives_ok($$ select public.set_asset_sponsor('bcbcbcbc-1111-0000-0000-000000000001', true) $$, 'an admin marks a sponsor');
 select ok((select sponsor from public.layout_assets where id = 'bcbcbcbc-1111-0000-0000-000000000001'), 'it is a sponsor');
 select throws_ok($$ select public.set_asset_sponsor('bcbcbcbc-1111-0000-0000-000000000003', true) $$, '42501', null, 'not another club''s image');
@@ -67,8 +68,8 @@ select is((select logo_asset_id from public.clubs where id = pg_temp.club()), nu
 select pg_temp.sign_in(1);
 select lives_ok($$ select public.set_club_branding(pg_temp.club()) $$, 'an admin clears the branding');
 select results_eq(
-  $$ select logo_asset_id, colour, colour2 from public.clubs where id = pg_temp.club() $$,
-  $$ values (null::uuid, null::text, null::text) $$,
+  $$ select logo_asset_id, colour, colour2, colour3 from public.clubs where id = pg_temp.club() $$,
+  $$ values (null::uuid, null::text, null::text, null::text) $$,
   'nothing is left'
 );
 reset role;

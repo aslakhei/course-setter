@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { type FormEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router'
@@ -87,7 +88,7 @@ export function MapRow({ map, first, linkPrefix = '' }: { map: ClubMap; first: b
   )
 }
 
-export function versionLabel(v: MapVersionSummary, t: ReturnType<typeof useTranslation>['t']): string {
+export function versionLabel(v: MapVersionSummary, t: TFunction): string {
   return [t('maps.version', { number: v.version }), v.scale ? formatScale(v.scale) : null, t(`maps.kind.${v.kind}`)]
     .filter(Boolean)
     .join(' · ')

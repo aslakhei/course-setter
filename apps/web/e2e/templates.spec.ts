@@ -100,13 +100,13 @@ test('club branding fills in a universal template, for every course or one', asy
 })
 
 /** A club library image uploaded through the API, waited for until it is ready. */
-async function clubImage(user: TestUser, clubId: string, name: string): Promise<string> {
+async function clubImage(user: TestUser, clubId: string, name: string, svg = LOGO): Promise<string> {
   const client = await clientFor(user)
   const started = await client.rpc('start_asset_upload', { scope: 'club', asset_name: name, kind: 'svg', club: clubId })
   if (started.error) throw started.error
   const reserved = started.data[0]
   if (!reserved) throw new Error('no upload')
-  await client.storage.from('layout-assets').upload(reserved.upload_path, LOGO, { contentType: 'image/svg+xml' })
+  await client.storage.from('layout-assets').upload(reserved.upload_path, svg, { contentType: 'image/svg+xml' })
   await client.rpc('finish_asset_upload', { asset_id: reserved.asset_id })
   await expect
     .poll(async () => (await admin.from('layout_assets').select('status').eq('id', reserved.asset_id).single()).data?.status, {
@@ -227,4 +227,66 @@ test('saved templates: a club template for its members, a personal one that foll
     .eq('id', imagesB[0]?.asset ?? '')
     .single()
   expect(copy).toEqual({ event_id: eventB, name: 'Map of the area' })
+})
+
+test('three club colours, a wide logo in its own shape, and the logo in the club mark', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId, mapVersionId } = await clubWithPdfMap(ada, 'Colour club', pdfMap(300, 200), 10000)
+  clubs.push(clubId)
+  // A logo three times as wide as it is high.
+  const wide = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40"><rect width="120" height="40" fill="#1f5a3a"/></svg>',
+  )
+  const logo = await clubImage(ada, clubId, 'Wide logo', wide)
+  const page = await pageFor(browser, ada)
+  await page.setViewportSize({ width: 1500, height: 950 })
+
+  // Without a logo the club mark shows the initials; with one, the logo.
+  await page.goto(`/clubs/${clubId}/settings`)
+  await expect(page.getByTestId('club-mark')).toHaveText('CC')
+  const branding = page.getByRole('region', { name: 'Branding' })
+  await branding.getByTitle('Wide logo').click()
+  await branding.getByLabel('Club colour 1').fill('#1f5a3a')
+  await branding.getByLabel('Club colour 2').fill('#d9b44a')
+  await branding.getByLabel('Club colour 3').fill('#c8102e')
+  await branding.getByRole('button', { name: 'Save' }).click()
+  await expect(branding.getByText('Saved')).toBeVisible()
+  const { data: club } = await admin.from('clubs').select('logo_asset_id, colour, colour2, colour3').eq('id', clubId).single()
+  expect(club).toEqual({ logo_asset_id: logo, colour: '#1f5a3a', colour2: '#d9b44a', colour3: '#c8102e' })
+  await expect(page.getByTestId('club-mark').locator('img')).toBeVisible()
+  await page.goto('/')
+  await expect(
+    page
+      .getByRole('link', { name: /Colour club/ })
+      .getByTestId('club-mark')
+      .locator('img'),
+  ).toBeVisible()
+
+  const eventId = await eventWith(clubId, mapVersionId, ada.id, undefined)
+  await page.goto(`/clubs/${clubId}/events/${eventId}?view=print&mode=layout`)
+  const layoutPanel = page.getByRole('complementary', { name: 'Layout' })
+  const gallery = page.getByRole('dialog', { name: 'Templates' })
+
+  // Header band: the template's square box holds the wide logo in its own shape.
+  await layoutPanel.getByRole('button', { name: 'Templates' }).click()
+  await gallery.getByRole('button', { name: /^Header band/ }).click()
+  await gallery.getByRole('button', { name: 'Use this template' }).click()
+  await waitSaved(page)
+  const image = (await saved(eventId)).printLayout?.elements.find(e => e.kind === 'image')
+  expect(image?.size[0]).toBeCloseTo(18, 6)
+  expect(image?.size[1]).toBeCloseTo(6, 6)
+
+  // Stripes: a band round the map for each of the three colours.
+  await layoutPanel.getByRole('button', { name: 'Templates' }).click()
+  await gallery.getByRole('button', { name: /^Stripes/ }).click()
+  await gallery.getByRole('button', { name: 'Use this template' }).click()
+  await waitSaved(page)
+  expect((await saved(eventId)).printLayout?.mapArea?.bands?.map(b => b.color)).toEqual(['#1f5a3a', '#d9b44a', '#c8102e'])
+
+  // The white outline round the control numbers, for every course.
+  await page.getByRole('checkbox', { name: 'White outline on numbers' }).check()
+  await waitSaved(page)
+  expect((await saved(eventId)).numberOutline).toBe(true)
 })

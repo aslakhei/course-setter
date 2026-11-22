@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest'
 import { addControl, addSpecial, insertCourseControl, setDescription, setSpecialBoundary, updateCourse } from '../course/commands.ts'
 import { courseById, type DescriptionColumnKey, type EventDoc, SPECIALS_BY_STANDARD, type SpecialKind, STANDARDS } from '../course/doc.ts'
 import { specialDrawing } from '../course/specials.ts'
-import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
+import { allControlsDrawing, courseDrawing, NUMBER_OUTLINE } from '../course/symbols.ts'
 import { testEvent } from '../course/test-doc.ts'
 import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
@@ -26,7 +26,7 @@ import { composeLayout, whiteAreaPath } from '../print/compose.ts'
 import type { PageElementSpec } from '../print/elements.ts'
 import { printPage } from '../print/layout.ts'
 import { resolveTemplate } from '../print/templates.ts'
-import { UNIVERSAL_TEMPLATES } from '../print/universal.ts'
+import { UNIVERSAL_TEMPLATES, universalLayout } from '../print/universal.ts'
 import type { Point } from '../similarity.ts'
 import { FONT_FEATURES, FONT_IDS, FONTS, type FontId } from '../text/fonts.ts'
 import { textPrimitives } from '../text/lines.ts'
@@ -515,6 +515,21 @@ const layoutShapesSheet = (): Sheet => ({
         },
       ],
     },
+    {
+      // As the page draws a control number with a white outline: the outline first, the number over it.
+      name: 'numbers with a white outline over a coloured field',
+      primitives: [
+        { type: 'path', role: 'layout', commands: square(0, 0, 18), lineWidth: 0, filled: true, color: '#2e7d32' },
+        { type: 'path', role: 'layout', commands: square(20, 0, 18), lineWidth: 0, filled: true, color: '#0b62a4' },
+        ...(['3/8', '12'] as const).flatMap((text, i): Primitive[] => {
+          const at: Point = [9 + i * 20, 9]
+          return [
+            { type: 'text', role: 'number', at, text, height: 4, outline: NUMBER_OUTLINE, color: '#ffffff' },
+            { type: 'text', role: 'number', at, text, height: 4, color: '#b5179e' },
+          ]
+        }),
+      ],
+    },
   ],
 })
 
@@ -581,13 +596,17 @@ const layoutElementsSheet = (): Sheet => {
 }
 
 /**
- * Every universal template on A4 portrait and A3 landscape, with a logo, two club colours and three
- * sponsors: the page's edge, the map area (beige), its outline and the elements, at a quarter of their size.
+ * Every universal template on A4 portrait and A3 landscape, with a logo, three club colours and three
+ * sponsors (and the ones made for the club's colours with one and two of them too): the page's edge, the map area (beige), its outline and the elements, at a quarter of their size.
  */
 const layoutTemplatesSheet = (): Sheet => {
   let doc = testEvent()
   doc = updateCourse(doc, 'A', { printScale: 10000, climb: 85 })
-  const branding = { logo: 'logo', colour: '#1f5a3a', colour2: '#d9b44a', sponsors: ['s1', 's2', 's3'] }
+  const branding = { logo: 'logo', colour: '#1f5a3a', colour2: '#d9b44a', colour3: '#c8102e', sponsors: ['s1', 's2', 's3'] }
+  const fewer = [
+    { ...branding, colour2: null, colour3: null },
+    { ...branding, colour3: null },
+  ]
   const context = {
     eventDate: '2026-11-24',
     clubName: 'Nordskog OK',
@@ -599,34 +618,40 @@ const layoutTemplatesSheet = (): Sheet => {
     ['A3', 'landscape'],
   ] as const
   const cells: Cell[] = []
-  for (const t of UNIVERSAL_TEMPLATES)
-    for (const [paper, orientation] of papers) {
-      let n = 0
-      const layout = resolveTemplate(t.layout, branding, () => `${t.id}-${++n}`)
-      const withLayout = { ...doc, printLayout: layout }
-      const course = courseById(withLayout, 'A')
-      const page = printPage(withLayout, course, 'Club night', { paper, orientation, center: [0, 0], margin: 5, layout: [] }, context)
-      const [w, h] = page.size
-      const primitives: Primitive[] = [
-        {
-          type: 'polyline',
-          role: 'layout',
-          points: [
-            [0, 0],
-            [w, 0],
-            [w, h],
-            [0, h],
-          ],
-          closed: true,
-          lineWidth: 0.6,
-          color: '#9a949c',
-        },
-        { type: 'path', role: 'layout', commands: page.mapClip, lineWidth: 0, filled: true, color: '#f1ecdf' },
-        ...page.mapOutline,
-        ...page.elements.flatMap(e => e.primitives),
-      ]
-      cells.push({ name: `${t.id} ${paper} ${orientation}`, primitives: transformPrimitives(primitives, 0.25, [0, 0]) })
-    }
+  const runs = [
+    ...UNIVERSAL_TEMPLATES.flatMap(t => papers.map(([paper, orientation]) => ({ t, paper, orientation, branding }))),
+    ...UNIVERSAL_TEMPLATES.filter(t => t.id === 'stripes' || t.id === 'ribbon').flatMap(t =>
+      fewer.map(b => ({ t, paper: 'A4' as const, orientation: 'portrait' as const, branding: b })),
+    ),
+  ]
+  for (const { t, paper, orientation, branding } of runs) {
+    let n = 0
+    const layout = resolveTemplate(universalLayout(t, branding), branding, () => `${t.id}-${++n}`)
+    const withLayout = { ...doc, printLayout: layout }
+    const course = courseById(withLayout, 'A')
+    const page = printPage(withLayout, course, 'Club night', { paper, orientation, center: [0, 0], margin: 5, layout: [] }, context)
+    const [w, h] = page.size
+    const primitives: Primitive[] = [
+      {
+        type: 'polyline',
+        role: 'layout',
+        points: [
+          [0, 0],
+          [w, 0],
+          [w, h],
+          [0, h],
+        ],
+        closed: true,
+        lineWidth: 0.6,
+        color: '#9a949c',
+      },
+      { type: 'path', role: 'layout', commands: page.mapClip, lineWidth: 0, filled: true, color: '#f1ecdf' },
+      ...page.mapOutline,
+      ...page.elements.flatMap(e => e.primitives),
+    ]
+    const colours = branding.colour3 ? '' : branding.colour2 ? ', 2 colours' : ', 1 colour'
+    cells.push({ name: `${t.id} ${paper} ${orientation}${colours}`, primitives: transformPrimitives(primitives, 0.25, [0, 0]) })
+  }
   const sponsor = (field: string) => ({ png: testPng(180, 70, { field, disc: '#ffffff' }) })
   return {
     name: 'layout-templates',

@@ -20,6 +20,7 @@ import {
   setSpecialCourses,
   updateCourse,
 } from '@course-setter/core'
+import type { TFunction } from 'i18next'
 import { type FormEvent, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, fieldClass } from '../components/ui.tsx'
@@ -141,7 +142,7 @@ export function CoursePanel({ state, eventName, onCourse, onSelect, onEdit, onNe
   )
 }
 
-export function stopName(control: Control, t: ReturnType<typeof useTranslation>['t']): string {
+export function stopName(control: Control, t: TFunction): string {
   return control.kind === 'control' ? t('editor.stop.control', { code: control.code }) : t(`editor.stop.${control.kind}`)
 }
 

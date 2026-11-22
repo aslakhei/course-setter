@@ -29,7 +29,9 @@ import {
   setLineJoin,
   setLineWidth,
   setStrokingColor,
+  setTextRenderingMode,
   stroke,
+  TextRenderingMode,
 } from 'pdf-lib'
 import type { Point } from '../similarity.ts'
 import type { FontId } from '../text/fonts.ts'
@@ -159,7 +161,19 @@ export function drawPrimitivesOnPage(page: PDFPage, primitives: Primitive[], opt
         size *= k
         width *= k
       }
-      page.drawText(p.text, { x: x(p.at[0]) - width / 2, y: y(p.at[1]) - digit / 2, size, font, color, ...translucent })
+      const draw = () => page.drawText(p.text, { x: x(p.at[0]) - width / 2, y: y(p.at[1]) - digit / 2, size, font, color, ...translucent })
+      if (p.outline) {
+        // Only the outline, stroked round the glyphs (drawText keeps the render mode and stroke it is given).
+        page.pushOperators(
+          pushGraphicsState(),
+          setTextRenderingMode(TextRenderingMode.Outline),
+          setLineWidth(2 * p.outline * PT_PER_MM),
+          setLineJoin(LineJoinStyle.Round),
+          setStrokingColor(color),
+        )
+        draw()
+        page.pushOperators(popGraphicsState())
+      } else draw()
       continue
     }
     if (p.type === 'textLine') {
