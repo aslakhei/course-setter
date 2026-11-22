@@ -197,6 +197,7 @@ export {
   showDescriptions,
 } from './print/layout.ts'
 export { ellipse, roundedRect, scaleBarLength } from './print/marks.ts'
+export { insertNode, mapNodes, moveHandle, moveNode, moveNodes, penNode, removeNode, toggleCorner } from './print/nodes.ts'
 export {
   type CanvasOptions,
   type CanvasTarget,

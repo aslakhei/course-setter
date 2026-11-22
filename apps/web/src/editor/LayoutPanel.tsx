@@ -10,13 +10,14 @@ import {
   type PrintSettings,
   reorderLayoutElement,
   updateLayoutElement,
+  updateWhiteArea,
 } from '@course-setter/core'
 import { type FormEvent, type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
 import { useAssetRows } from '../lib/assets.ts'
 import { type ChosenImage, ImagePicker } from './ImagePicker.tsx'
-import { type AppliesTo, hiddenState, layerName, paletteElement, setHidden } from './layout.ts'
+import { type AppliesTo, hiddenState, layerName, paletteElement, setHidden, whiteAreasOf } from './layout.ts'
 
 /** The Layers entry for the map area (element ids are uuids, so this never clashes). */
 export const MAP_LAYER = '#map'
@@ -37,6 +38,9 @@ export type LayoutPanelProps = {
   onDescriptions: (show: boolean) => void
   /** The shown course's field values, to name text elements as they print. */
   values: Record<Field, string>
+  /** Whether a white area is being drawn. */
+  penActive: boolean
+  onStartPen: () => void
 }
 
 const PALETTE: NewElementKind[] = ['text', 'shape', 'northArrow', 'scaleBar']
@@ -119,6 +123,9 @@ export function LayoutPanel(props: LayoutPanelProps) {
           <Button size="sm" onClick={() => setPicking(true)}>
             {t('layout.kinds.image')}
           </Button>
+          <Button size="sm" onClick={props.onStartPen} aria-pressed={props.penActive}>
+            {t('layout.whiteArea')}
+          </Button>
           <Button size="sm" onClick={() => setQrOpen(o => !o)} aria-expanded={qrOpen}>
             {t('layout.kinds.qr')}
           </Button>
@@ -141,7 +148,9 @@ export function LayoutPanel(props: LayoutPanelProps) {
         <h2 id="layout-layers" className="m-0 px-1 pb-1 text-[13px] font-semibold">
           {t('layout.layers')}
         </h2>
-        {elements.length === 0 && <span className="px-1 text-xs text-muted">{t('layout.layersEmpty')}</span>}
+        {elements.length === 0 && whiteAreasOf(doc, settings).length === 0 && (
+          <span className="px-1 text-xs text-muted">{t('layout.layersEmpty')}</span>
+        )}
         <ul aria-label={t('layout.layers')} className="m-0 flex list-none flex-col gap-0.5 p-0">
           {[...elements].reverse().map((e, i) => {
             const name = layerName(e, t, props.values, imageNames)
@@ -215,6 +224,56 @@ export function LayoutPanel(props: LayoutPanelProps) {
               {t('layout.descriptions')}
             </label>
           </li>
+          {whiteAreasOf(doc, settings)
+            .map((a, i) => ({ a, name: t('layout.whiteAreaN', { n: i + 1 }) }))
+            .reverse()
+            .map(({ a, name }) => {
+              const hidden = hiddenState(doc, settings, a.id)
+              return (
+                <li key={a.id} className={rowClass(selected.includes(a.id))}>
+                  <button
+                    type="button"
+                    className={`flex min-w-0 grow flex-col py-1 text-left text-[13px] ${hidden !== 'no' ? 'text-muted' : ''}`}
+                    aria-current={selected.includes(a.id) ? 'true' : undefined}
+                    onClick={click => onSelect(a.id, click.shiftKey)}
+                  >
+                    <span className="truncate">{name}</span>
+                    {hidden !== 'no' && (
+                      <span className="text-[11px]">{t(hidden === 'all' ? 'layout.hiddenAll' : 'layout.hiddenCourse')}</span>
+                    )}
+                  </button>
+                  <IconButton
+                    label={t(hidden === 'no' ? 'layout.hide' : 'layout.show', { name })}
+                    pressed={hidden !== 'no'}
+                    onClick={() => onEdit(setHidden(doc, course, settings, hidden === 'all' ? 'all' : appliesTo, a.id, hidden === 'no'))}
+                  >
+                    {hidden === 'no' ? (
+                      <>
+                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                        <circle cx="12" cy="12" r="3" />
+                      </>
+                    ) : (
+                      <path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4.2M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6" />
+                    )}
+                  </IconButton>
+                  <IconButton
+                    label={t(a.locked ? 'layout.unlock' : 'layout.lock', { name })}
+                    pressed={a.locked === true}
+                    onClick={() =>
+                      onEdit(
+                        updateWhiteArea(doc, course.id, settings, a.id, x => {
+                          const { locked: _old, ...rest } = x
+                          return a.locked ? rest : { ...rest, locked: true }
+                        }),
+                      )
+                    }
+                  >
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d={a.locked ? 'M8 11V7a4 4 0 0 1 8 0v4' : 'M8 11V7a4 4 0 0 1 7.5-2'} />
+                  </IconButton>
+                </li>
+              )
+            })}
           <li className={rowClass(selected.includes(MAP_LAYER))}>
             <button type="button" className="grow py-1 text-left text-[13px]" onClick={() => onSelect(MAP_LAYER)}>
               {t('layout.map')}

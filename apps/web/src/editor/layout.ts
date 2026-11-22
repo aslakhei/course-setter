@@ -15,12 +15,21 @@ import {
   type PageElementSpec,
   type Point,
   type PrintSettings,
+  pagePosition,
+  pageSize,
   removeLayoutElement,
+  removeWhiteArea,
   setElementOverride,
   specForBox,
   updateLayoutElement,
+  updateWhiteArea,
+  type WhiteArea,
+  type WhiteAreaNode,
 } from '@course-setter/core'
 import type { TFunction } from 'i18next'
+
+/** A white area being drawn with the pen: on the map or the page, and its points so far. */
+export type Pen = { on: 'map' | 'page'; nodes: WhiteAreaNode[] }
 
 /** Whom an edit is for: every course (the shared layout) or only the shown course (its overrides). */
 export type AppliesTo = 'all' | 'course'
@@ -82,10 +91,13 @@ export function setHidden(
   hidden: boolean,
 ): EventDoc {
   if (settings.ownLayout || appliesTo === 'all') {
-    return updateLayoutElement(doc, course.id, settings, id, e => {
+    const flip = <T extends { hidden?: boolean }>(e: T): T => {
       const { hidden: _old, ...rest } = e
-      return hidden ? { ...rest, hidden: true } : rest
-    })
+      return (hidden ? { ...rest, hidden: true } : rest) as T
+    }
+    return whiteAreaOf(doc, settings, id)
+      ? updateWhiteArea(doc, course.id, settings, id, flip)
+      : updateLayoutElement(doc, course.id, settings, id, flip)
   }
   const { hidden: _old, ...rest } = settings.overrides?.[id] ?? {}
   return setElementOverride(doc, course.id, settings, id, hidden ? { ...rest, hidden: true } : rest)
@@ -93,7 +105,7 @@ export function setHidden(
 
 /** Whether the element is hidden on the shown course's page, and for whom. */
 export function hiddenState(doc: EventDoc, settings: PrintSettings, id: string): 'no' | 'all' | 'course' {
-  if (baseElement(doc, settings, id)?.hidden) return 'all'
+  if ((baseElement(doc, settings, id) ?? whiteAreaOf(doc, settings, id))?.hidden) return 'all'
   if (!settings.ownLayout && settings.overrides?.[id]?.hidden) return 'course'
   return 'no'
 }
@@ -198,4 +210,40 @@ export function nextSelection(selected: string[], id: string | null, additive: b
   if (!additive || id === mapLayer) return [id]
   const without = selected.filter(s => s !== mapLayer)
   return without.includes(id) ? without.filter(s => s !== id) : [...without, id]
+}
+
+/** A white area of the layout the course uses (before its overrides), or undefined. */
+export function whiteAreaOf(doc: EventDoc, settings: PrintSettings, id: string): WhiteArea | undefined {
+  return (settings.ownLayout ?? doc.printLayout)?.whiteAreas?.find(a => a.id === id)
+}
+
+/** The white areas of the layout the course uses (before its overrides), in drawing order. */
+export const whiteAreasOf = (doc: EventDoc, settings: PrintSettings): WhiteArea[] =>
+  (settings.ownLayout ?? doc.printLayout)?.whiteAreas ?? []
+
+/**
+ * Between ground metres and a white area's own coordinates on the shown page: the same for an area on
+ * the map; page mm from the top-left corner, y down, for one on the page.
+ */
+export function areaCoordinates(course: Course, settings: PrintSettings) {
+  const height = pageSize(settings.paper, settings.orientation)[1]
+  const mPerMm = course.printScale / 1000
+  const [ox, oy] = pagePosition(course, settings, [0, 0])
+  return {
+    toArea: (on: WhiteArea['on'], ground: Point): Point => {
+      if (on === 'map') return ground
+      const [x, y] = pagePosition(course, settings, ground)
+      return [x, height - y]
+    },
+    fromArea: (on: WhiteArea['on'], p: Point): Point => (on === 'map' ? p : [(p[0] - ox) * mPerMm, (height - p[1] - oy) * mPerMm]),
+    /** A move of `delta` page mm (x right, y up) in the area's coordinates. */
+    delta: (on: WhiteArea['on'], [dx, dy]: Point): Point => (on === 'map' ? [dx * mPerMm, dy * mPerMm] : [dx, -dy]),
+  }
+}
+
+/** A white area removed for every course, or hidden on this course only. */
+export function removeArea(doc: EventDoc, course: Course, settings: PrintSettings, appliesTo: AppliesTo, id: string): EventDoc {
+  return !settings.ownLayout && appliesTo === 'course'
+    ? setHidden(doc, course, settings, 'course', id, true)
+    : removeWhiteArea(doc, course.id, settings, id)
 }

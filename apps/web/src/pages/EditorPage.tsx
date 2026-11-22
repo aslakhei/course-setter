@@ -1,6 +1,7 @@
 import {
   ALL_CONTROLS,
   addCourse,
+  addWhiteArea,
   allControlsCourse,
   type Course,
   changePaper,
@@ -12,6 +13,7 @@ import {
   fieldValues,
   moveControl,
   moveDocToVersion,
+  moveNodes,
   type PageContext,
   type Point,
   type PrintSettings,
@@ -20,6 +22,7 @@ import {
   printPage,
   printSettingsOf,
   removeCourseControl,
+  removeNode,
   setNumberPosition,
   setPrintSettings,
   setRoute,
@@ -27,6 +30,7 @@ import {
   showDescriptions,
   specForBox,
   transformBetween,
+  updateWhiteArea,
 } from '@course-setter/core'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
@@ -39,7 +43,19 @@ import { AccessDialog, ConflictDialog, MoveDialog } from '../editor/Dialogs.tsx'
 import { EditorMap, type Hover } from '../editor/EditorMap.tsx'
 import { LayoutPanel, MAP_LAYER } from '../editor/LayoutPanel.tsx'
 import { LayoutProperties } from '../editor/LayoutProperties.tsx'
-import { type AppliesTo, nextSelection, nudged, placeElement, placeMany, removeMany, shownElement } from '../editor/layout.ts'
+import {
+  type AppliesTo,
+  areaCoordinates,
+  nextSelection,
+  nudged,
+  type Pen,
+  placeElement,
+  placeMany,
+  removeArea,
+  removeMany,
+  shownElement,
+  whiteAreaOf,
+} from '../editor/layout.ts'
 import { type LayoutEditing, PrintMap } from '../editor/PrintMap.tsx'
 import { PrintPanel, PrintToolbar } from '../editor/PrintView.tsx'
 import {
@@ -167,11 +183,26 @@ function Editor({
   // Layout mode (?view=print&mode=layout): the page's elements, edited on the page.
   const layoutMode = printing && params.get('mode') === 'layout'
   const [layoutSelected, setLayoutSelected] = useState<string[]>([])
-  const selectLayout = useCallback(
-    (id: string | null, additive = false) => setLayoutSelected(old => nextSelection(old, id, additive, MAP_LAYER)),
-    [],
-  )
+  // Drawing a white area with the pen, and the selected point of a selected white area.
+  const [pen, setPen] = useState<Pen | null>(null)
+  const [layoutNode, setLayoutNode] = useState<number | null>(null)
+  // Selecting anything lets go of a white area's selected point.
+  const selectLayout = useCallback((id: string | null, additive = false) => {
+    setLayoutSelected(old => nextSelection(old, id, additive, MAP_LAYER))
+    setLayoutNode(null)
+  }, [])
   const [appliesTo, setAppliesTo] = useState<AppliesTo>('all')
+  useEffect(() => {
+    if (!layoutMode) setPen(null)
+  }, [layoutMode])
+  const finishPen = useCallback(() => {
+    if (!pen || pen.nodes.length < 3 || !printCourse || !printSettings) return
+    const id = crypto.randomUUID()
+    dispatch({ type: 'edit', doc: addWhiteArea(doc, printCourse.id, printSettings, { id, on: pen.on, nodes: pen.nodes }) })
+    setPen(null)
+    setLayoutSelected([id])
+    setLayoutNode(null)
+  }, [pen, printCourse, printSettings, doc])
   const shownPage = useMemo(
     () => (printCourse && printSettings ? printPage(doc, printCourse, event.name, printSettings, pageContext) : null),
     [doc, printCourse, printSettings, event.name, pageContext],
@@ -187,6 +218,12 @@ function Editor({
         return spec ? placeElement(doc, printCourse, printSettings, appliesTo, specForBox(spec, box, size)) : doc
       },
       onEdit: next => dispatch({ type: 'edit', doc: next }),
+      pen,
+      onPen: setPen,
+      onPenDone: finishPen,
+      setAreaNodes: (id, nodes) => updateWhiteArea(doc, printCourse.id, printSettings, id, a => ({ ...a, nodes })),
+      selectedNode: layoutNode,
+      onSelectNode: setLayoutNode,
       aspectOf: id => {
         const placed = shownPage?.elements.find(e => e.id === id)
         if (placed?.kind !== 'image') return undefined
@@ -194,7 +231,7 @@ function Editor({
         return (b.maxX - b.minX) / (b.maxY - b.minY)
       },
     }
-  }, [layoutMode, printCourse, printSettings, layoutSelected, selectLayout, doc, appliesTo, shownPage])
+  }, [layoutMode, printCourse, printSettings, layoutSelected, selectLayout, doc, appliesTo, shownPage, pen, finishPen, layoutNode])
   const openPrint = () => {
     dispatch({ type: 'tool', tool: 'select' })
     if (!course && printCourse && printCourse.id !== ALL_CONTROLS) dispatch({ type: 'course', courseId: printCourse.id })
@@ -253,7 +290,59 @@ function Editor({
       const mod = e.ctrlKey || e.metaKey
       // Layout mode: arrow keys move the selected elements (Shift: 5 mm), Delete removes them (only this
       // course: hides them there), Escape lets go of them.
+      // Drawing a white area: Enter closes it, Backspace takes back the last point, Escape stops.
+      if (layoutMode && pen && !mod) {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          finishPen()
+          return
+        }
+        if (e.key === 'Backspace') {
+          e.preventDefault()
+          setPen({ ...pen, nodes: pen.nodes.slice(0, -1) })
+          return
+        }
+        if (e.key === 'Escape') {
+          setPen(null)
+          return
+        }
+      }
       const chosen = layoutSelected.filter(id => id !== MAP_LAYER)
+      // A selected white area: arrow keys move it, Delete removes its selected point (or the area), Escape lets go.
+      const area =
+        layoutMode && printCourse && printSettings && chosen.length === 1 ? whiteAreaOf(doc, printSettings, chosen[0] ?? '') : undefined
+      if (area && printCourse && printSettings && !mod) {
+        const step = e.shiftKey ? 5 : 1
+        const arrows: Record<string, [number, number]> = {
+          ArrowLeft: [-step, 0],
+          ArrowRight: [step, 0],
+          ArrowUp: [0, step],
+          ArrowDown: [0, -step],
+        }
+        const delta = arrows[e.key]
+        if (delta && !area.locked) {
+          e.preventDefault()
+          const d = areaCoordinates(printCourse, printSettings).delta(area.on, delta)
+          edit(updateWhiteArea(doc, printCourse.id, printSettings, area.id, a => ({ ...a, nodes: moveNodes(a.nodes, d) })))
+          return
+        }
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+          e.preventDefault()
+          if (layoutNode !== null && area.nodes.length > 3 && !area.locked) {
+            edit(updateWhiteArea(doc, printCourse.id, printSettings, area.id, a => ({ ...a, nodes: removeNode(a.nodes, layoutNode) })))
+            setLayoutNode(null)
+          } else if (layoutNode === null) {
+            edit(removeArea(doc, printCourse, printSettings, appliesTo, area.id))
+            if (printSettings.ownLayout || appliesTo === 'all') setLayoutSelected([])
+          }
+          return
+        }
+        if (e.key === 'Escape') {
+          if (layoutNode !== null) setLayoutNode(null)
+          else setLayoutSelected([])
+          return
+        }
+      }
       if (layoutMode && !mod && printCourse && printSettings && chosen.length > 0) {
         const specs = chosen.flatMap(id => shownElement(doc, printSettings, id) ?? [])
         const step = e.shiftKey ? 5 : 1
@@ -341,7 +430,7 @@ function Editor({
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [state, course, doc, edit, t, printing, layoutMode, printCourse, printSettings, layoutSelected, appliesTo])
+  }, [state, course, doc, edit, t, printing, layoutMode, printCourse, printSettings, layoutSelected, appliesTo, pen, finishPen, layoutNode])
 
   const takeTheirs = async () => {
     setResolving(true)
@@ -461,6 +550,11 @@ function Editor({
             clubId={event.clubId}
             eventId={event.id}
             onEdit={next => edit(next)}
+            penActive={pen !== null}
+            onStartPen={() => {
+              setPen({ on: 'map', nodes: [] })
+              setLayoutSelected([])
+            }}
             descriptionsShown={printSettings.layout.some(e => e.kind === 'descriptions')}
             values={fieldValues(doc, printCourse, event.name, pageContext)}
             onDescriptions={show => setPrint(printCourse, showDescriptions(doc, printCourse, event.name, printSettings, show))}
@@ -512,6 +606,9 @@ function Editor({
             placed={shownPage.elements}
             appliesTo={appliesTo}
             onAppliesTo={setAppliesTo}
+            pen={pen}
+            onPen={setPen}
+            onPenDone={finishPen}
             selected={layoutSelected}
             onSelect={selectLayout}
             clubId={event.clubId}
