@@ -1,5 +1,6 @@
-// Snapshot tests for the drawing backends: every course symbol and every control description symbol is
-// drawn by the Canvas backend (as in the editor, here with @napi-rs/canvas) and by the PDF backend (as
+// Snapshot tests for the drawing backends: every course symbol, every control description symbol and
+// the page's own primitives (text in each font, coloured and translucent shapes, images) are drawn by the
+// Canvas backend (as in the editor, here with @napi-rs/canvas) and by the PDF backend (as
 // for print, rendered with mupdf). Each image must match its stored snapshot, and the two backends must
 // match each other, so the editor and the printed map cannot drift apart.
 //
@@ -9,10 +10,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas'
+import { type Image as CanvasImage, createCanvas, GlobalFonts, loadImage } from '@napi-rs/canvas'
 import fontkit from '@pdf-lib/fontkit'
 import * as mupdf from 'mupdf'
-import { PDFDocument, rgb } from 'pdf-lib'
+import { PDFDocument, type PDFEmbeddedPage, type PDFImage, rgb } from 'pdf-lib'
 import { describe, expect, it } from 'vitest'
 import { addControl, addSpecial, insertCourseControl, setDescription, setSpecialBoundary, updateCourse } from '../course/commands.ts'
 import { courseById, type DescriptionColumnKey, type EventDoc, SPECIALS_BY_STANDARD, type SpecialKind, STANDARDS } from '../course/doc.ts'
@@ -22,9 +23,11 @@ import { testEvent } from '../course/test-doc.ts'
 import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
 import type { Point } from '../similarity.ts'
+import { FONT_FEATURES, FONT_IDS, FONTS, type FontId } from '../text/fonts.ts'
+import { textPrimitives } from '../text/lines.ts'
 import { drawPrimitives, paperToDevice } from './canvas.ts'
-import { drawPrimitivesOnPage, PT_PER_MM } from './pdf.ts'
-import { type Primitive, primitivesBounds, transformPrimitives } from './primitives.ts'
+import { drawPrimitivesOnPage, MissingAssetError, PT_PER_MM } from './pdf.ts'
+import { type Bounds, type PathCommand, type Primitive, primitivesBounds, transformPrimitives } from './primitives.ts'
 
 const SNAPSHOTS = fileURLToPath(new URL('./__snapshots__/', import.meta.url))
 const FONT_FILE = fileURLToPath(new URL('../../fonts/LiberationSans-Regular.ttf', import.meta.url))
@@ -37,13 +40,18 @@ const PURPLE = { css: '#b5179e', pdf: rgb(0xb5 / 255, 0x17 / 255, 0x9e / 255) }
 const BLACK = { css: '#000000', pdf: rgb(0, 0, 0) }
 GlobalFonts.registerFromPath(FONT_FILE, FONT_FAMILY)
 GlobalFonts.registerFromPath(BOLD_FONT_FILE, FONT_FAMILY)
+const fontFile = (id: FontId) => fileURLToPath(new URL(`../../fonts/${FONTS[id].file}`, import.meta.url))
+for (const id of FONT_IDS) GlobalFonts.registerFromPath(fontFile(id), FONTS[id].family)
+
+/** Images by asset id: PNG files, or one-page PDFs (drawn by the PDF backend only, as vector). */
+type Assets = Record<string, { png: Buffer } | { pdf: Uint8Array }>
 
 type Cell = { name: string; primitives: Primitive[] }
 /**
  * `between` is the share of drawn pixels per cell the Canvas and PDF images may differ by (default 2 %).
  * Text makes it larger: the two rasterisers place glyphs up to half a pixel (0.04 mm) apart.
  */
-type Sheet = { name: string; color: typeof PURPLE; cell: Point; columns: number; cells: Cell[]; between?: number }
+type Sheet = { name: string; color: typeof PURPLE; cell: Point; columns: number; cells: Cell[]; between?: number; assets?: Assets }
 type Image = { width: number; height: number; data: Uint8ClampedArray | Uint8Array; channels: number }
 
 /** The sheet's primitives, each cell's drawing centred in its grid cell, in sheet mm (y up). */
@@ -63,23 +71,46 @@ function layout(sheet: Sheet): { size: Point; primitives: Primitive[]; boxes: { 
   return { size, primitives, boxes }
 }
 
-function drawCanvas(size: Point, primitives: Primitive[], color: string): Image {
+async function drawCanvas(size: Point, primitives: Primitive[], color: string, assets: Assets = {}): Promise<Image> {
   const [w, h] = [Math.round(size[0] * PX_PER_MM), Math.round(size[1] * PX_PER_MM)]
   const canvas = createCanvas(w, h)
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, w, h)
-  drawPrimitives(ctx, primitives, { transform: paperToDevice(PX_PER_MM, [0, 0], h), color, font: FONT_FAMILY, digitHeight: DIGIT_HEIGHT })
+  const images = new Map<string, CanvasImage>()
+  for (const [id, asset] of Object.entries(assets)) if ('png' in asset) images.set(id, await loadImage(asset.png))
+  drawPrimitives(ctx, primitives, {
+    transform: paperToDevice(PX_PER_MM, [0, 0], h),
+    color,
+    font: FONT_FAMILY,
+    digitHeight: DIGIT_HEIGHT,
+    images: id => images.get(id) ?? null,
+  })
   return { width: w, height: h, data: ctx.getImageData(0, 0, w, h).data, channels: 4 }
 }
 
-async function drawPdf(size: Point, primitives: Primitive[], color: typeof PURPLE): Promise<Image> {
+async function drawPdf(size: Point, primitives: Primitive[], color: typeof PURPLE, assets: Assets = {}): Promise<Image> {
   const doc = await PDFDocument.create()
   doc.registerFontkit(fontkit)
   const font = await doc.embedFont(readFileSync(FONT_FILE), { subset: true })
   const boldFont = await doc.embedFont(readFileSync(BOLD_FONT_FILE), { subset: true })
+  const fonts: Partial<Record<FontId, Awaited<ReturnType<typeof doc.embedFont>>>> = {}
+  for (const id of FONT_IDS) fonts[id] = await doc.embedFont(readFileSync(fontFile(id)), { subset: true, features: FONT_FEATURES })
+  const images = new Map<string, PDFImage | PDFEmbeddedPage>()
+  for (const [id, asset] of Object.entries(assets)) {
+    const embedded = 'png' in asset ? await doc.embedPng(asset.png) : (await doc.embedPdf(asset.pdf, [0]))[0]
+    if (embedded) images.set(id, embedded)
+  }
   const page = doc.addPage([size[0] * PT_PER_MM, size[1] * PT_PER_MM])
-  drawPrimitivesOnPage(page, primitives, { origin: [0, 0], color: color.pdf, font, boldFont, digitHeight: DIGIT_HEIGHT })
+  drawPrimitivesOnPage(page, primitives, {
+    origin: [0, 0],
+    color: color.pdf,
+    font,
+    boldFont,
+    digitHeight: DIGIT_HEIGHT,
+    fonts,
+    images: id => images.get(id) ?? null,
+  })
   const pdf = mupdf.Document.openDocument(await doc.save(), 'application/pdf')
   const k = PX_PER_MM / PT_PER_MM
   const pixmap = pdf.loadPage(0).toPixmap(mupdf.Matrix.scale(k, k), mupdf.ColorSpace.DeviceRGB, false)
@@ -373,13 +404,113 @@ const sheetsSheet = (): Sheet => {
   }
 }
 
-describe.each([symbolSheet, courseSheet, specialSheet, descriptionSymbolsSheet, instructionSheet, sheetsSheet])('%o', makeSheet => {
+/** A PNG `width` × `height` pixels: a blue field with an orange disc (what a club logo might be). */
+function testPng(width: number, height: number, colors = { field: '#0b62a4', disc: '#f08a24' }): Buffer {
+  const canvas = createCanvas(width, height)
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = colors.field
+  ctx.fillRect(0, 0, width, height)
+  ctx.fillStyle = colors.disc
+  ctx.beginPath()
+  ctx.arc(width / 2, height / 2, Math.min(width, height) / 3, 0, 2 * Math.PI)
+  ctx.fill()
+  return canvas.toBuffer('image/png')
+}
+
+const square = (x: number, y: number, side: number): PathCommand[] => [
+  ['M', x, y],
+  ['L', x + side, y],
+  ['L', x + side, y + side],
+  ['L', x, y + side],
+  ['Z'],
+]
+
+/**
+ * Text on the printed page around the map: a line in every font of the set, a wrapped and centred
+ * paragraph, text in its own colour and opacity. Line ends match to the pixel, but Skia rounds the
+ * glyphs between them to whole pixels (up to 0.1 mm off), so more pixels differ than for shapes; the
+ * widths both backends draw are checked exactly in text/lines.test.ts.
+ */
+const layoutTextSheet = (): Sheet => ({
+  name: 'layout-text',
+  color: BLACK,
+  cell: [68, 18],
+  columns: 2,
+  between: 0.12,
+  cells: [
+    ...FONT_IDS.map(font => ({
+      name: font,
+      primitives: textPrimitives({ text: `${FONTS[font].typeface} – Løype A 4,2 km`, font, sizePt: 12, width: 64 }, [0, 0]),
+    })),
+    {
+      name: 'wrapped and centred',
+      primitives: textPrimitives(
+        { text: 'Klubbmesterskap i nattorientering for alle klasser', font: 'serif', sizePt: 10, width: 46, align: 'center' },
+        [0, 0],
+      ),
+    },
+    {
+      name: 'coloured and translucent text',
+      primitives: [
+        ...textPrimitives({ text: 'Hamar OK', font: 'display-bold', sizePt: 24, width: 64 }, [0, 0], { color: '#0b62a4' }),
+        ...textPrimitives({ text: 'Nattløp', font: 'condensed-bold', sizePt: 24, width: 64, align: 'right' }, [0, -1], {
+          color: '#f08a24',
+          opacity: 0.5,
+        }),
+      ],
+    },
+  ],
+})
+
+/** Shapes in their own colours, overlapping and translucent, and an image, as the printed page draws them around the map. */
+const layoutShapesSheet = (): Sheet => ({
+  name: 'layout-shapes',
+  color: BLACK,
+  cell: [68, 18],
+  columns: 2,
+  assets: { logo: { png: testPng(240, 120) } },
+  cells: [
+    {
+      name: 'translucent shapes',
+      primitives: [
+        { type: 'path', role: 'layout', commands: square(0, 0, 12), lineWidth: 0, filled: true, color: '#0b62a4' },
+        { type: 'path', role: 'layout', commands: square(6, 3, 12), lineWidth: 0, filled: true, color: '#c8102e', opacity: 0.6 },
+        { type: 'path', role: 'layout', commands: square(12, 6, 12), lineWidth: 0, filled: true, color: '#f2c200', opacity: 0.3 },
+        { type: 'circle', role: 'layout', center: [40, 9], radius: 7, lineWidth: 0.8, color: '#2e7d32', opacity: 0.5 },
+        {
+          type: 'polyline',
+          role: 'layout',
+          points: [
+            [30, 2],
+            [50, 16],
+          ],
+          lineWidth: 1.5,
+          closed: false,
+          cap: 'round',
+          color: '#7a1a6c',
+        },
+      ],
+    },
+    { name: 'image', primitives: [{ type: 'image', role: 'layout', box: { minX: 0, minY: 0, maxX: 30, maxY: 15 }, asset: 'logo' }] },
+  ],
+})
+
+describe.each([
+  symbolSheet,
+  courseSheet,
+  specialSheet,
+  descriptionSymbolsSheet,
+  instructionSheet,
+  sheetsSheet,
+  layoutTextSheet,
+  layoutShapesSheet,
+])('%o', makeSheet => {
   const sheet = makeSheet()
 
   it('draws the same with the Canvas and the PDF backend, and both match their snapshots', { timeout: 60_000 }, async () => {
     const { size, primitives } = layout(sheet)
-    const canvas = drawCanvas(size, primitives, sheet.color.css)
-    const pdf = await drawPdf(size, primitives, sheet.color)
+    const canvas = await drawCanvas(size, primitives, sheet.color.css, sheet.assets)
+    const pdf = await drawPdf(size, primitives, sheet.color, sheet.assets)
     expect(pdf.width).toBe(canvas.width)
     expect(pdf.height).toBe(canvas.height)
     const between = differingCells(canvas, pdf, sheet, sheet.between ?? 0.02)
@@ -407,5 +538,52 @@ describe('description symbols', () => {
     // Only text templates (sizes, "between", crossings of the same kind) and header items have no drawing.
     const empty = DESCRIPTION_SYMBOLS.filter(s => s.shapes.length === 0).map(s => s.column)
     expect(new Set(empty)).toEqual(new Set(['@', 'F', 'G']))
+  })
+})
+
+describe('images', () => {
+  const page: Point = [50, 30]
+  const box: Bounds = { minX: 5.3, minY: 4.7, maxX: 45.3, maxY: 24.7 }
+  const red = { png: testPng(400, 200, { field: '#ff0000', disc: '#ff0000' }) }
+
+  /** The box (mm, y up) the red pixels of an image cover, from pixels at least half red. */
+  function redBox(image: Image): Bounds {
+    let [minX, minY, maxX, maxY] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY, -1, -1]
+    for (let y = 0; y < image.height; y++)
+      for (let x = 0; x < image.width; x++) {
+        const i = (y * image.width + x) * image.channels
+        if ((image.data[i] ?? 0) - (image.data[i + 1] ?? 0) > 127) {
+          minX = Math.min(minX, x)
+          maxX = Math.max(maxX, x)
+          minY = Math.min(minY, y)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    const h = image.height / PX_PER_MM
+    return { minX: minX / PX_PER_MM, maxX: (maxX + 1) / PX_PER_MM, minY: h - (maxY + 1) / PX_PER_MM, maxY: h - minY / PX_PER_MM }
+  }
+
+  const expectBox = (actual: Bounds) => {
+    for (const k of ['minX', 'minY', 'maxX', 'maxY'] as const) expect(Math.abs(actual[k] - box[k]), k).toBeLessThanOrEqual(0.2)
+  }
+  const image = (asset: string): Primitive[] => [{ type: 'image', role: 'layout', box, asset }]
+
+  it('prints a PNG at the size of its box (±0.2 mm) with both backends', async () => {
+    expectBox(redBox(await drawCanvas(page, image('red'), '#000', { red })))
+    expectBox(redBox(await drawPdf(page, image('red'), BLACK, { red })))
+  })
+
+  it('places a PDF page, as vector, at the size of its box (±0.2 mm)', async () => {
+    const logo = await PDFDocument.create()
+    logo.addPage([100, 50]).drawRectangle({ x: 0, y: 0, width: 100, height: 50, color: rgb(1, 0, 0) })
+    expectBox(redBox(await drawPdf(page, image('vector'), BLACK, { vector: { pdf: await logo.save() } })))
+  })
+
+  it('draws a placeholder on the canvas while an image is missing, and refuses to make a PDF without it', async () => {
+    const drawn = await drawCanvas(page, image('nothing'), '#000')
+    const grey = (y: number, x: number) => drawn.data[(y * drawn.width + x) * drawn.channels]
+    const [cx, cy] = [Math.round(10 * PX_PER_MM), Math.round((page[1] - 8) * PX_PER_MM)]
+    expect(grey(cy, cx)).toBeLessThan(255)
+    await expect(drawPdf(page, image('nothing'), BLACK)).rejects.toThrow(MissingAssetError)
   })
 })

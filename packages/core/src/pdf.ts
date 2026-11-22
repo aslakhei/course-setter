@@ -2,4 +2,4 @@
 // out of the web app's bundle.
 
 export { addPrintPage, FONT_DIGIT_HEIGHT, type MapLayer, PRINT_PURPLE, type PrintFonts } from './print/pdf.ts'
-export { drawPrimitivesOnPage, type PdfOptions, PT_PER_MM } from './render/pdf.ts'
+export { drawPrimitivesOnPage, MissingAssetError, type PdfOptions, PT_PER_MM, pdfColor } from './render/pdf.ts'

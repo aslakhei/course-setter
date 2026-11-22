@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**", "!**/.claude", "!**/database.types.ts", "!**/descriptions/symbols.data.ts"]
+    "includes": ["**", "!**/.claude", "!**/database.types.ts", "!**/descriptions/symbols.data.ts", "!**/text/metrics.data.ts"]
   },
   "formatter": {
     "enabled": true,

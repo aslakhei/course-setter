@@ -37,9 +37,20 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
-## Liberation Sans
+## Fonts
 
-`packages/core/fonts/LiberationSans-Regular.ttf` and `LiberationSans-Bold.ttf` (Liberation Fonts
-2.1.5, metric-compatible with Arial) are embedded in exported PDFs for control numbers and description
-sheets, and used by the snapshot tests so they draw the same text on every platform. They are licensed
-under the SIL Open Font License 1.1, see `packages/core/fonts/LICENSE-LiberationSans.txt`.
+The fonts in `packages/core/fonts` are used for text on printed courses (control numbers, description
+sheets, and text on the page around the map). The same files are embedded in exported PDFs and used by the
+snapshot tests, so text looks and breaks into lines the same everywhere. All are
+licensed under the SIL Open Font License 1.1; each licence is next to its font files.
+
+- Liberation Sans 2.1.5 (`LiberationSans-Regular.ttf`, `LiberationSans-Bold.ttf`), metric-compatible with
+  Arial: `LICENSE-LiberationSans.txt`.
+- Roboto Condensed (`RobotoCondensed-Regular.ttf`, `RobotoCondensed-Bold.ttf`), Copyright 2011 The Roboto
+  Project Authors: `LICENSE-RobotoCondensed.txt`.
+- Oswald (`Oswald-Regular.ttf`, `Oswald-Bold.ttf`), Copyright 2016 The Oswald Project Authors:
+  `LICENSE-Oswald.txt`.
+- Source Serif 4 (`SourceSerif4-Regular.ttf`, `SourceSerif4-Bold.ttf`), Copyright 2014 The Source Serif 4
+  Project Authors: `LICENSE-SourceSerif4.txt`.
+
+Roboto Condensed, Oswald and Source Serif 4 are the static regular and bold instances Google Fonts serves.
