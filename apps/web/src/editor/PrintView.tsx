@@ -67,6 +67,8 @@ export function PrintToolbar({
   onScale,
   onCellSize,
   onDescriptions,
+  numberOutline,
+  onNumberOutline,
   onReset,
   onBack,
   mode,
@@ -81,6 +83,9 @@ export function PrintToolbar({
   onScale: (scale: number) => void
   onCellSize: (size: number) => void
   onDescriptions: (show: boolean) => void
+  /** A white outline round the control numbers, on every course. */
+  numberOutline: boolean
+  onNumberOutline: (on: boolean) => void
   onReset: () => void
   onBack: () => void
   /** Placing the page on the map, or editing its layout. */
@@ -178,6 +183,15 @@ export function PrintToolbar({
           onChange={e => onDescriptions(e.target.checked)}
         />
         {t('print.descriptions')}
+      </label>
+      <label className="flex items-center gap-1.5 text-[13px]" title={t('print.numberOutlineHelp')}>
+        <input
+          type="checkbox"
+          className="size-4 accent-brand-600"
+          checked={numberOutline}
+          onChange={e => onNumberOutline(e.target.checked)}
+        />
+        {t('print.numberOutline')}
       </label>
       <Button size="sm" onClick={onReset} disabled={!course.print} title={t('print.resetHelp')}>
         {t('print.reset')}

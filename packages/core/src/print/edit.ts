@@ -126,6 +126,19 @@ export function setMapAreaStroke(
   })
 }
 
+/** Set or remove (null or none) the coloured bands round the map area, outermost first. */
+export function setMapAreaBands(
+  doc: EventDoc,
+  courseId: string,
+  settings: PrintSettings,
+  bands: { color: string; width: number }[] | null,
+): EventDoc {
+  return withMapArea(doc, courseId, settings, area => {
+    const { bands: _old, ...rest } = area
+    return bands?.length ? { ...rest, bands } : rest
+  })
+}
+
 type MapArea = NonNullable<PrintLayout['mapArea']>
 function withMapArea(doc: EventDoc, courseId: string, settings: PrintSettings, change: (area: MapArea) => MapArea): EventDoc {
   return withLayout(doc, courseById(doc, courseId), settings, l => {

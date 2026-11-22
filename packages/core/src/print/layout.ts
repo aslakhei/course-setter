@@ -16,12 +16,14 @@ import {
   type PrintSettings,
 } from '../course/doc.ts'
 import { specialsDrawing } from '../course/specials.ts'
-import { courseDrawing } from '../course/symbols.ts'
+import { courseDrawing, numberOutlines } from '../course/symbols.ts'
 import { descriptionSheet, drawDescriptionSheet, SHEET } from '../descriptions/sheet.ts'
 import { type Bounds, type PathCommand, type Primitive, pathPoints, primitivesBounds, transformPrimitives } from '../render/primitives.ts'
 import type { FontId } from '../text/fonts.ts'
 import type { Extent } from '../tiles.ts'
 import { composeLayout, layoutFor, type PageContext, type PlacedElement, whiteAreaPath } from './compose.ts'
+import type { PrintLayout } from './elements.ts'
+import { roundedRect } from './marks.ts'
 
 export const DEFAULT_MARGIN = 5
 const DEFAULT_PAPER: Paper = 'A4'
@@ -47,6 +49,8 @@ export type PrintPage = {
   printScale: number
   /** Course and special symbols, page mm; to be drawn in purple with Multiply, clipped to the map area. */
   course: Primitive[]
+  /** White outlines of the control numbers (when the event has them): drawn under the course, as they are, clipped to the map area. */
+  numberOutlines: Primitive[]
   /** The description sheet, page mm, drawn in black on a white box; null when the course prints none. */
   descriptions: { box: Bounds; primitives: Primitive[] } | null
   /** The print layout's elements, bottom to top, with fields filled in for the course; drawn above the course. */
@@ -194,21 +198,10 @@ export function printPage(
     groundArea,
     printScale: course.printScale,
     course: onPage,
+    numberOutlines: doc.numberOutline ? numberOutlines(onPage) : [],
     descriptions: descriptionsOn(doc, course, title, settings.layout, size),
     elements: layout.elements,
-    mapOutline: (() => {
-      const stroke = layoutFor(doc, settings).mapArea?.stroke
-      if (!stroke) return []
-      const outline: Primitive = {
-        type: 'path',
-        role: 'layout',
-        commands: layout.mapClip,
-        lineWidth: stroke.width,
-        join: 'round',
-        color: stroke.color,
-      }
-      return [outline]
-    })(),
+    mapOutline: mapOutline(layoutFor(doc, settings).mapArea, mapArea, layout.mapClip),
     whiteAreas: (layoutFor(doc, settings).whiteAreas ?? [])
       .filter(a => !a.hidden)
       .map(a => {
@@ -218,6 +211,29 @@ export function printPage(
         return { id: a.id, on: a.on, commands, primitives: [fill], locked: a.locked === true }
       }),
   }
+}
+
+/** The coloured bands round the map area (outermost first, each just outside the next) and the line on its edge. */
+function mapOutline(spec: PrintLayout['mapArea'], area: Bounds, clip: PathCommand[]): Primitive[] {
+  const radius = spec?.radius ?? 0
+  const out: Primitive[] = []
+  let reach = (spec?.bands ?? []).reduce((sum, band) => sum + band.width, 0)
+  for (const band of spec?.bands ?? []) {
+    const d = reach - band.width / 2
+    reach -= band.width
+    const around = { minX: area.minX - d, minY: area.minY - d, maxX: area.maxX + d, maxY: area.maxY + d }
+    out.push({
+      type: 'path',
+      role: 'layout',
+      commands: roundedRect(around, radius > 0 ? radius + d : 0),
+      lineWidth: band.width,
+      join: 'miter',
+      color: band.color,
+    })
+  }
+  if (spec?.stroke)
+    out.push({ type: 'path', role: 'layout', commands: clip, lineWidth: spec.stroke.width, join: 'round', color: spec.stroke.color })
+  return out
 }
 
 function descriptionsOn(doc: EventDoc, course: Course, title: string, layout: LayoutElement[], size: Point): PrintPage['descriptions'] {

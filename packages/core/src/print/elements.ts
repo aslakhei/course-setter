@@ -13,8 +13,18 @@ import { FONT_IDS } from '../text/fonts.ts'
 export const ANCHORS = ['tl', 't', 'tr', 'l', 'c', 'r', 'bl', 'b', 'br'] as const
 export type Anchor = (typeof ANCHORS)[number]
 
+/** Which edges an anchor pins to: left, right or the middle across; top, bottom or the middle down. */
+export function anchorAxes(anchor: Anchor): { h: 'left' | 'right' | 'middle'; v: 'top' | 'bottom' | 'middle' } {
+  return {
+    h: anchor.endsWith('l') ? 'left' : anchor.endsWith('r') ? 'right' : 'middle',
+    v: anchor.startsWith('t') ? 'top' : anchor.startsWith('b') ? 'bottom' : 'middle',
+  }
+}
+
 export const NORTH_ARROW_STYLES = ['arrow', 'needle'] as const
 export const SHAPES = ['rect', 'ellipse', 'line'] as const
+/** How many coloured bands a frame round the map area may have. */
+export const MAX_MAP_BANDS = 3
 
 const point = z.tuple([z.number().finite(), z.number().finite()])
 const size = z.tuple([z.number().min(0.5).max(1000), z.number().min(0.5).max(1000)])
@@ -112,11 +122,20 @@ export const printLayoutSchema = z
     /** White areas, drawn over the map and under the course. */
     whiteAreas: z.array(whiteAreaSchema).max(100).optional(),
     /**
-     * The map area's corners rounded with this radius (mm), and a line round it (a frame in the club
-     * colour that fits any paper and orientation).
+     * The map area's corners rounded with this radius (mm), a line round it, and coloured bands round it
+     * (outermost first) that take their width from the map area, inside the margin: frames in the club
+     * colours that fit any paper and orientation.
      */
     mapArea: z
-      .object({ radius: z.number().min(0).max(30).optional(), stroke: z.object({ color, width: z.number().min(0.1).max(5) }).optional() })
+      .object({
+        radius: z.number().min(0).max(30).optional(),
+        stroke: z.object({ color, width: z.number().min(0.1).max(5) }).optional(),
+        bands: z
+          .array(z.object({ color, width: z.number().min(0.2).max(10) }))
+          .min(1)
+          .max(MAX_MAP_BANDS)
+          .optional(),
+      })
       .optional(),
   })
   .superRefine((layout, ctx) => {

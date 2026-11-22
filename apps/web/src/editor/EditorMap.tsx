@@ -12,6 +12,7 @@ import {
   MIN_POINTS,
   moveControl,
   nextFreeCode,
+  numberOutlines,
   type Point,
   type Primitive,
   type SpecialKind,
@@ -114,9 +115,11 @@ export function EditorMap(props: Props) {
   const { versionId, grid, tilesUrl, mapScale, doc, course, selected, tool, draft } = props
   const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
-  // Course symbols are drawn by primitive layers (the faint pool, the course, the highlighted control and
-  // the preview); the crosshair and bend handles are ordinary OpenLayers features on top.
+  // Course symbols are drawn by primitive layers (white outlines round the numbers, the faint pool, the
+  // course, the highlighted control and the preview); the crosshair and bend handles are ordinary
+  // OpenLayers features on top.
   const [layers] = useState(() => ({
+    outlines: primitiveLayer(),
     pool: primitiveLayer('course-layer', 0.4),
     course: primitiveLayer('course-layer'),
     marks: primitiveLayer(),
@@ -163,6 +166,7 @@ export function EditorMap(props: Props) {
       target: target.current,
       layers: [
         new TileLayer({ source: tileSource(grid, tilesUrl, projection) }),
+        layers.outlines.layer,
         layers.pool.layer,
         layers.course.layer,
         layers.marks.layer,
@@ -382,6 +386,10 @@ export function EditorMap(props: Props) {
     const purple = { color: COURSE_PURPLE }
     layers.course.setDrawings([{ primitives: drawing.filter(p => !isHighlighted(p)), printScale: scale, paint: purple }])
     layers.pool.setDrawings([{ primitives: poolDrawing.filter(p => !isHighlighted(p)), printScale: scale, paint: purple }])
+    // Under the course (white would vanish with Multiply), as printed.
+    layers.outlines.setDrawings(
+      shown.numberOutline ? [{ primitives: numberOutlines(drawing), printScale: scale, paint: { color: '#ffffff' } }] : [],
+    )
 
     // The selected control and its number (and a control a click would reuse) in the highlight colour,
     // with a crosshair on the exact centre.

@@ -37,9 +37,10 @@ export type Primitive =
   /**
    * Text centred on `at`. `height` is the height of a digit (ISOM: "Arial, 4.0 mm" means 4.0 mm digits,
    * a font size of about 5.6 mm), so numbers have the specified size whatever font a backend uses.
-   * Text wider than `maxWidth` (mm) is drawn smaller, to 95 % of it, as Purple Pen does.
+   * Text wider than `maxWidth` (mm) is drawn smaller, to 95 % of it, as Purple Pen does. With `outline`
+   * (mm) only an outline that wide round the glyphs is drawn (a white outline under a control number).
    */
-  | ({ type: 'text'; at: Point; text: string; height: number; bold?: boolean; maxWidth?: number } & Tagged)
+  | ({ type: 'text'; at: Point; text: string; height: number; bold?: boolean; maxWidth?: number; outline?: number } & Tagged)
   /**
    * One line of text in a font of the fixed set, starting at `at` on its baseline, at font size `size` mm.
    * Lines are broken and aligned by core (text/lines.ts), so a backend draws them as they are.
@@ -140,7 +141,13 @@ export function transformPrimitives(primitives: Primitive[], factor: number, [dx
     if (p.type === 'circle') return { ...p, center: t(p.center), radius: p.radius * factor, lineWidth: p.lineWidth * factor }
     if (p.type === 'polyline') return { ...p, points: p.points.map(t), lineWidth: p.lineWidth * factor, ...dash(p.dash) }
     if (p.type === 'text')
-      return { ...p, at: t(p.at), height: p.height * factor, ...(p.maxWidth !== undefined ? { maxWidth: p.maxWidth * factor } : {}) }
+      return {
+        ...p,
+        at: t(p.at),
+        height: p.height * factor,
+        ...(p.maxWidth !== undefined ? { maxWidth: p.maxWidth * factor } : {}),
+        ...(p.outline !== undefined ? { outline: p.outline * factor } : {}),
+      }
     if (p.type === 'textLine') return { ...p, at: t(p.at), size: p.size * factor }
     if (p.type === 'image') {
       const [[minX, minY], [maxX, maxY]] = [t([p.box.minX, p.box.minY]), t([p.box.maxX, p.box.maxY])]

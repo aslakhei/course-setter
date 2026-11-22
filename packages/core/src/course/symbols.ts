@@ -286,6 +286,19 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
     else out.push({ type: 'polyline', points, lineWidth: s.lineWidth, closed: false, role: 'leg' })
   }
 
+  // A control visited more than once is drawn once, at its first visit, with every visit's number ("3/8")
+  // placed away from the legs of all of them.
+  const visits = new Map<string, number[]>()
+  stops.forEach((stop, i) => {
+    if (stop.kind === 'control') visits.set(stop.controlId, [...(visits.get(stop.controlId) ?? []), i])
+  })
+  const legsAt = (i: number): Point[] => {
+    const p = at(i)
+    const next = i + 1 < stops.length ? path(i)[1] : undefined
+    const prev = i > 0 ? path(i - 1).at(-2) : undefined
+    return [next, prev].filter((q): q is Point => q !== undefined).map(q => unit(sub(q, p)))
+  }
+
   stops.forEach((stop, i) => {
     const p = at(i)
     const owner = stop.controlId
@@ -318,15 +331,30 @@ export function courseDrawing(doc: EventDoc, course: Course): Primitive[] {
       const dir = unit(next && prev ? sub(next, prev) : next ? sub(next, p) : prev ? sub(p, prev) : [0, 1])
       out.push(...crossing(p, dir, s, owner))
     } else {
+      const all = visits.get(owner) ?? [i]
+      if (all[0] !== i) return
       out.push({ type: 'circle', center: p, radius: s.controlDiameter / 2, lineWidth: s.lineWidth, ...tag })
-      const legs = [next, prev].filter((q): q is Point => q !== undefined).map(q => unit(sub(q, p)))
+      const text = all.map(v => stops[v]?.number).join('/')
       // A number the setter moved keeps its place relative to the control (in paper mm).
       const moved = course.numberPositions[owner]
-      const numberAt = moved ? ([p[0] + moved[0], p[1] + moved[1]] as Point) : numberPosition(p, legs, s, String(stop.number))
-      out.push({ type: 'text', at: numberAt, text: String(stop.number), height: s.numberHeight, role: 'number', owner })
+      const numberAt = moved ? ([p[0] + moved[0], p[1] + moved[1]] as Point) : numberPosition(p, all.flatMap(legsAt), s, text)
+      out.push({ type: 'text', at: numberAt, text, height: s.numberHeight, role: 'number', owner })
     }
   })
   return out
+}
+
+/** How far the white outline round a control number reaches beyond its strokes, paper mm. */
+export const NUMBER_OUTLINE = 0.25
+
+/**
+ * White outlines of the control numbers among `primitives`: drawn under the course (in normal blend, as
+ * white would vanish with Multiply) when the event has them (`EventDoc.numberOutline`).
+ */
+export function numberOutlines(primitives: Primitive[]): Primitive[] {
+  return primitives.flatMap((p): Primitive[] =>
+    p.type === 'text' && p.role === 'number' ? [{ ...p, outline: NUMBER_OUTLINE, color: '#ffffff', opacity: 1 }] : [],
+  )
 }
 
 /** Every control of the event with its code (the "all controls" view), at `printScale`. */

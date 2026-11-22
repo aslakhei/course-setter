@@ -1,11 +1,21 @@
 // The universal templates: built into the app, they take each club's logo and colours (tokens, see
-// templates.ts). Every element is pinned to a page corner or edge, so each fits A4 and A3 in both
-// orientations.
+// templates.ts), and some are made for as many colours as the club has (one to three). Every element is
+// pinned to a page corner or edge, so each fits A4 and A3 in both orientations.
 import type { PageElementSpec, PrintLayout } from './elements.ts'
-import { sponsorToken, TOKENS } from './templates.ts'
+import { type Branding, clubColours, sponsorToken, TOKENS } from './templates.ts'
 
-export type UniversalTemplateId = 'plain' | 'header' | 'frame' | 'training' | 'competition'
-export type UniversalTemplate = { id: UniversalTemplateId; layout: PrintLayout }
+export type UniversalTemplateId = 'plain' | 'header' | 'frame' | 'training' | 'competition' | 'stripes' | 'ribbon'
+/** A template and its layout for a club with `colours` colours (1–3). */
+export type UniversalTemplate = { id: UniversalTemplateId; layout: (colours: number) => PrintLayout }
+
+/** The template's layout for the club: made for as many colours as it has. */
+export const universalLayout = (template: UniversalTemplate, branding: Branding): PrintLayout =>
+  template.layout(clubColours(branding).length)
+
+const COLOURS = [TOKENS.colour, TOKENS.colour2, TOKENS.colour3] as const
+/** Stripes in the club's colours, `widths` (mm) for one, two or three colours. */
+const stripes = (colours: number, widths: Record<1 | 2 | 3, number[]>) =>
+  (widths[Math.min(3, Math.max(1, colours)) as 1 | 2 | 3] ?? []).map((width, i) => ({ color: COLOURS[i] as string, width }))
 
 const credits = (offset: [number, number]): PageElementSpec => ({
   id: 'credits',
@@ -69,7 +79,7 @@ const header = (subtitle: string): PageElementSpec[] => [
 export const UNIVERSAL_TEMPLATES: UniversalTemplate[] = [
   {
     id: 'plain',
-    layout: {
+    layout: () => ({
       elements: [
         {
           id: 'title',
@@ -86,15 +96,15 @@ export const UNIVERSAL_TEMPLATES: UniversalTemplate[] = [
         credits([8, 7]),
         scaleBar([8, 7]),
       ],
-    },
+    }),
   },
   {
     id: 'header',
-    layout: { elements: [...header('{course} · {length} · {date}'), credits([8, 7]), scaleBar([8, 7])] },
+    layout: () => ({ elements: [...header('{course} · {length} · {date}'), credits([8, 7]), scaleBar([8, 7])] }),
   },
   {
     id: 'frame',
-    layout: {
+    layout: () => ({
       mapArea: { radius: 6, stroke: { color: TOKENS.colour, width: 1.2 } },
       elements: [
         {
@@ -113,11 +123,11 @@ export const UNIVERSAL_TEMPLATES: UniversalTemplate[] = [
         { id: 'logo', kind: 'image', anchor: 'bl', offset: [9, 9], size: [14, 14], asset: TOKENS.logo },
         scaleBar([9, 9]),
       ],
-    },
+    }),
   },
   {
     id: 'training',
-    layout: {
+    layout: () => ({
       elements: [
         {
           id: 'course',
@@ -145,11 +155,11 @@ export const UNIVERSAL_TEMPLATES: UniversalTemplate[] = [
         },
         scaleBar([7, 7], 30),
       ],
-    },
+    }),
   },
   {
     id: 'competition',
-    layout: {
+    layout: () => ({
       mapArea: { stroke: { color: TOKENS.colour, width: 0.8 } },
       elements: [
         ...header('{course} · {length} · {climb}'),
@@ -186,6 +196,68 @@ export const UNIVERSAL_TEMPLATES: UniversalTemplate[] = [
           }),
         ),
       ],
+    }),
+  },
+  {
+    // A frame of stripes round the map in the club's colours, the first the widest.
+    id: 'stripes',
+    layout: colours => ({
+      mapArea: { bands: stripes(colours, { 1: [2.5], 2: [2.2, 1.2], 3: [2, 1, 1] }) },
+      elements: [
+        {
+          id: 'title',
+          kind: 'text',
+          anchor: 'tl',
+          offset: [11, 11],
+          size: [110, 1],
+          text: '{event}\n{course} · {length}',
+          font: 'display-bold',
+          sizePt: 14,
+          color: TOKENS.colour,
+          backing: { padding: 1.5 },
+        },
+        { id: 'logo', kind: 'image', anchor: 'tr', offset: [11, 11], size: [16, 16], asset: TOKENS.logo },
+        credits([11, 11]),
+        scaleBar([11, 11]),
+      ],
+    }),
+  },
+  {
+    // A header band in the club colour with a stripe under it for each other colour, and the same
+    // stripes along the foot of the page.
+    id: 'ribbon',
+    layout: colours => {
+      // Stripes running from the top band down, or from the foot of the page up, each keeping the map clear.
+      const run = (list: { color: string; width: number }[], anchor: 'tl' | 'bl', from: number, name: string) => {
+        let y = from
+        return list.map((stripe, i): PageElementSpec => {
+          const at = y
+          y += stripe.width
+          return {
+            id: `${name}-${i + 1}`,
+            kind: 'shape',
+            anchor,
+            offset: [0, at],
+            stretch: [0, 0],
+            size: [1, stripe.width],
+            pushMap: true,
+            shape: 'rect',
+            fill: { color: stripe.color, opacity: 1 },
+          }
+        })
+      }
+      const top = stripes(colours, { 1: [], 2: [0, 2], 3: [0, 2, 2] }).slice(1)
+      const foot = stripes(colours, { 1: [3], 2: [3, 1.5], 3: [3, 1.5, 1.5] })
+      const footHeight = foot.reduce((sum, stripe) => sum + stripe.width, 0)
+      return {
+        elements: [
+          ...header('{course} · {length} · {date}'),
+          ...run(top, 'tl', 24, 'stripe'),
+          ...run(foot, 'bl', 0, 'foot'),
+          credits([8, footHeight + 4]),
+          scaleBar([8, footHeight + 4]),
+        ],
+      }
     },
   },
 ]

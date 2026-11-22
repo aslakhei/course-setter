@@ -6,9 +6,16 @@ import type { Database } from './database.types.ts'
 import { supabase } from './supabase.ts'
 
 export type ClubRole = Database['public']['Enums']['club_role']
-export type MyClub = { id: string; name: string; role: ClubRole }
+export type MyClub = { id: string; name: string; role: ClubRole; logoAssetId: string | null }
 /** A club and its branding for print templates (logo: a club library image; colours #rrggbb). */
-export type Club = { id: string; name: string; logoAssetId: string | null; colour: string | null; colour2: string | null }
+export type Club = {
+  id: string
+  name: string
+  logoAssetId: string | null
+  colour: string | null
+  colour2: string | null
+  colour3: string | null
+}
 export type Member = { userId: string; role: ClubRole; joinedAt: string; name: string; avatarUrl: string | null }
 export type Invite = { id: string; token: string; createdAt: string; expiresAt: string; revokedAt: string | null }
 export type InviteInfo = { clubId: string; clubName: string; status: 'valid' | 'expired' | 'revoked'; alreadyMember: boolean }
@@ -52,8 +59,10 @@ export function useMyClubs(userId: string) {
   return useQuery({
     queryKey: keys.myClubs(userId),
     queryFn: async (): Promise<MyClub[]> => {
-      const result = rows(await supabase.from('club_members').select('role, clubs(id, name)').eq('user_id', userId))
-      return result.map(r => ({ id: r.clubs.id, name: r.clubs.name, role: r.role })).sort((a, b) => a.name.localeCompare(b.name))
+      const result = rows(await supabase.from('club_members').select('role, clubs(id, name, logo_asset_id)').eq('user_id', userId))
+      return result
+        .map(r => ({ id: r.clubs.id, name: r.clubs.name, role: r.role, logoAssetId: r.clubs.logo_asset_id }))
+        .sort((a, b) => a.name.localeCompare(b.name))
     },
   })
 }
@@ -63,8 +72,19 @@ export function useClub(clubId: string) {
   return useQuery({
     queryKey: keys.club(clubId),
     queryFn: async (): Promise<Club | null> => {
-      const row = check(await supabase.from('clubs').select('id, name, logo_asset_id, colour, colour2').eq('id', clubId).maybeSingle())
-      return row && { id: row.id, name: row.name, logoAssetId: row.logo_asset_id, colour: row.colour, colour2: row.colour2 }
+      const row = check(
+        await supabase.from('clubs').select('id, name, logo_asset_id, colour, colour2, colour3').eq('id', clubId).maybeSingle(),
+      )
+      return (
+        row && {
+          id: row.id,
+          name: row.name,
+          logoAssetId: row.logo_asset_id,
+          colour: row.colour,
+          colour2: row.colour2,
+          colour3: row.colour3,
+        }
+      )
     },
   })
 }
@@ -128,21 +148,26 @@ export function useCreateClub() {
   })
 }
 
-/** Set the club's logo and colours (admins); null clears one. */
+/** Set the club's logo and (up to three) colours (admins); null clears one. */
 export function useSetBranding(clubId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (b: { logoAssetId: string | null; colour: string | null; colour2: string | null }) => {
+    mutationFn: async (b: { logoAssetId: string | null; colour: string | null; colour2: string | null; colour3: string | null }) => {
       check(
         await supabase.rpc('set_club_branding', {
           club: clubId,
           ...(b.logoAssetId ? { logo_asset_id: b.logoAssetId } : {}),
           ...(b.colour ? { colour: b.colour } : {}),
           ...(b.colour2 ? { colour2: b.colour2 } : {}),
+          ...(b.colour3 ? { colour3: b.colour3 } : {}),
         }),
       )
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.club(clubId) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: keys.club(clubId) })
+      // The club mark in the club list shows the logo.
+      queryClient.invalidateQueries({ queryKey: ['my-clubs'] })
+    },
   })
 }
 

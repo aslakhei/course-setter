@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
@@ -29,7 +30,7 @@ export function ClubMembersPage() {
   )
 }
 
-function errorText(error: unknown, t: ReturnType<typeof useTranslation>['t']): string {
+function errorText(error: unknown, t: TFunction): string {
   return error instanceof ApiError && error.code === 'lastAdmin' ? t('members.lastAdmin') : t('common.error')
 }
 

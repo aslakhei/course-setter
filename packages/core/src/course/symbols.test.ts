@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { insertCourseControl, setNumberPosition } from './commands.ts'
 import { courseById, type Point } from './doc.ts'
-import { allControlsDrawing, courseDrawing, type Primitive, symbolSizes, toPaperMm } from './symbols.ts'
+import { allControlsDrawing, courseDrawing, NUMBER_OUTLINE, numberOutlines, type Primitive, symbolSizes, toPaperMm } from './symbols.ts'
 import { testEvent } from './test-doc.ts'
 
 describe('symbol sizes', () => {
@@ -142,6 +142,35 @@ describe('courseDrawing', () => {
     expect(courseById(moved, 'B').numberPositions).toEqual({})
     const back = setNumberPosition(moved, 'A', 'b', null)
     expect(courseById(back, 'A').numberPositions).toEqual({})
+  })
+
+  it('draws a control visited twice once, with both numbers ("1/4"), clear of the legs of both visits', () => {
+    // Course A: start, a, b, c, a again, finish.
+    const twice = insertCourseControl(testEvent(), 'A', 'a', 4)
+    const drawn = courseDrawing(twice, courseById(twice, 'A'))
+    expect(of(drawn, 'circle').filter(c => c.owner === 'a')).toHaveLength(1)
+    const texts = of(drawn, 'text')
+    expect(texts.map(t => t.text)).toEqual(['1/4', '2', '3'])
+    const number = texts.find(t => t.owner === 'a')
+    // The legs at a: from the start (below left), to b (straight up), from c (up right) and to the finish
+    // (down right): the number goes left, the widest gap.
+    const a = toPaperMm([300, 400], 15000)
+    expect((number?.at[0] ?? 0) - a[0]).toBeLessThan(0)
+    // A moved number moves the joined text.
+    const moved = setNumberPosition(twice, 'A', 'a', [5, 5])
+    const movedText = of(courseDrawing(moved, courseById(moved, 'A')), 'text').find(t => t.owner === 'a')
+    expect(movedText).toMatchObject({ text: '1/4', at: [a[0] + 5, a[1] + 5] })
+  })
+
+  it('gives the numbers white outlines to draw under the course', () => {
+    const outlines = numberOutlines(drawing)
+    expect(outlines.map(t => (t.type === 'text' ? [t.text, t.outline, t.color] : null))).toEqual([
+      ['1', NUMBER_OUTLINE, '#ffffff'],
+      ['2', NUMBER_OUTLINE, '#ffffff'],
+      ['3', NUMBER_OUTLINE, '#ffffff'],
+    ])
+    // In the same places as the numbers.
+    expect(outlines.map(t => (t.type === 'text' ? t.at : null))).toEqual(of(drawing, 'text').map(t => t.at))
   })
 
   it('uses the course print scale: the 1:10 000 course gets 150 % symbols', () => {

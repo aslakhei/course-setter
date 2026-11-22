@@ -1,12 +1,21 @@
-// The template gallery in the Layout mode: universal templates, the club's and one's own, each with the
-// club's logo and colours and seen on the shown course; one is copied into the event for every course
+// The template gallery in the Layout mode: universal templates (made for as many colours as the club
+// has), the club's and one's own, each with the club's logo and colours, its images in their own shape,
+// and seen on the shown course; one is copied into the event for every course
 // (replacing the shared layout) or for the shown course only. The current layout can be saved as a
 // template of one's own, or (admins) of the club.
-import { type Branding, type PrintLayout, type PrintPage, resolveTemplate, UNIVERSAL_TEMPLATES } from '@course-setter/core'
+import {
+  type Branding,
+  fitImages,
+  type PrintLayout,
+  type PrintPage,
+  resolveTemplate,
+  UNIVERSAL_TEMPLATES,
+  universalLayout,
+} from '@course-setter/core'
 import { type FormEvent, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
-import { useAssetImages } from '../lib/assets.ts'
+import { aspectOf, useAssetImages, useAssetRows } from '../lib/assets.ts'
 import { formatDate } from '../lib/format.ts'
 import type { SavedTemplate, TemplateScope } from '../lib/templates.ts'
 import { Modal } from './Dialogs.tsx'
@@ -57,7 +66,7 @@ export function TemplateGallery({
   const [savedNote, setSavedNote] = useState<string | null>(null)
 
   // Resolved with the club's branding and stable ids, so previews do not change on every render.
-  const items = useMemo((): Record<Tab, Item[]> => {
+  const resolved = useMemo((): Record<Tab, Item[]> => {
     const resolve = (key: string, layout: PrintLayout) => {
       let n = 0
       return resolveTemplate(layout, branding, () => `${key}-${++n}`)
@@ -74,25 +83,32 @@ export function TemplateGallery({
         key: `universal:${u.id}`,
         name: t(`templates.universalTemplates.${u.id}.name`),
         note: t(`templates.universalTemplates.${u.id}.description`),
-        layout: resolve(u.id, u.layout),
+        layout: resolve(u.id, universalLayout(u, branding)),
       })),
       club: saved.filter(s => s.scope === 'club').map(fromSaved),
       mine: saved.filter(s => s.scope === 'personal').map(fromSaved),
     }
   }, [branding, saved, t])
-  const shown = items[tab]
-  const selected = shown.find(i => i.key === chosen) ?? shown[0]
 
   const assetIds = useMemo(
     () =>
       [
         ...new Set(
-          Object.values(items).flatMap(list => list.flatMap(i => i.layout.elements.flatMap(e => (e.kind === 'image' ? [e.asset] : [])))),
+          Object.values(resolved).flatMap(list => list.flatMap(i => i.layout.elements.flatMap(e => (e.kind === 'image' ? [e.asset] : [])))),
         ),
       ].sort(),
-    [items],
+    [resolved],
   )
   const { images, loaded } = useAssetImages(assetIds)
+  // Each image keeps its own aspect ratio inside the template's box (a square box for any logo).
+  const rows = useAssetRows(assetIds)
+  const items = useMemo((): Record<Tab, Item[]> => {
+    const aspects = new Map((rows.data ?? []).map(a => [a.id, aspectOf(a)]))
+    const fit = (list: Item[]) => list.map(i => ({ ...i, layout: fitImages(i.layout, id => aspects.get(id) ?? null) }))
+    return { universal: fit(resolved.universal), club: fit(resolved.club), mine: fit(resolved.mine) }
+  }, [resolved, rows.data])
+  const shown = items[tab]
+  const selected = shown.find(i => i.key === chosen) ?? shown[0]
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new resolver when an image comes in, so previews draw again
   const imageOf = useMemo(() => (id: string) => images.get(id) ?? null, [images, loaded])
   const pages = useMemo(() => shown.map(i => ({ ...i, page: pageWith(i.layout, 'all') })), [shown, pageWith])

@@ -181,6 +181,8 @@ export const eventDocSchema = z
     allControls: allControls.optional(),
     /** Elements on every course's printed page (titles, logos, frames …); absent: none. */
     printLayout: printLayoutSchema.optional(),
+    /** A thin white outline round the control numbers on every course (absent: none). */
+    numberOutline: z.boolean().optional(),
   })
   .superRefine((doc, ctx) => {
     const ids = new Set<string>()

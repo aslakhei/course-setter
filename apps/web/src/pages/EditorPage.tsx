@@ -14,6 +14,7 @@ import {
   deleteSpecial,
   type EventDoc,
   fieldValues,
+  fitImages,
   layoutFor,
   moveControl,
   moveDocToVersion,
@@ -29,6 +30,7 @@ import {
   printSettingsOf,
   removeCourseControl,
   removeNode,
+  setNumberOutline,
   setNumberPosition,
   setPrintSettings,
   setRoute,
@@ -83,7 +85,7 @@ import { TemplateGallery } from '../editor/TemplateGallery.tsx'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
 import { type Member, useClub, useMembers } from '../lib/api.ts'
-import { fetchAssets, useCopyToEvent, useLibrary } from '../lib/assets.ts'
+import { aspectOf, fetchAssets, useCopyToEvent, useLibrary } from '../lib/assets.ts'
 import { type EventDetail, eventKeys, fetchEvent, moveEvent, SaveConflict, saveAsCopy, useEvent } from '../lib/events.ts'
 import { formatScale } from '../lib/format.ts'
 import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl, useVersionLinks } from '../lib/maps.ts'
@@ -204,6 +206,7 @@ function Editor({
       logo: club.data?.logoAssetId ?? null,
       colour: club.data?.colour ?? null,
       colour2: club.data?.colour2 ?? null,
+      colour3: club.data?.colour3 ?? null,
       sponsors: (clubImages.data ?? [])
         .filter(a => a.sponsor && a.status === 'ready')
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -248,13 +251,18 @@ function Editor({
       replaced.set(id, here ? id : a ? await copyToEvent.mutateAsync(a).catch(() => null) : null)
     }
     let dropped = 0
-    const elements = layout.elements.flatMap((e): PageElementSpec[] => {
+    // Each image in its own shape inside the template's box (the gallery fits them too, once it knows them).
+    const fitted = fitImages(layout, id => {
+      const a = rows.get(id)
+      return a ? aspectOf(a) : null
+    })
+    const elements = fitted.elements.flatMap((e): PageElementSpec[] => {
       if (e.kind !== 'image') return [e]
       const id = replaced.get(e.asset)
       if (!id) dropped++
       return id ? [{ ...e, asset: id }] : []
     })
-    return { layout: { ...layout, elements }, dropped }
+    return { layout: { ...fitted, elements }, dropped }
   }
   const applyTemplate = async (template: PrintLayout, to: 'all' | 'course', keepSheets: boolean) => {
     if (!printCourse) return
@@ -603,6 +611,8 @@ function Editor({
             onScale={printScale => edit(changePrintSize(doc, printCourse.id, event.name, { printScale }))}
             onCellSize={descriptionCellSize => edit(changePrintSize(doc, printCourse.id, event.name, { descriptionCellSize }))}
             onDescriptions={show => setPrint(printCourse, showDescriptions(doc, printCourse, event.name, printSettings, show))}
+            numberOutline={doc.numberOutline === true}
+            onNumberOutline={on => edit(setNumberOutline(doc, on))}
             onReset={() => {
               // The page's placement goes back to the defaults; the course's layout changes stay.
               const { overrides, ownLayout } = printSettings

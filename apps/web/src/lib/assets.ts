@@ -284,3 +284,15 @@ export function useAssetImages(ids: string[]): { images: Map<string, HTMLImageEl
 
   return state
 }
+
+/** An image's width / height, or null when it is not known yet. */
+export const aspectOf = (a: Pick<LayoutAsset, 'width' | 'height'>): number | null => (a.width && a.height ? a.width / a.height : null)
+
+/** A web address of the club's logo image to show (null: none, or not there yet). */
+export function useLogoUrl(assetId: string | null): string | null {
+  const rows = useAssetRows(assetId ? [assetId] : [])
+  const logo = rows.data?.find(a => a.id === assetId && a.status === 'ready')
+  const path = logo ? shownPath(logo) : null
+  const urls = useSignedUrls(path ? [path] : [])
+  return (path && urls.data?.get(path)) || null
+}

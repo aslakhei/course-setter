@@ -453,6 +453,8 @@
     "cellSizeOption": "{{size}} mm",
     "cellSizeHelp": "Size of each square on the printed description sheet (IOF: 5 to 7 mm)",
     "descriptions": "Description sheet",
+    "numberOutline": "White outline on numbers",
+    "numberOutlineHelp": "A thin white outline round the control numbers, so they stand out on dark or busy map. For every course.",
     "reset": "Reset page",
     "resetHelp": "Place the page and the description sheet automatically again",
     "hint": "Drag the page to choose what is printed. Drag the description sheet to a free spot.",
@@ -786,7 +788,12 @@
       "cancel": "Cancel",
       "editHelp": "Drag a point or a handle to change the outline (Alt: one handle alone), drag inside to move it. Alt-click a point to make it a corner or a curve; Delete removes the selected point."
     },
-    "mapOutline": "Line round the map"
+    "mapOutline": "Line round the map",
+    "mapBands": "Coloured bands round the map",
+    "mapBandsHelp": "Outermost first. They take their width from the map, inside the margin, so they fit any paper.",
+    "mapBand": "Band {{number}}",
+    "mapBandAdd": "Add band",
+    "mapBandRemove": "Remove"
   },
   "branding": {
     "heading": "Branding",
@@ -796,8 +803,10 @@
     "noImages": "Add the logo to the club images below first, then choose it here.",
     "colour": "Club colour 1",
     "colour2": "Club colour 2",
+    "colour3": "Club colour 3",
+    "none": "None",
     "badColour": "Give colours as #rrggbb, for example #1f5a3a.",
-    "coloursHelp": "Left empty, templates use the colour shown."
+    "coloursHelp": "One to three colours. Some templates use as many as the club has. Without a colour 1, templates use the blue shown."
   },
   "templates": {
     "heading": "Templates",
@@ -832,6 +841,14 @@
       "competition": {
         "name": "Competition",
         "description": "Header band, a frame and a row of sponsors, for club races."
+      },
+      "stripes": {
+        "name": "Stripes",
+        "description": "A frame of stripes round the map, one for each club colour."
+      },
+      "ribbon": {
+        "name": "Ribbon",
+        "description": "A header band with stripes in the other club colours, and the stripes again at the foot."
       }
     },
     "tabs": {
