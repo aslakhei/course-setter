@@ -310,6 +310,7 @@ export class CourseError extends Error {
     | 'invalid_description'
     | 'invalid_special'
     | 'invalid_print'
+    | 'invalid_layout'
   constructor(code: CourseError['code'], message: string) {
     super(message)
     this.code = code

@@ -40,6 +40,8 @@ const common = {
   backing: z.object({ padding: z.number().min(0).max(20) }).optional(),
   /** Not moved or resized by accident in the editor. */
   locked: z.boolean().optional(),
+  /** Not printed (kept in the layout, e.g. a sponsor row for some events only). */
+  hidden: z.boolean().optional(),
 }
 
 const text = z.object({

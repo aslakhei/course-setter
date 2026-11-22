@@ -100,7 +100,7 @@ export function layoutAssetIds(doc: EventDoc, courseIds: string[]): string[] {
 }
 
 /** An element on the page: its box (page mm, y up) and what it draws, a white backing box first. */
-export type PlacedElement = { id: string; kind: PageElementSpec['kind']; box: Bounds; primitives: Primitive[] }
+export type PlacedElement = { id: string; kind: PageElementSpec['kind']; box: Bounds; primitives: Primitive[]; locked: boolean }
 
 /** Where an element of this width and height lies on a page of `size`, by its anchor, offset and stretch. */
 export function elementBox(spec: PageElementSpec, size: Point, width: number, height: number): Bounds {
@@ -171,38 +171,40 @@ export function composeLayout(
   const layout = layoutFor(doc, settings)
   const values = fieldValues(doc, course, title, context)
   const area: Bounds = { minX: settings.margin, minY: settings.margin, maxX: size[0] - settings.margin, maxY: size[1] - settings.margin }
-  const elements = layout.elements.map((spec): PlacedElement => {
-    const width = widthOf(spec, size)
-    const height =
-      spec.kind === 'text'
-        ? layoutText({
-            text: fillFields(spec.text, values),
-            font: spec.font,
-            sizePt: spec.sizePt,
-            width,
-            ...(spec.lineHeight ? { lineHeight: spec.lineHeight } : {}),
-          }).height
-        : spec.size[1]
-    const box = elementBox(spec, size, width, height)
-    const primitives = drawElement(spec, box, values, course.printScale)
-    const pad = spec.backing?.padding
-    const outer = pad === undefined ? box : { minX: box.minX - pad, minY: box.minY - pad, maxX: box.maxX + pad, maxY: box.maxY + pad }
-    if (pad !== undefined)
-      primitives.unshift({
-        type: 'path',
-        role: 'layout',
-        owner: spec.id,
-        commands: roundedRect(outer),
-        lineWidth: 0,
-        filled: true,
-        color: '#ffffff',
-      })
-    if (spec.pushMap) {
-      if ((outer.minY + outer.maxY) / 2 > size[1] / 2) area.maxY = Math.min(area.maxY, outer.minY)
-      else area.minY = Math.max(area.minY, outer.maxY)
-    }
-    return { id: spec.id, kind: spec.kind, box, primitives }
-  })
+  const elements = layout.elements
+    .filter(spec => !spec.hidden)
+    .map((spec): PlacedElement => {
+      const width = widthOf(spec, size)
+      const height =
+        spec.kind === 'text'
+          ? layoutText({
+              text: fillFields(spec.text, values),
+              font: spec.font,
+              sizePt: spec.sizePt,
+              width,
+              ...(spec.lineHeight ? { lineHeight: spec.lineHeight } : {}),
+            }).height
+          : spec.size[1]
+      const box = elementBox(spec, size, width, height)
+      const primitives = drawElement(spec, box, values, course.printScale)
+      const pad = spec.backing?.padding
+      const outer = pad === undefined ? box : { minX: box.minX - pad, minY: box.minY - pad, maxX: box.maxX + pad, maxY: box.maxY + pad }
+      if (pad !== undefined)
+        primitives.unshift({
+          type: 'path',
+          role: 'layout',
+          owner: spec.id,
+          commands: roundedRect(outer),
+          lineWidth: 0,
+          filled: true,
+          color: '#ffffff',
+        })
+      if (spec.pushMap) {
+        if ((outer.minY + outer.maxY) / 2 > size[1] / 2) area.maxY = Math.min(area.maxY, outer.minY)
+        else area.minY = Math.max(area.minY, outer.maxY)
+      }
+      return { id: spec.id, kind: spec.kind, box, primitives, locked: spec.locked === true }
+    })
   if (area.maxY < area.minY) area.maxY = area.minY
   return { elements, mapArea: area, mapClip: roundedRect(area, layout.mapArea?.radius ?? 0) }
 }
