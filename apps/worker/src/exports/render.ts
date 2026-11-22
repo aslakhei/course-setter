@@ -20,8 +20,9 @@ import {
 import { addPrintPage, FONT_DIGIT_HEIGHT, type MapLayer } from '@course-setter/core/pdf'
 import fontkit from '@pdf-lib/fontkit'
 import { zipSync } from 'fflate'
-import { type PDFDocument as Doc, PDFDocument, type PDFEmbeddedPage, type PDFFont } from 'pdf-lib'
+import { type PDFDocument as Doc, PDFDocument, type PDFEmbeddedPage, type PDFFont, type PDFImage } from 'pdf-lib'
 import sharp from 'sharp'
+import { type AssetFile, embedAsset } from '../assets/image.ts'
 import { loadOcad } from '../maps/ocad.ts'
 import { loadPdf } from '../maps/pdf.ts'
 import type { MapSource } from '../maps/source.ts'
@@ -46,6 +47,8 @@ export type ExportInput = {
   /** Date, club, setter and map details for the print layout's fields. */
   context?: PageContext
   courseIds: string[]
+  /** The images the layout may show, by asset id (an image element whose asset is not here fails the export). */
+  assets?: Map<string, AssetFile>
   /** One PDF per course in a zip, instead of one PDF with a page per course. */
   separate: boolean
   map: { kind: 'ocad' | 'pdf'; scale: number; file: Buffer }
@@ -107,8 +110,31 @@ async function addCourse(pdf: Doc, input: ExportInput, map: MapFile, courseId: s
   const page = printPage(input.doc, course, input.eventName, settings, input.context)
   const toPage = (p: [number, number]) => pagePosition(course, settings, p)
   const fonts = await embedFonts(pdf, fontsOnPage(page))
-  // Uploaded images are not supported yet: a layout with an image element fails with MissingAssetError.
-  addPrintPage(pdf, page, await mapLayer(pdf, map, page.groundArea, toPage, course.printScale), fonts, () => null)
+  const images = await embedImages(pdf, page, input.assets ?? new Map())
+  addPrintPage(pdf, page, await mapLayer(pdf, map, page.groundArea, toPage, course.printScale), fonts, id => images.get(id)?.image ?? null)
+}
+
+type Embedded = { image: PDFImage | PDFEmbeddedPage; widthMm: number }
+const imageCache = new WeakMap<Doc, Map<string, Embedded>>()
+
+/**
+ * The images a page's layout shows, embedded once per PDF; an SVG again when a page prints it wider
+ * than before (it is rendered for the width it is printed at). Assets not given stay out: drawing them
+ * fails the export with MissingAssetError.
+ */
+async function embedImages(pdf: Doc, page: ReturnType<typeof printPage>, assets: Map<string, AssetFile>): Promise<Map<string, Embedded>> {
+  const cache = imageCache.get(pdf) ?? new Map<string, Embedded>()
+  imageCache.set(pdf, cache)
+  const widths = new Map<string, number>()
+  for (const e of page.elements)
+    for (const p of e.primitives) if (p.type === 'image') widths.set(p.asset, Math.max(widths.get(p.asset) ?? 0, p.box.maxX - p.box.minX))
+  for (const [id, widthMm] of widths) {
+    const asset = assets.get(id)
+    const have = cache.get(id)
+    if (!asset || (have && (asset.kind !== 'svg' || have.widthMm >= widthMm))) continue
+    cache.set(id, { image: await embedAsset(pdf, asset, widthMm), widthMm })
+  }
+  return cache
 }
 
 /** The middle of the map, for a course with nothing on it yet. */

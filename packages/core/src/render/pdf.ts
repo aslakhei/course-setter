@@ -60,7 +60,7 @@ export class MissingAssetError extends Error {
   readonly code = 'missing_asset'
   readonly asset: string
   constructor(asset: string) {
-    super(`No image for asset ${asset}`)
+    super(`An image in the print layout is missing, or cannot be used in this event (${asset}).`)
     this.asset = asset
   }
 }

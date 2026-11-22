@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { useSession } from '../auth/useSession.ts'
+import { ImageLibrary } from '../components/ImageLibrary.tsx'
 import { Avatar, Button, ErrorMessage, Panel } from '../components/ui.tsx'
 import { downloadMyData, OnlyAdmin, useDeleteAccount } from '../lib/account.ts'
 
 const pageClass = 'mx-auto flex max-w-[1200px] flex-col gap-3.5 px-5 pt-4 pb-8'
 
-/** /account: who you are signed in as, downloading your data and deleting your account. */
+/** /account: who you are signed in as, your images, downloading your data and deleting your account. */
 export function AccountPage() {
   const { t } = useTranslation()
   const session = useSession()
@@ -46,6 +47,14 @@ export function AccountPage() {
           </div>
         </div>
       </Panel>
+
+      <ImageLibrary
+        scope={{ scope: 'personal' }}
+        title={t('images.personalHeading')}
+        titleId="account-images"
+        help={t('images.personalHelp')}
+        canEdit
+      />
 
       <Panel title={t('account.dataHeading')} titleId="account-data" className="max-w-xl">
         <div className="flex flex-col items-start gap-2 px-3.5 py-3">

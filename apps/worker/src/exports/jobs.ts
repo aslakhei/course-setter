@@ -1,9 +1,11 @@
 // The export_pdf job (see migration create_exports): print the courses of an export, upload the file,
 // mark the export ready. Afterwards it removes files of exports that have expired, so cleaning up needs
 // no scheduled wake-ups of the worker.
-import { type PageContext, parseDoc } from '@course-setter/core'
+import { layoutAssetIds, type PageContext, parseDoc } from '@course-setter/core'
 import { MissingAssetError } from '@course-setter/core/pdf'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { AssetFile, AssetKind } from '../assets/image.ts'
+import { ASSETS } from '../assets/jobs.ts'
 import type { JobHandler } from '../jobs.ts'
 import { MapError } from '../maps/source.ts'
 import { makeExport } from './render.ts'
@@ -57,6 +59,22 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
     return rows.length
   }
 
+  /** The images among `ids` the event may print (see event_layout_assets), downloaded. */
+  async function layoutAssets(eventId: string, ids: string[]): Promise<Map<string, AssetFile>> {
+    const out = new Map<string, AssetFile>()
+    // Asset ids are uuids; anything else in a document cannot be one.
+    const uuids = ids.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+    if (uuids.length === 0) return out
+    const { data, error } = await db.rpc('event_layout_assets', { event: eventId, ids: uuids })
+    if (error) throw new Error(`reading the layout's images: ${error.message}`)
+    for (const row of (data ?? []) as { id: string; kind: AssetKind; original_path: string }[]) {
+      const download = await db.storage.from(ASSETS).download(row.original_path)
+      if (download.error) throw new Error(`downloading image ${row.id}: ${download.error.message}`)
+      out.set(row.id, { kind: row.kind, file: Buffer.from(await download.data.arrayBuffer()) })
+    }
+    return out
+  }
+
   return {
     async export_pdf(job) {
       const id = job.payload.export_id
@@ -89,8 +107,10 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
         const download = await db.storage.from(ORIGINALS).download(version.data.original_path)
         if (download.error) throw new Error(`downloading the map: ${download.error.message}`)
 
+        const doc = parseDoc(revision.data.doc, version.data.scale)
         const file = await makeExport({
-          doc: parseDoc(revision.data.doc, version.data.scale),
+          doc,
+          assets: await layoutAssets(x.event_id, layoutAssetIds(doc, x.course_ids)),
           eventName: event.data.name,
           context: pageContext(event.data, version.data),
           courseIds: x.course_ids,

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { assetJobHandlers } from './assets/jobs.ts'
 import { exportJobHandlers } from './exports/jobs.ts'
 import { fileJobHandlers } from './files.ts'
 import { mapJobHandlers } from './maps/jobs.ts'
@@ -15,9 +16,9 @@ export const handlers: Record<string, JobHandler> = {
   },
 }
 
-/** Every job type the worker runs; map, export and file jobs read and write the database and Storage through `db`. */
+/** Every job type the worker runs; map, image, export and file jobs read and write the database and Storage through `db`. */
 export function allHandlers(db: SupabaseClient): Record<string, JobHandler> {
-  return { ...handlers, ...mapJobHandlers(db), ...exportJobHandlers(db), ...fileJobHandlers(db) }
+  return { ...handlers, ...mapJobHandlers(db), ...assetJobHandlers(db), ...exportJobHandlers(db), ...fileJobHandlers(db) }
 }
 
 export type DrainResult = { done: number; failed: number }

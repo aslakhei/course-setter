@@ -14,8 +14,8 @@ export const COURSE_PURPLE = '#b5179e'
 /** Colour, and an optional dash pattern in CSS pixels that replaces the primitives' own (previews). */
 export type Paint = { color: string; lineDash?: number[] }
 
-/** Primitives in paper mm at `printScale`, drawn in one colour. */
-export type Drawing = { primitives: Primitive[]; printScale: number; paint: Paint }
+/** Primitives in paper mm at `printScale`, drawn in one colour (unless they have their own), with the images they show. */
+export type Drawing = { primitives: Primitive[]; printScale: number; paint: Paint; images?: (asset: string) => object | null }
 
 export type PrimitiveLayer = { layer: Layer; setDrawings: (drawings: Drawing[]) => void }
 
@@ -50,6 +50,7 @@ export function primitiveLayer(className = '', opacity = 1): PrimitiveLayer {
           color: drawing.paint.color,
           dashPx: drawing.paint.lineDash?.map(v => v * ratio),
           minLineWidthPx: ratio,
+          ...(drawing.images ? { images: drawing.images } : {}),
         })
       }
       return canvas

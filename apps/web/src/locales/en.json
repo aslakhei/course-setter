@@ -560,5 +560,38 @@
     "deleteSure": "I understand that this cannot be undone",
     "delete": "Delete my account",
     "onlyAdmin": "You are the only admin of {{clubs}}. Make another member admin on the club’s Members page, or delete the club in its settings, first."
+  },
+  "images": {
+    "clubHeading": "Club images",
+    "clubHelp": "Logos and sponsor images for printed courses. Everyone in the club can use them in print layouts; only admins add and delete them.",
+    "personalHeading": "Your images",
+    "personalHelp": "Only you see these. You can use them in print layouts of any event you have access to.",
+    "empty": "No images yet.",
+    "file": "Image file",
+    "fileHelp": "PNG, JPEG, SVG or PDF, up to 5 MB. A PDF or SVG logo prints sharpest.",
+    "name": "Name",
+    "upload": "Upload image",
+    "uploading": "Uploading…",
+    "uploadFailed": "The upload failed. Try again.",
+    "tooMany": "There are too many images here. Delete some first.",
+    "wrongType": "Choose a PNG, JPEG, SVG or PDF file.",
+    "tooLarge": "The file is {{size}}; the limit is 5 MB.",
+    "processing": "Checking the image…",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{name}}",
+    "deleteConfirm": "Delete the image \"{{name}}\"? Print layouts that use it cannot be printed until it is replaced.",
+    "kind": {
+      "png": "PNG",
+      "jpeg": "JPEG",
+      "svg": "SVG",
+      "pdf": "PDF"
+    },
+    "errors": {
+      "unsupported_image": "This is not a PNG, JPEG, SVG or PDF image (SVGs may not link to other files).",
+      "wrong_type": "The file does not match its name: check that it is really a PNG, JPEG, SVG or PDF.",
+      "unreadable_image": "The image could not be read. Save it again from the program that made it.",
+      "image_too_large": "The image is too large. Use one under 5 MB and 80 million pixels.",
+      "processing_failed": "Something went wrong checking the image. Delete it and upload it again."
+    }
   }
 }
