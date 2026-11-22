@@ -72,12 +72,25 @@ test('an admin uploads a map, it is processed and shown, and members can open it
   await adaPage.mouse.dblclick(box.x + box.width * 0.7, box.y + box.height * 0.5)
   await expect(adaPage.getByTestId('measured-length')).toHaveText(/^[\d .]+ m · [\d.]+ mm at 1:15 000$/)
 
+  // The admin gives the map details printed courses can show.
+  await expect(adaPage.getByText('No map details yet.')).toBeVisible()
+  await adaPage.getByRole('button', { name: 'Edit details' }).click()
+  await adaPage.getByLabel('Contour interval').fill('75')
+  await expect(adaPage.getByText('Give the contour interval in metres, from 0.5 to 50.')).toBeVisible()
+  await adaPage.getByLabel('Contour interval').fill('2,5')
+  await adaPage.getByLabel('Mapper').fill('Ola Mapper')
+  await adaPage.getByLabel('Year').fill('2024')
+  await adaPage.getByRole('button', { name: 'Save details' }).click()
+  await expect(adaPage.getByText('Contours 2.5 m · Mapper: Ola Mapper · 2024')).toBeVisible()
+
   // A member sees the map and opens it.
   const moPage = await pageFor(browser, mo)
   await moPage.goto(`/clubs/${clubId}/maps`)
   await moPage.getByRole('link', { name: 'Test forest' }).click()
   await expect.poll(() => inkedPixels(moPage), { timeout: 30_000 }).toBeGreaterThan(20)
   await expect(moPage.getByRole('button', { name: 'Delete version' })).toHaveCount(0)
+  await expect(moPage.getByText('Contours 2.5 m · Mapper: Ola Mapper · 2024')).toBeVisible()
+  await expect(moPage.getByRole('button', { name: 'Edit details' })).toHaveCount(0)
   await expect(moPage.getByRole('heading', { name: 'Upload a map' })).toHaveCount(0)
 
   // An outsider gets neither the club nor the map.

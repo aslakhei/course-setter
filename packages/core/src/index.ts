@@ -113,10 +113,34 @@ export {
 export { safeFileName } from './files.ts'
 export { type CourseData, type CourseDataOptions, courseDataXml } from './iof/xml.ts'
 export {
+  type ComposedLayout,
+  composeLayout,
+  elementBox,
+  FIELDS,
+  type Field,
+  fieldValues,
+  fillFields,
+  formatScaleText,
+  layoutFor,
+  type PageContext,
+  type PlacedElement,
+} from './print/compose.ts'
+export {
+  ANCHORS,
+  type Anchor,
+  type ElementOverrides,
+  NORTH_ARROW_STYLES,
+  type PageElementSpec,
+  type PrintLayout,
+  printLayoutSchema,
+  SHAPES,
+} from './print/elements.ts'
+export {
   changePaper,
   changePrintSize,
   DEFAULT_MARGIN,
   defaultPrintSettings,
+  fontsOnPage,
   groundToPage,
   mapAreaOf,
   type PrintPage,
@@ -129,6 +153,7 @@ export {
   printSettingsOf,
   showDescriptions,
 } from './print/layout.ts'
+export { ellipse, roundedRect, scaleBarLength } from './print/marks.ts'
 export {
   type CanvasOptions,
   type CanvasTarget,
@@ -141,6 +166,7 @@ export {
 export {
   ARIAL_DIGIT_HEIGHT,
   type Bounds,
+  flattenPath,
   isColor,
   type LineCap,
   type LineJoin,

@@ -10,6 +10,7 @@ import {
   type EventDoc,
   moveControl,
   moveDocToVersion,
+  type PageContext,
   type Point,
   type PrintSettings,
   parseDoc,
@@ -48,7 +49,7 @@ import {
 } from '../editor/state.ts'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
-import { type Member, useMembers } from '../lib/api.ts'
+import { type Member, useClub, useMembers } from '../lib/api.ts'
 import { type EventDetail, eventKeys, fetchEvent, moveEvent, SaveConflict, saveAsCopy, useEvent } from '../lib/events.ts'
 import { formatScale } from '../lib/format.ts'
 import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl, useVersionLinks } from '../lib/maps.ts'
@@ -115,6 +116,18 @@ function Editor({
   const [hover, setHover] = useState<Hover | null>(null)
   const maps = useMaps(event.clubId)
   const mapName = maps.data?.find(m => m.id === version.mapId)?.name ?? ''
+  const club = useClub(event.clubId)
+  // What the print layout's fields need besides the document: the event's date, the club, the setter
+  // (whoever created the event) and the map's details.
+  const pageContext = useMemo<PageContext>(
+    () => ({
+      eventDate: event.date,
+      clubName: club.data?.name ?? null,
+      setter: members.find(m => m.userId === event.createdBy)?.name ?? null,
+      map: { name: mapName, contour: version.contourInterval, mapper: version.mapper, year: version.year },
+    }),
+    [event.date, event.createdBy, club.data?.name, members, mapName, version.contourInterval, version.mapper, version.year],
+  )
   const queryClient = useQueryClient()
 
   // The print view (?view=print): a course's page on the map, and making PDFs. It shows the course being
@@ -352,6 +365,7 @@ function Editor({
               doc={doc}
               course={printCourse}
               title={event.name}
+              context={pageContext}
               settings={printSettings}
               onChange={settings => setPrint(printCourse, settings)}
             />

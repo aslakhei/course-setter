@@ -6,3 +6,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/** Font files imported as URLs (Vite `?url`), from packages/core/fonts. */
+declare module '*.ttf?url' {
+  const url: string
+  export default url
+}

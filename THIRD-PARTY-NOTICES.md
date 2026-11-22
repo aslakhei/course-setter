@@ -40,8 +40,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## Fonts
 
 The fonts in `packages/core/fonts` are used for text on printed courses (control numbers, description
-sheets, and text on the page around the map). The same files are embedded in exported PDFs and used by the
-snapshot tests, so text looks and breaks into lines the same everywhere. All are
+sheets, and text on the page around the map). The same files are embedded in exported PDFs, loaded by the
+editor's print view and used by the snapshot tests, so text looks and breaks into lines the same everywhere. All are
 licensed under the SIL Open Font License 1.1; each licence is next to its font files.
 
 - Liberation Sans 2.1.5 (`LiberationSans-Regular.ttf`, `LiberationSans-Bold.ttf`), metric-compatible with

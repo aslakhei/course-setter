@@ -115,7 +115,24 @@
       "georef": "Lined up with version {{number}} from the map's coordinates.",
       "points": "Lined up with version {{number}} from matched points, within {{rms}} m."
     },
-    "uploadAbandoned": "The upload of version {{number}} ({{file}}) did not finish. Open the map, choose this version, delete it and upload the file again."
+    "uploadAbandoned": "The upload of version {{number}} ({{file}}) did not finish. Open the map, choose this version, delete it and upload the file again.",
+    "details": {
+      "heading": "Map details",
+      "help": "Printed courses can show these, for example as \"Contour interval {contour}\" in a title.",
+      "contour": "Contour interval",
+      "contourValue": "Contours {{value}} m",
+      "mapper": "Mapper",
+      "mapperValue": "Mapper: {{value}}",
+      "year": "Year",
+      "yearHelp": "When the map was made or last revised.",
+      "yearValue": "{{value}}",
+      "none": "No map details yet.",
+      "edit": "Edit details",
+      "save": "Save details",
+      "cancel": "Cancel",
+      "badContour": "Give the contour interval in metres, from 0.5 to 50.",
+      "badYear": "Give a year from 1900 to 2100."
+    }
   },
   "events": {
     "heading": "Events",

@@ -1,24 +1,30 @@
 // A printed page as PDF: the map in the map area, the course on top in purple with Multiply (so map
-// detail shows through, as overprinting does), and the description sheet in black on white. The worker
-// supplies the map (an image of exactly the map area, or the original PDF map page placed at scale).
+// detail shows through, as overprinting does), the print layout's elements (titles, logos, frames …)
+// and the description sheet in black on white. The worker supplies the map (an image of exactly the map
+// area, or the original PDF map page placed at scale), the fonts and the images the layout uses.
 import {
+  appendBezierCurve,
   clip,
+  closePath,
   endPath,
+  lineTo,
+  moveTo,
   type PDFDocument,
   type PDFEmbeddedPage,
   type PDFFont,
   type PDFImage,
   PDFName,
+  type PDFOperator,
   type PDFPage,
   popGraphicsState,
   pushGraphicsState,
-  rectangle,
   rgb,
   setGraphicsState,
 } from 'pdf-lib'
 import type { Point } from '../course/doc.ts'
 import { drawPrimitivesOnPage, PT_PER_MM } from '../render/pdf.ts'
-import type { Bounds } from '../render/primitives.ts'
+import type { Bounds, PathCommand } from '../render/primitives.ts'
+import type { FontId } from '../text/fonts.ts'
 import type { PrintPage } from './layout.ts'
 
 /**
@@ -43,22 +49,36 @@ export type PrintFonts = {
   bold: PDFFont
   /** Digit height of the fonts as a fraction of their size (Arial and Liberation Sans: about 0.7). */
   digitHeight?: number
+  /** The layout's fonts, embedded with FONT_FEATURES; at least those `fontsOnPage` lists. */
+  layout?: Partial<Record<FontId, PDFFont>>
 }
+
+/** The images the layout's image elements show, by asset id (an image missing throws MissingAssetError). */
+export type PrintImages = (asset: string) => PDFImage | PDFEmbeddedPage | null
 
 const pt = (mm: number) => mm * PT_PER_MM
 
-/** Operators that clip what follows to a box (page mm). */
-function clipTo(box: Bounds) {
-  return [rectangle(pt(box.minX), pt(box.minY), pt(box.maxX - box.minX), pt(box.maxY - box.minY)), clip(), endPath()]
+/** Operators that clip what follows to a closed outline (page mm). */
+function clipTo(commands: PathCommand[]): PDFOperator[] {
+  const ops: PDFOperator[] = commands.map(c =>
+    c[0] === 'M'
+      ? moveTo(pt(c[1]), pt(c[2]))
+      : c[0] === 'L'
+        ? lineTo(pt(c[1]), pt(c[2]))
+        : c[0] === 'C'
+          ? appendBezierCurve(pt(c[1]), pt(c[2]), pt(c[3]), pt(c[4]), pt(c[5]), pt(c[6]))
+          : closePath(),
+  )
+  return [...ops, clip(), endPath()]
 }
 
 /** Add the page to `pdf`. */
-export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer | null, fonts: PrintFonts): PDFPage {
+export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer | null, fonts: PrintFonts, images?: PrintImages): PDFPage {
   const page = pdf.addPage([pt(layout.size[0]), pt(layout.size[1])])
   const area = layout.mapArea
 
   if (map) {
-    page.pushOperators(pushGraphicsState(), ...clipTo(area))
+    page.pushOperators(pushGraphicsState(), ...clipTo(layout.mapClip))
     if (map.kind === 'image') {
       const at = map.at ?? area
       page.drawImage(map.image, { x: pt(at.minX), y: pt(at.minY), width: pt(at.maxX - at.minX), height: pt(at.maxY - at.minY) })
@@ -70,10 +90,23 @@ export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer 
 
   // The course, multiplied onto the map and clipped to the map area.
   const multiply = page.node.newExtGState('Multiply', pdf.context.obj({ Type: 'ExtGState', BM: PDFName.of('Multiply') }))
-  page.pushOperators(pushGraphicsState(), setGraphicsState(multiply), ...clipTo(area))
-  const textOptions = { font: fonts.regular, boldFont: fonts.bold, ...(fonts.digitHeight ? { digitHeight: fonts.digitHeight } : {}) }
+  page.pushOperators(pushGraphicsState(), setGraphicsState(multiply), ...clipTo(layout.mapClip))
+  const textOptions = {
+    font: fonts.regular,
+    boldFont: fonts.bold,
+    ...(fonts.digitHeight ? { digitHeight: fonts.digitHeight } : {}),
+    ...(fonts.layout ? { fonts: fonts.layout } : {}),
+    ...(images ? { images } : {}),
+  }
   drawPrimitivesOnPage(page, layout.course, { origin: [0, 0], color: PRINT_PURPLE, ...textOptions })
   page.pushOperators(popGraphicsState())
+
+  // The layout, as it is (no Multiply): a white band or backing covers the map and the course.
+  drawPrimitivesOnPage(
+    page,
+    layout.elements.flatMap(e => e.primitives),
+    { origin: [0, 0], color: BLACK, ...textOptions },
+  )
 
   if (layout.descriptions) {
     const { box, primitives } = layout.descriptions

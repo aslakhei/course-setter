@@ -1,6 +1,7 @@
 // The event document: one control pool and the courses that use it, stored as JSON in events.doc.
 // Positions are ground metres in the event's map version frame (see tiles.ts), never pixels.
 import { z } from 'zod'
+import { overridesSchema, printLayoutSchema } from '../print/elements.ts'
 
 export const SCHEMA_VERSION = 1
 
@@ -109,9 +110,9 @@ export const ORIENTATIONS = ['portrait', 'landscape'] as const
 export type Orientation = (typeof ORIENTATIONS)[number]
 
 /**
- * Something placed on the printed page, in page mm from the page's top-left corner, y down (as the
- * setter sees the page). Only the description sheet so far; text, logos and layout templates can join
- * later as new kinds.
+ * The description sheet's place on a course's page, in page mm from the page's top-left corner, y down
+ * (as the setter sees the page). It is per course, as its size and best corner are; everything else on
+ * the page is in the event's shared print layout (`EventDoc.printLayout`).
  */
 const layoutElement = z.object({
   kind: z.literal('descriptions'),
@@ -127,6 +128,10 @@ const printSettings = z.object({
   /** White border round the map area, mm (most printers cannot print to the edge). */
   margin: z.number().min(0).max(30),
   layout: z.array(layoutElement),
+  /** This course's changes to elements of the event's shared print layout. */
+  overrides: overridesSchema.optional(),
+  /** A layout of the course's own instead of the shared one (overrides do not apply to it). */
+  ownLayout: printLayoutSchema.optional(),
 })
 
 const course = z.object({
@@ -174,6 +179,8 @@ export const eventDocSchema = z
     courses: z.array(course),
     specials: z.array(special).default([]),
     allControls: allControls.optional(),
+    /** Elements on every course's printed page (titles, logos, frames …); absent: none. */
+    printLayout: printLayoutSchema.optional(),
   })
   .superRefine((doc, ctx) => {
     const ids = new Set<string>()

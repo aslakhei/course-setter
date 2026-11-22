@@ -1,10 +1,21 @@
-import { useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import { MapViewer } from '../components/MapViewer.tsx'
 import { Button, ErrorMessage, fieldClass, Loading } from '../components/ui.tsx'
 import { formatDate } from '../lib/format.ts'
-import { type ClubMap, latestReady, type MapVersionSummary, useDeleteMapVersion, useMaps, useMapVersion, useTilesUrl } from '../lib/maps.ts'
+import {
+  type ClubMap,
+  latestReady,
+  type MapDetails,
+  type MapVersionDetail,
+  type MapVersionSummary,
+  useDeleteMapVersion,
+  useMaps,
+  useMapVersion,
+  useSetMapDetails,
+  useTilesUrl,
+} from '../lib/maps.ts'
 import { useClubContext } from './ClubLayout.tsx'
 import { UploadPanel, VersionStatus, versionLabel } from './ClubMapsPage.tsx'
 
@@ -78,6 +89,7 @@ export function MapPage() {
         )}
       </div>
       {deleteVersion.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
+      {version.data && <Details version={version.data} isAdmin={isAdmin} />}
       {isAdmin && uploading && (
         <div className="max-w-md">
           <UploadPanel mapId={map.id} onUploaded={() => setUploading(false)} />
@@ -115,6 +127,89 @@ function Alignment({ version, map, isAdmin }: { version: MapVersionSummary; map:
         </>
       )}
     </span>
+  )
+}
+
+/** The version's details printed courses can show; admins edit them. */
+function Details({ version, isAdmin }: { version: MapVersionDetail; isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const [editing, setEditing] = useState(false)
+  const shown = [
+    version.contourInterval !== null ? t('maps.details.contourValue', { value: version.contourInterval }) : null,
+    version.mapper ? t('maps.details.mapperValue', { value: version.mapper }) : null,
+    version.year !== null ? t('maps.details.yearValue', { value: version.year }) : null,
+  ].filter(Boolean)
+  if (editing) return <DetailsForm key={version.id} version={version} onDone={() => setEditing(false)} />
+  if (!shown.length && !isAdmin) return null
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
+      <span className={shown.length ? 'text-body' : 'text-muted'}>{shown.length ? shown.join(' · ') : t('maps.details.none')}</span>
+      {isAdmin && (
+        <Button size="sm" onClick={() => setEditing(true)}>
+          {t('maps.details.edit')}
+        </Button>
+      )}
+    </div>
+  )
+}
+
+function DetailsForm({ version, onDone }: { version: MapVersionDetail; onDone: () => void }) {
+  const { t } = useTranslation()
+  const save = useSetMapDetails()
+  const [contour, setContour] = useState(version.contourInterval?.toString() ?? '')
+  const [mapper, setMapper] = useState(version.mapper ?? '')
+  const [year, setYear] = useState(version.year?.toString() ?? '')
+  const contourValue = contour.trim() === '' ? null : Number(contour.replace(',', '.'))
+  const yearValue = year.trim() === '' ? null : Number(year)
+  const contourOk = contourValue === null || (Number.isFinite(contourValue) && contourValue >= 0.5 && contourValue <= 50)
+  const yearOk = yearValue === null || (Number.isInteger(yearValue) && yearValue >= 1900 && yearValue <= 2100)
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!contourOk || !yearOk) return
+    const details: MapDetails = { contourInterval: contourValue, mapper: mapper.trim() || null, year: yearValue }
+    save.mutate({ versionId: version.id, details }, { onSuccess: onDone })
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      aria-labelledby="map-details-heading"
+      className="flex max-w-xl flex-col gap-2 rounded-md border border-line bg-white px-3.5 py-3"
+    >
+      <h3 id="map-details-heading" className="m-0 text-[13px] font-semibold">
+        {t('maps.details.heading')}
+      </h3>
+      <span className="text-[13px] text-muted">{t('maps.details.help')}</span>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex flex-col gap-1 text-[13px]">
+          {t('maps.details.contour')}
+          <span className="flex items-center gap-1.5">
+            <input className={`${fieldClass} w-16`} inputMode="decimal" value={contour} onChange={e => setContour(e.target.value)} />
+            <span>m</span>
+          </span>
+        </label>
+        <label className="flex grow flex-col gap-1 text-[13px]">
+          {t('maps.details.mapper')}
+          <input className={fieldClass} maxLength={200} value={mapper} onChange={e => setMapper(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 text-[13px]" title={t('maps.details.yearHelp')}>
+          {t('maps.details.year')}
+          <input className={`${fieldClass} w-20`} inputMode="numeric" value={year} onChange={e => setYear(e.target.value)} />
+        </label>
+      </div>
+      {!contourOk && <ErrorMessage>{t('maps.details.badContour')}</ErrorMessage>}
+      {!yearOk && <ErrorMessage>{t('maps.details.badYear')}</ErrorMessage>}
+      {save.isError && <ErrorMessage>{t('common.error')}</ErrorMessage>}
+      <span className="flex gap-2">
+        <Button type="submit" variant="primary" size="sm" disabled={!contourOk || !yearOk || save.isPending}>
+          {t('maps.details.save')}
+        </Button>
+        <Button size="sm" onClick={onDone}>
+          {t('maps.details.cancel')}
+        </Button>
+      </span>
+    </form>
   )
 }
 

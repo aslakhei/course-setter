@@ -1,5 +1,5 @@
-// A whole printed page, rendered with mupdf and measured: the scale, the overprint effect, the margin
-// and the description sheet's white box.
+// A whole printed page, rendered with mupdf and measured: the scale, the overprint effect, the margin,
+// the description sheet's white box, and a print layout over the map.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { createCanvas } from '@napi-rs/canvas'
@@ -10,7 +10,9 @@ import { describe, expect, it } from 'vitest'
 import { addControl, addCourse, insertCourseControl } from '../course/commands.ts'
 import { courseById, type EventDoc, emptyDoc, type PrintSettings } from '../course/doc.ts'
 import { PT_PER_MM } from '../render/pdf.ts'
-import { printPage } from './layout.ts'
+import { FONT_FEATURES, FONTS } from '../text/fonts.ts'
+import type { PrintLayout } from './elements.ts'
+import { fontsOnPage, mapAreaOf, printPage } from './layout.ts'
 import { addPrintPage } from './pdf.ts'
 
 const FONT = fileURLToPath(new URL('../../fonts/LiberationSans-Regular.ttf', import.meta.url))
@@ -36,24 +38,32 @@ const SETTINGS: PrintSettings = {
   layout: [{ kind: 'descriptions', at: [10, 10] }],
 }
 
-async function render(): Promise<{ width: number; height: number; px: (xMm: number, yUpMm: number) => [number, number, number] }> {
-  const doc = event()
-  const page = printPage(doc, courseById(doc, 'K'), 'Test', SETTINGS)
+async function render(
+  doc = event(),
+  settings = SETTINGS,
+): Promise<{ width: number; height: number; px: (xMm: number, yUpMm: number) => [number, number, number] }> {
+  const page = printPage(doc, courseById(doc, 'K'), 'Test', settings)
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
+  const layout: Record<string, Awaited<ReturnType<typeof pdf.embedFont>>> = {}
+  for (const id of fontsOnPage(page)) {
+    const file = fileURLToPath(new URL(`../../fonts/${FONTS[id].file}`, import.meta.url))
+    layout[id] = await pdf.embedFont(readFileSync(file), { subset: true, features: FONT_FEATURES })
+  }
   const fonts = {
     regular: await pdf.embedFont(readFileSync(FONT), { subset: true }),
     bold: await pdf.embedFont(readFileSync(BOLD), { subset: true }),
     digitHeight: 1409 / 2048,
+    layout,
   }
-  // A plain grey map image of the map area, 2 px per mm.
-  const area = page.mapArea
+  // A plain grey map image of the whole area inside the margin, 2 px per mm: the page clips it to its map area.
+  const area = mapAreaOf(page.size, settings.margin)
   const canvas = createCanvas(Math.round((area.maxX - area.minX) * 2), Math.round((area.maxY - area.minY) * 2))
   const ctx = canvas.getContext('2d')
   ctx.fillStyle = `rgb(${GREY}, ${GREY}, ${GREY})`
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   const image = await pdf.embedPng(canvas.toBuffer('image/png'))
-  addPrintPage(pdf, page, { kind: 'image', image }, fonts)
+  addPrintPage(pdf, page, { kind: 'image', image, at: area }, fonts)
   const rendered = mupdf.Document.openDocument(await pdf.save(), 'application/pdf')
   const k = PX_PER_MM / PT_PER_MM
   const pixmap = rendered.loadPage(0).toPixmap(mupdf.Matrix.scale(k, k), mupdf.ColorSpace.DeviceRGB, false)
@@ -106,5 +116,63 @@ describe('a printed page', () => {
     // The sheet's box (top-left at 10, 10 mm from the page's top-left) is white between its lines.
     const inside = px(10 + 6 * 2.5, 297 - 10 - 6 * 2.5)
     expect(inside).toEqual([255, 255, 255])
+  })
+})
+
+describe('a printed page with a print layout', () => {
+  const layout: PrintLayout = {
+    mapArea: { radius: 10 },
+    elements: [
+      // A blue header band 30 mm high that keeps the map clear of it.
+      {
+        id: 'band',
+        kind: 'shape',
+        shape: 'rect',
+        anchor: 'tl',
+        offset: [0, 0],
+        stretch: [0, 0],
+        size: [1, 30],
+        pushMap: true,
+        fill: { color: '#0b62a4', opacity: 1 },
+      },
+      {
+        id: 'title',
+        kind: 'text',
+        anchor: 'tl',
+        offset: [10, 8],
+        size: [150, 1],
+        text: '{course}',
+        font: 'display-bold',
+        sizePt: 28,
+        color: '#ffffff',
+      },
+      // A white box over control a (55, 148.5 mm).
+      {
+        id: 'cover',
+        kind: 'shape',
+        shape: 'rect',
+        anchor: 'tl',
+        offset: [49, 297 - 148.5 - 6],
+        size: [12, 12],
+        fill: { color: '#ffffff', opacity: 1 },
+      },
+    ],
+  }
+
+  it('draws the layout over the map and the course, and keeps the map in its rounded area', async () => {
+    const { px } = await render({ ...event(), printLayout: layout }, { ...SETTINGS, layout: [] })
+    // The band covers the top of the page; the map starts below it.
+    expect(px(180, 280)).toEqual([0x0b, 0x62, 0xa4])
+    expect(px(180, 260)).toEqual([GREY, GREY, GREY])
+    // The title is drawn in white on the band (somewhere in its first letters).
+    let white = 0
+    for (let x = 10; x < 30; x += 0.2) if (px(x, 297 - 14)[0] === 255) white++
+    expect(white).toBeGreaterThan(5)
+    // The white box hides control a's ring; control b's ring is purple as before.
+    expect(px(55 + 3.75, 148.5)).toEqual([255, 255, 255])
+    expect(isPurple(px(155 + 3.75, 148.5))).toBe(true)
+    // Rounded corners: just inside the bottom-left corner of the map area is white, a little further in is map.
+    expect(px(6, 6)).toEqual([255, 255, 255])
+    expect(px(6, 30)).toEqual([GREY, GREY, GREY])
   })
 })

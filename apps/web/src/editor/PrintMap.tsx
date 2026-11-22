@@ -1,11 +1,15 @@
 // The print view's map: the course as in the editor, the printed page as a frame to drag over the map
-// (outside it dimmed, its white margin as printed) and the description sheet on its white box, to drag
-// within the page. What is inside the frame is what the PDF shows: both are laid out by printPage().
+// (outside it dimmed, its white margin as printed), the print layout's elements (titles, logos, frames)
+// and the description sheet on its white box, to drag within the page. What is inside the frame is what
+// the PDF shows: both are laid out by printPage().
 import 'ol/ol.css'
 import {
   type Course,
   courseDrawing,
   type EventDoc,
+  flattenPath,
+  fontsOnPage,
+  type PageContext,
   type Point,
   type PrintSettings,
   pageGroundArea,
@@ -30,10 +34,11 @@ import View from 'ol/View.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { extentOf, projectionFor, tileSource } from '../components/MapViewer.tsx'
+import { loadFonts } from '../lib/fonts.ts'
 import { formatScale } from '../lib/format.ts'
 import { COURSE_PURPLE, primitiveLayer } from './courseLayer.ts'
 import { HIGHLIGHT } from './EditorMap.tsx'
-import { dragged, formatPaper, type Grab, grabAt, groundRing } from './print.ts'
+import { dragged, formatPaper, type Grab, grabAt, groundPoints, groundRing } from './print.ts'
 
 type Props = {
   versionId: string
@@ -43,6 +48,8 @@ type Props = {
   course: Course
   /** The event's name, the title of the description sheet. */
   title: string
+  /** The print layout's fields that are not in the document. */
+  context: PageContext
   settings: PrintSettings
   onChange: (settings: PrintSettings) => void
 }
@@ -56,17 +63,24 @@ const styles = {
 }
 
 export function PrintMap(props: Props) {
-  const { versionId, grid, tilesUrl, doc, course, title, settings } = props
+  const { versionId, grid, tilesUrl, doc, course, title, context, settings } = props
   const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
-  // Bottom to top: the map, the course (Multiply), the dimmed surroundings and white paper, the
-  // description sheet, the frame lines.
+  // Bottom to top: the map, the course (Multiply), the dimmed surroundings and white paper, the print
+  // layout, the description sheet, the frame lines.
   const [layers] = useState(() => {
     // Above the frame: course, paper, orientation and scale (OpenLayers places it, so not React).
     const label = document.createElement('div')
     label.className = 'rounded-t bg-[#0b62a4] px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-white'
     label.setAttribute('data-testid', 'print-page-label')
-    return { course: primitiveLayer('course-layer'), under: new VectorSource(), sheet: primitiveLayer(), over: new VectorSource(), label }
+    return {
+      course: primitiveLayer('course-layer'),
+      under: new VectorSource(),
+      elements: primitiveLayer(),
+      sheet: primitiveLayer(),
+      over: new VectorSource(),
+      label,
+    }
   })
   const map = useRef<OlMap | null>(null)
   const [drag, setDrag] = useState<Drag | null>(null)
@@ -77,7 +91,9 @@ export function PrintMap(props: Props) {
       drag ? dragged(doc, course, title, settings, drag.grab, [drag.point[0] - drag.from[0], drag.point[1] - drag.from[1]]) : settings,
     [doc, course, title, settings, drag],
   )
-  const page = useMemo(() => printPage(doc, course, title, shown), [doc, course, title, shown])
+  const page = useMemo(() => printPage(doc, course, title, shown, context), [doc, course, title, shown, context])
+  // The layout's fonts, loaded once each; the layout is drawn again when they are in.
+  const [fontsReady, setFontsReady] = useState(0)
   const latest = useRef({ props, page, shown })
   latest.current = { props, page, shown }
 
@@ -94,6 +110,7 @@ export function PrintMap(props: Props) {
         new TileLayer({ source: tileSource(grid, tilesUrl, projection) }),
         layers.course.layer,
         new VectorLayer({ source: layers.under, updateWhileInteracting: true, updateWhileAnimating: true }),
+        layers.elements.layer,
         layers.sheet.layer,
         new VectorLayer({ source: layers.over, updateWhileInteracting: true, updateWhileAnimating: true }),
       ],
@@ -172,10 +189,38 @@ export function PrintMap(props: Props) {
     layers.course.setDrawings([{ primitives, printScale: scale, paint: { color: COURSE_PURPLE } }])
   }, [layers, doc, course])
 
-  // The page: dimmed surroundings, white margin, the sheet on its white box, and the frame.
+  useEffect(() => {
+    let current = true
+    loadFonts(fontsOnPage(page))
+      .then(() => current && setFontsReady(n => n + 1))
+      // Without the font the text shows in a fallback font; the PDF is not affected.
+      .catch(() => undefined)
+    return () => {
+      current = false
+    }
+  }, [page])
+
+  // The print layout, above the paper (and the course, where it covers the map).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: drawn again once the fonts have loaded
+  useEffect(() => {
+    const offset = pageToPaperOffset(course, shown)
+    layers.elements.setDrawings([
+      {
+        primitives: transformPrimitives(
+          page.elements.flatMap(e => e.primitives),
+          1,
+          offset,
+        ),
+        printScale: course.printScale,
+        paint: { color: '#000' },
+      },
+    ])
+  }, [layers, course, shown, page, fontsReady])
+
+  // The page: dimmed surroundings, white margin (and bands), the sheet on its white box, and the frame.
   useEffect(() => {
     const whole = groundRing(course, shown, { minX: 0, minY: 0, maxX: page.size[0], maxY: page.size[1] })
-    const inner = groundRing(course, shown, page.mapArea)
+    const inner = groundPoints(course, shown, flattenPath(page.mapClip)[0] ?? [])
     const far = 1e5
     const e = grid.extent
     const world: Point[] = [

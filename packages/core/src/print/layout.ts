@@ -18,8 +18,10 @@ import {
 import { specialsDrawing } from '../course/specials.ts'
 import { courseDrawing } from '../course/symbols.ts'
 import { descriptionSheet, drawDescriptionSheet, SHEET } from '../descriptions/sheet.ts'
-import { type Bounds, type Primitive, pathPoints, primitivesBounds, transformPrimitives } from '../render/primitives.ts'
+import { type Bounds, type PathCommand, type Primitive, pathPoints, primitivesBounds, transformPrimitives } from '../render/primitives.ts'
+import type { FontId } from '../text/fonts.ts'
 import type { Extent } from '../tiles.ts'
+import { composeLayout, type PageContext, type PlacedElement } from './compose.ts'
 
 export const DEFAULT_MARGIN = 5
 const DEFAULT_PAPER: Paper = 'A4'
@@ -33,8 +35,13 @@ export function pageSize(paper: Paper, orientation: Orientation): Point {
 export type PrintPage = {
   /** Page width and height, mm. */
   size: Point
-  /** Where the map is drawn on the page, mm (y up). */
+  /**
+   * Where the map is drawn on the page, mm (y up): inside the margin, less the layout's bands that keep
+   * the map clear. Bands cover the map; they do not move it (`pagePosition` places ground points).
+   */
   mapArea: Bounds
+  /** The map area's outline (rounded corners when the layout has them): the map and the course are clipped to it. */
+  mapClip: PathCommand[]
   /** The part of the map the map area shows, ground metres in the map frame. */
   groundArea: Extent
   printScale: number
@@ -42,6 +49,8 @@ export type PrintPage = {
   course: Primitive[]
   /** The description sheet, page mm, drawn in black on a white box; null when the course prints none. */
   descriptions: { box: Bounds; primitives: Primitive[] } | null
+  /** The print layout's elements, bottom to top, with fields filled in for the course; drawn above the course. */
+  elements: PlacedElement[]
 }
 
 /** Ground metres -> page mm for a page showing `center` in the middle of `mapArea`. */
@@ -53,6 +62,14 @@ export function groundToPage(center: Point, mapArea: Bounds, printScale: number)
 /** The map area of a page: the page less the margin on every side. */
 export function mapAreaOf(size: Point, margin: number): Bounds {
   return { minX: margin, minY: margin, maxX: size[0] - margin, maxY: size[1] - margin }
+}
+
+/**
+ * The map area a course's page leaves for the map and the description sheet: inside the margin, less
+ * the layout's bands. (Fields are left empty: a band's height does not depend on them in practice.)
+ */
+function freeArea(doc: EventDoc, course: Course, title: string, settings: PrintSettings): Bounds {
+  return composeLayout(doc, course, title, settings, pageSize(settings.paper, settings.orientation)).mapArea
 }
 
 /** The description sheet's rows, its size in mm and its primitives with the top-left corner at (0, 0). */
@@ -104,7 +121,7 @@ export function defaultPrintSettings(doc: EventDoc, course: Course, title: strin
 /** The top-left corner (page mm, y down) of the corner of the map area that hides the least of the course. */
 function bestCorner(doc: EventDoc, course: Course, title: string, settings: PrintSettings): Point {
   const size = pageSize(settings.paper, settings.orientation)
-  const area = mapAreaOf(size, settings.margin)
+  const area = freeArea(doc, course, title, settings)
   const sheet = sheetOf(doc, course, title)
   const toPage = groundToPage(settings.center, area, course.printScale)
   const offset = toPage([0, 0])
@@ -134,25 +151,30 @@ export function printSettingsOf(doc: EventDoc, course: Course, title: string, fa
   return course.print ?? defaultPrintSettings(doc, course, title, fallback)
 }
 
-/** The printed page of a course, `title` (the event's name) heading its description sheet. */
+/**
+ * The printed page of a course, `title` (the event's name) heading its description sheet; `context`
+ * fills in the layout's fields that are not in the document (date, club, map details).
+ */
 export function printPage(
   doc: EventDoc,
   course: Course,
   title: string,
   settings: PrintSettings = printSettingsOf(doc, course, title),
+  context: PageContext = {},
 ): PrintPage {
   const size = pageSize(settings.paper, settings.orientation)
-  const mapArea = mapAreaOf(size, settings.margin)
-  const toPage = groundToPage(settings.center, mapArea, course.printScale)
-  const ground = (v: number) => (v * course.printScale) / 1000
-  const halfW = ground((mapArea.maxX - mapArea.minX) / 2)
-  const halfH = ground((mapArea.maxY - mapArea.minY) / 2)
-  const groundArea: Extent = {
-    minX: settings.center[0] - halfW,
-    maxX: settings.center[0] + halfW,
-    minY: settings.center[1] - halfH,
-    maxY: settings.center[1] + halfH,
-  }
+  // The page shows settings.center in the middle of the area inside the margin, bands or not.
+  const frame = mapAreaOf(size, settings.margin)
+  const toPage = groundToPage(settings.center, frame, course.printScale)
+  const layout = composeLayout(doc, course, title, settings, size, context)
+  const { mapArea } = layout
+  const ground = (x: number, y: number): Point => [
+    settings.center[0] + ((x - (frame.minX + frame.maxX) / 2) * course.printScale) / 1000,
+    settings.center[1] + ((y - (frame.minY + frame.maxY) / 2) * course.printScale) / 1000,
+  ]
+  const [minX, minY] = ground(mapArea.minX, mapArea.minY)
+  const [maxX, maxY] = ground(mapArea.maxX, mapArea.maxY)
+  const groundArea: Extent = { minX, minY, maxX, maxY }
   // Course symbols are in paper mm from the map frame's origin at the print scale: shift them so the
   // frame's origin lands where toPage puts it.
   const origin = toPage([0, 0])
@@ -161,10 +183,12 @@ export function printPage(
   return {
     size,
     mapArea,
+    mapClip: layout.mapClip,
     groundArea,
     printScale: course.printScale,
     course: onPage,
     descriptions: descriptionsOn(doc, course, title, settings.layout, size),
+    elements: layout.elements,
   }
 }
 
@@ -178,6 +202,13 @@ function descriptionsOn(doc: EventDoc, course: Course, title: string, layout: La
     box: { minX: x - sheet.pad, maxX: x + sheet.width + sheet.pad, minY: top - sheet.height - sheet.pad, maxY: top + sheet.pad },
     primitives: transformPrimitives(sheet.primitives, 1, [x, top]),
   }
+}
+
+/** The fonts the page's layout elements use: the ones to embed in its PDF or load in the browser. */
+export function fontsOnPage(page: PrintPage): FontId[] {
+  const fonts = new Set<FontId>()
+  for (const e of page.elements) for (const p of e.primitives) if (p.type === 'textLine') fonts.add(p.font)
+  return [...fonts]
 }
 
 /** Where a ground point is printed: page mm (y up) for a course with these settings. */
@@ -203,10 +234,10 @@ export function pageToPaperOffset(course: Course, settings: PrintSettings): Poin
   return [-x, -y]
 }
 
-/** Where the description sheet's top-left corner (page mm, y down) may go: the sheet stays in the map area. */
+/** Where the description sheet's top-left corner (page mm, y down) may go: the sheet stays in the map area, clear of bands. */
 function sheetRange(doc: EventDoc, course: Course, title: string, settings: PrintSettings) {
   const [, height] = pageSize(settings.paper, settings.orientation)
-  const area = mapAreaOf(pageSize(settings.paper, settings.orientation), settings.margin)
+  const area = freeArea(doc, course, title, settings)
   const sheet = sheetOf(doc, course, title)
   const x = { min: area.minX + sheet.pad, max: area.maxX - sheet.pad - sheet.width }
   const y = { min: height - area.maxY + sheet.pad, max: height - area.minY - sheet.pad - sheet.height }

@@ -3,11 +3,24 @@
 // rasterised); OCAD maps are rendered for the print area only, at 600 dpi as a palette PNG.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { type Bounds, courseById, type EventDoc, groundToPage, printPage, printSettingsOf, safeFileName } from '@course-setter/core'
+import {
+  type Bounds,
+  courseById,
+  type EventDoc,
+  FONT_FEATURES,
+  FONTS,
+  type FontId,
+  fontsOnPage,
+  type PageContext,
+  pagePosition,
+  printPage,
+  printSettingsOf,
+  safeFileName,
+} from '@course-setter/core'
 import { addPrintPage, FONT_DIGIT_HEIGHT, type MapLayer } from '@course-setter/core/pdf'
 import fontkit from '@pdf-lib/fontkit'
 import { zipSync } from 'fflate'
-import { type PDFDocument as Doc, PDFDocument, type PDFEmbeddedPage } from 'pdf-lib'
+import { type PDFDocument as Doc, PDFDocument, type PDFEmbeddedPage, type PDFFont } from 'pdf-lib'
 import sharp from 'sharp'
 import { loadOcad } from '../maps/ocad.ts'
 import { loadPdf } from '../maps/pdf.ts'
@@ -17,10 +30,8 @@ import type { MapSource } from '../maps/source.ts'
  * Liberation Sans (Arial-metric, OFL; see THIRD-PARTY-NOTICES.md), kept in packages/core/fonts. The
  * worker image keeps the workspace layout, so the path is the same there.
  */
-const FONT_FILES = {
-  regular: fileURLToPath(new URL('../../../../packages/core/fonts/LiberationSans-Regular.ttf', import.meta.url)),
-  bold: fileURLToPath(new URL('../../../../packages/core/fonts/LiberationSans-Bold.ttf', import.meta.url)),
-}
+const fontFile = (file: string) => fileURLToPath(new URL(`../../../../packages/core/fonts/${file}`, import.meta.url))
+const FONT_FILES = { regular: fontFile('LiberationSans-Regular.ttf'), bold: fontFile('LiberationSans-Bold.ttf') }
 
 /** Print resolution for OCAD maps. */
 export const PRINT_DPI = 600
@@ -32,6 +43,8 @@ const STRIP_ROWS = 1024
 export type ExportInput = {
   doc: EventDoc
   eventName: string
+  /** Date, club, setter and map details for the print layout's fields. */
+  context?: PageContext
   courseIds: string[]
   /** One PDF per course in a zip, instead of one PDF with a page per course. */
   separate: boolean
@@ -72,23 +85,30 @@ async function newPdf(): Promise<Doc> {
   return pdf
 }
 
-const fontCache = new WeakMap<Doc, Awaited<ReturnType<typeof embedFonts>>>()
-async function embedFonts(pdf: Doc) {
-  return {
+type Fonts = { regular: PDFFont; bold: PDFFont; digitHeight: number; layout: Partial<Record<FontId, PDFFont>> }
+const fontCache = new WeakMap<Doc, Fonts>()
+/** The fonts for control numbers and descriptions, and the layout fonts `ids`, each embedded once per PDF. */
+async function embedFonts(pdf: Doc, ids: FontId[]): Promise<Fonts> {
+  const fonts = fontCache.get(pdf) ?? {
     regular: await pdf.embedFont(readFileSync(FONT_FILES.regular), { subset: true }),
     bold: await pdf.embedFont(readFileSync(FONT_FILES.bold), { subset: true }),
     digitHeight: FONT_DIGIT_HEIGHT,
+    layout: {},
   }
+  for (const id of ids)
+    fonts.layout[id] ??= await pdf.embedFont(readFileSync(fontFile(FONTS[id].file)), { subset: true, features: FONT_FEATURES })
+  fontCache.set(pdf, fonts)
+  return fonts
 }
 
 async function addCourse(pdf: Doc, input: ExportInput, map: MapFile, courseId: string): Promise<void> {
   const course = courseById(input.doc, courseId)
   const settings = printSettingsOf(input.doc, course, input.eventName, mapCentre(map))
-  const page = printPage(input.doc, course, input.eventName, settings)
-  const toPage = groundToPage(settings.center, page.mapArea, course.printScale)
-  const fonts = fontCache.get(pdf) ?? (await embedFonts(pdf))
-  fontCache.set(pdf, fonts)
-  addPrintPage(pdf, page, await mapLayer(pdf, map, page.groundArea, toPage, course.printScale), fonts)
+  const page = printPage(input.doc, course, input.eventName, settings, input.context)
+  const toPage = (p: [number, number]) => pagePosition(course, settings, p)
+  const fonts = await embedFonts(pdf, fontsOnPage(page))
+  // Uploaded images are not supported yet: a layout with an image element fails with MissingAssetError.
+  addPrintPage(pdf, page, await mapLayer(pdf, map, page.groundArea, toPage, course.printScale), fonts, () => null)
 }
 
 /** The middle of the map, for a course with nothing on it yet. */
