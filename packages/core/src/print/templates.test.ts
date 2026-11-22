@@ -4,7 +4,17 @@ import { courseById, type EventDoc, emptyDoc, eventDocSchema, type PrintSettings
 import { detachLayout, setElementOverride, setMapAreaRadius, setMapAreaStroke } from './edit.ts'
 import type { PageElementSpec, PrintLayout } from './elements.ts'
 import { printPage } from './layout.ts'
-import { applyLayout, type Branding, DEFAULT_COLOURS, NO_BRANDING, resolveTemplate, sponsorToken, TOKENS } from './templates.ts'
+import {
+  applyLayout,
+  type Branding,
+  DEFAULT_COLOURS,
+  NO_BRANDING,
+  parseTemplate,
+  resolveTemplate,
+  sponsorToken,
+  TOKENS,
+  tokenizeLayout,
+} from './templates.ts'
 import { UNIVERSAL_TEMPLATES } from './universal.ts'
 
 const settings: PrintSettings = { paper: 'A4', orientation: 'portrait', center: [0, 0], margin: 5, layout: [] }
@@ -116,5 +126,43 @@ describe('a line round the map area', () => {
     const doc = setPrintSettings(event(), 'A', { ...settings, paper: 'A3' })
     const applied = applyLayout(doc, { elements: [] }, { courseId: 'A', settings: courseById(doc, 'A').print as PrintSettings })
     expect(courseById(applied, 'A').print?.paper).toBe('A3')
+  })
+})
+
+describe('saving a layout as a template', () => {
+  it('turns the club’s logo, colours and sponsors into tokens, and back for another club', () => {
+    const layout = resolveTemplate(template, BRANDING, counter())
+    const saved = tokenizeLayout(layout, BRANDING)
+    expect(saved.mapArea?.stroke?.color).toBe(TOKENS.colour2)
+    expect(saved.elements.map(e => (e.kind === 'image' ? e.asset : e.kind === 'shape' ? e.fill?.color : null))).toEqual([
+      TOKENS.colour,
+      TOKENS.logo,
+      sponsorToken(1),
+      sponsorToken(2),
+    ])
+    // In another club: its logo and colours.
+    const other: Branding = { logo: 'their-logo', colour: '#c8102e', colour2: null, sponsors: [] }
+    const there = resolveTemplate(saved, other, counter())
+    expect(there.mapArea?.stroke?.color).toBe(DEFAULT_COLOURS.colour2)
+    expect(there.elements.map(e => (e.kind === 'image' ? e.asset : e.kind === 'shape' ? e.fill?.color : null))).toEqual([
+      '#c8102e',
+      'their-logo',
+    ])
+  })
+
+  it('keeps colours and images that are not the club’s', () => {
+    const layout: PrintLayout = {
+      elements: [
+        { id: 'x', kind: 'text', anchor: 'tl', offset: [0, 0], size: [10, 1], text: 'Hi', font: 'sans', sizePt: 10, color: '#123456' },
+      ],
+    }
+    expect(tokenizeLayout(layout, BRANDING)).toEqual(layout)
+  })
+
+  it('checks stored templates', () => {
+    expect(parseTemplate(template)).toEqual(template)
+    expect(parseTemplate(tokenizeLayout(resolveTemplate(template, BRANDING, counter()), BRANDING))).not.toBeNull()
+    expect(parseTemplate({ elements: [{ id: 'x', kind: 'nonsense' }] })).toBeNull()
+    expect(parseTemplate('no')).toBeNull()
   })
 })

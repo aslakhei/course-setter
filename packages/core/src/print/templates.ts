@@ -68,3 +68,39 @@ export function applyLayout(doc: EventDoc, layout: PrintLayout, to: 'all' | { co
   const allControls = doc.allControls && allPrint?.overrides ? { ...doc.allControls, print: withoutOverrides(allPrint) } : doc.allControls
   return { ...doc, printLayout: layout, courses, ...(allControls ? { allControls } : {}) }
 }
+
+/**
+ * A layout to save as a template: the club's logo, colours and sponsors in it become tokens, so the
+ * template takes the branding of the club it is used in (a personal template in another club, too).
+ */
+export function tokenizeLayout(layout: PrintLayout, branding: Branding): PrintLayout {
+  const same = (a: string, b: string | null) => b !== null && a.toLowerCase() === b.toLowerCase()
+  const colour = (c: string) => (same(c, branding.colour) ? TOKENS.colour : same(c, branding.colour2) ? TOKENS.colour2 : c)
+  const recoloured = JSON.parse(JSON.stringify(layout), (key, value) =>
+    key === 'color' && typeof value === 'string' ? colour(value) : value,
+  ) as PrintLayout
+  const asset = (a: string) => {
+    if (a === branding.logo) return TOKENS.logo
+    const sponsor = branding.sponsors.indexOf(a)
+    return sponsor >= 0 ? sponsorToken(sponsor + 1) : a
+  }
+  return { ...recoloured, elements: recoloured.elements.map(e => (e.kind === 'image' ? { ...e, asset: asset(e.asset) } : e)) }
+}
+
+/** A stored template, checked as a layout with tokens; null when it is not one. */
+export function parseTemplate(raw: unknown): PrintLayout | null {
+  if (!raw || typeof raw !== 'object') return null
+  let n = 0
+  const anything: Branding = {
+    logo: 'logo',
+    colour: '#000000',
+    colour2: '#000000',
+    sponsors: Array.from({ length: 100 }, (_, i) => `sponsor-${i}`),
+  }
+  try {
+    resolveTemplate(raw as PrintLayout, anything, () => `check-${++n}`)
+    return raw as PrintLayout
+  } catch {
+    return null
+  }
+}

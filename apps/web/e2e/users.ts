@@ -9,6 +9,12 @@ export const admin = createClient(supabase.url, supabase.secretKey, { auth: { pe
 export type TestUser = { id: string; name: string; session: Session }
 
 /**
+ * How long to wait for something the worker does (processing a map or an image, making a PDF): it runs
+ * one job at a time, so with every test file running at once a job can wait behind several maps.
+ */
+export const JOB_WAIT = 150_000
+
+/**
  * A confirmed user with a password, signed in from Node. The app only offers Google sign-in; password
  * sign-in exists on local Supabase only, so tests get a real session without a test-only login page.
  */

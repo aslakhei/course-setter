@@ -803,7 +803,6 @@
     "heading": "Templates",
     "button": "Templates",
     "universal": "Universal templates",
-    "universalHelp": "Universal templates take the club's logo and colours from the club settings. Each fits A4 and A3, portrait and landscape.",
     "selected": "Chosen template",
     "previewOf": "The template on {{course}}",
     "previewHelp": "On {{course}}, with the club's logo and colours (the map is left out).",
@@ -834,6 +833,38 @@
         "name": "Competition",
         "description": "Header band, a frame and a row of sponsors, for club races."
       }
-    }
+    },
+    "tabs": {
+      "universal": "Universal · {{count}}",
+      "club": "{{club}} · {{count}}",
+      "mine": "Mine · {{count}}"
+    },
+    "help": {
+      "universal": "Universal templates take the club's logo and colours from the club settings. Each fits A4 and A3, portrait and landscape.",
+      "club": "The club's templates: everyone in the club can use them; admins save and delete them.",
+      "mine": "Your own templates: only you see them, and you can use them in any club. They take the club logo and colours of the event they are used in."
+    },
+    "empty": {
+      "universal": "No templates.",
+      "club": "No club templates yet. Admins save the current layout as a club template below.",
+      "mine": "No templates of your own yet. Save the current layout as a template below."
+    },
+    "saveCurrent": "Save the current layout as a template",
+    "namePlaceholder": "Template name",
+    "saveAs": "Save as",
+    "mine": "Mine",
+    "forClub": "{{club}} (admins)",
+    "adminsOnly": "Only club admins save club templates.",
+    "save": "Save template",
+    "saved": "Saved “{{name}}”.",
+    "replaced": "Replaced “{{name}}” with the current layout.",
+    "delete": "Delete template",
+    "deleteConfirm": "Delete the template “{{name}}”? Events that used it keep their layout.",
+    "imagesDropped_one": "One image of the template could not be used in this event and was left out.",
+    "imagesDropped_other": "{{count}} images of the template could not be used in this event and were left out.",
+    "clubHeading": "Club templates",
+    "clubHelp": "Everyone in the club can use club templates; only admins save and delete them. A template is saved from the Layout mode of any event.",
+    "noClubTemplates": "No club templates yet.",
+    "deleteLabel": "Delete the template {{name}}"
   }
 }

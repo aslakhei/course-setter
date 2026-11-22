@@ -29,6 +29,10 @@ export type LayoutAsset = {
   createdAt: string
   /** A club library image marked as a sponsor (templates show sponsors). */
   sponsor: boolean
+  /** Where it belongs: a club's library (clubId), an event (clubId and eventId), or a person (ownerId). */
+  clubId: string | null
+  eventId: string | null
+  ownerId: string | null
 }
 
 /** 5 MB, also set on the bucket. */
@@ -60,7 +64,8 @@ export const assetKeys = {
   images: (ids: string[]) => ['layout-asset-images', ...ids] as const,
 }
 
-const columns = 'id, name, kind, status, width, height, bytes, error_code, original_path, preview_path, created_at, sponsor'
+const columns =
+  'id, name, kind, status, width, height, bytes, error_code, original_path, preview_path, created_at, sponsor, club_id, event_id, owner_id'
 type Row = {
   id: string
   name: string
@@ -74,6 +79,9 @@ type Row = {
   preview_path: string | null
   created_at: string
   sponsor: boolean
+  club_id: string | null
+  event_id: string | null
+  owner_id: string | null
 }
 const toAsset = (r: Row): LayoutAsset => ({
   id: r.id,
@@ -88,6 +96,9 @@ const toAsset = (r: Row): LayoutAsset => ({
   previewPath: r.preview_path,
   createdAt: r.created_at,
   sponsor: r.sponsor,
+  clubId: r.club_id,
+  eventId: r.event_id,
+  ownerId: r.owner_id,
 })
 
 const busy = (a: LayoutAsset) => a.status === 'uploading' || a.status === 'processing'
@@ -202,6 +213,14 @@ export function useAssetRows(ids: string[]) {
     },
     refetchInterval: query => (query.state.data?.some(busy) ? 3000 : false),
   })
+}
+
+/** The images with these ids the signed-in person may see (any status). */
+export async function fetchAssets(ids: string[]): Promise<LayoutAsset[]> {
+  if (ids.length === 0) return []
+  const { data, error } = await supabase.from('layout_assets').select(columns).in('id', ids)
+  if (error) throw new ApiError(error)
+  return (data ?? []).map(toAsset)
 }
 
 /**
