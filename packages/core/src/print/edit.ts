@@ -6,7 +6,7 @@ import { setPrintSettings } from '../course/commands.ts'
 import { type Course, CourseError, courseById, type EventDoc, type Point, type PrintSettings } from '../course/doc.ts'
 import type { FontId } from '../text/fonts.ts'
 import { layoutFor } from './compose.ts'
-import { type ElementOverrides, type PageElementSpec, type PrintLayout, printLayoutSchema } from './elements.ts'
+import { type ElementOverrides, type PageElementSpec, type PrintLayout, printLayoutSchema, type WhiteArea } from './elements.ts'
 
 /** Whether a course prints with a layout of its own (else the event's shared one). */
 export const hasOwnLayout = (settings: PrintSettings | undefined): boolean => Boolean(settings?.ownLayout)
@@ -60,7 +60,11 @@ export function removeLayoutElement(doc: EventDoc, courseId: string, settings: P
     elementIn(l, id)
     return { ...l, elements: l.elements.filter(e => e.id !== id) }
   })
-  if (settings.ownLayout) return removed
+  return settings.ownLayout ? removed : withoutOverrides(removed, id)
+}
+
+/** The document without any course's overrides of `id` (the all-controls page's too). */
+function withoutOverrides(removed: EventDoc, id: string): EventDoc {
   const without = (print: PrintSettings | undefined): PrintSettings | undefined => {
     if (!print?.overrides || !(id in print.overrides)) return print
     const { [id]: _gone, ...rest } = print.overrides
@@ -123,7 +127,8 @@ export function setElementOverride(
   override: ElementOverride | null,
 ): EventDoc {
   if (settings.ownLayout) throw new CourseError('invalid_layout', 'A course with a layout of its own has no overrides')
-  elementIn(doc.printLayout ?? { elements: [] }, id)
+  const shared = doc.printLayout ?? { elements: [] }
+  if (!shared.whiteAreas?.some(a => a.id === id)) elementIn(shared, id)
   const { [id]: _old, ...rest } = settings.overrides ?? {}
   const kept = override && Object.keys(override).length ? { ...rest, [id]: override } : rest
   const { overrides: _gone, ...bare } = settings
@@ -230,4 +235,40 @@ export function newElement(
       if (!extra.url) throw new CourseError('invalid_layout', 'A QR code needs its address')
       return { ...base, kind, size: [20, 20], url: extra.url, color: '#000000', backing: { padding: 1.5 } }
   }
+}
+
+function whiteAreaIn(layout: PrintLayout, id: string): WhiteArea {
+  const found = layout.whiteAreas?.find(a => a.id === id)
+  if (!found) throw new CourseError('invalid_layout', `No white area ${id}`)
+  return found
+}
+
+/** Add a white area to the layout the course uses. */
+export function addWhiteArea(doc: EventDoc, courseId: string, settings: PrintSettings, area: WhiteArea): EventDoc {
+  return withLayout(doc, courseById(doc, courseId), settings, l => ({ ...l, whiteAreas: [...(l.whiteAreas ?? []), area] }))
+}
+
+/** Change a white area (its points, map or page, lock …) in the layout the course uses. */
+export function updateWhiteArea(
+  doc: EventDoc,
+  courseId: string,
+  settings: PrintSettings,
+  id: string,
+  change: (area: WhiteArea) => WhiteArea,
+): EventDoc {
+  return withLayout(doc, courseById(doc, courseId), settings, l => {
+    whiteAreaIn(l, id)
+    return { ...l, whiteAreas: (l.whiteAreas ?? []).map(a => (a.id === id ? change(a) : a)) }
+  })
+}
+
+/** Remove a white area; from the shared layout, every course's hiding of it goes too. */
+export function removeWhiteArea(doc: EventDoc, courseId: string, settings: PrintSettings, id: string): EventDoc {
+  const removed = withLayout(doc, courseById(doc, courseId), settings, l => {
+    whiteAreaIn(l, id)
+    const rest = (l.whiteAreas ?? []).filter(a => a.id !== id)
+    const { whiteAreas: _old, ...bare } = l
+    return rest.length ? { ...bare, whiteAreas: rest } : bare
+  })
+  return settings.ownLayout ? removed : withoutOverrides(removed, id)
 }

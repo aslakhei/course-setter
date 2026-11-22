@@ -125,9 +125,11 @@ export {
   layoutFor,
   type PageContext,
   type PlacedElement,
+  whiteAreaPath,
 } from './print/compose.ts'
 export {
   addLayoutElement,
+  addWhiteArea,
   detachLayout,
   duplicateLayoutElement,
   type ElementOverride,
@@ -137,11 +139,13 @@ export {
   newElement,
   reattachLayout,
   removeLayoutElement,
+  removeWhiteArea,
   reorderLayoutElement,
   setElementOverride,
   setMapAreaRadius,
   specForBox,
   updateLayoutElement,
+  updateWhiteArea,
 } from './print/edit.ts'
 export {
   ANCHORS,
@@ -152,6 +156,8 @@ export {
   type PrintLayout,
   printLayoutSchema,
   SHAPES,
+  type WhiteArea,
+  type WhiteAreaNode,
 } from './print/elements.ts'
 export {
   ALIGNMENTS,
@@ -163,11 +169,13 @@ export {
   type Handle,
   handleAt,
   handlePoints,
+  insidePath,
   resizeBox,
   type SnapTargets,
   snapMove,
   snapResize,
   snapTargets,
+  whiteAreaAt,
 } from './print/geometry.ts'
 export {
   changePaper,
@@ -177,6 +185,7 @@ export {
   fontsOnPage,
   groundToPage,
   mapAreaOf,
+  type PlacedWhiteArea,
   type PrintPage,
   pageGroundArea,
   pagePosition,

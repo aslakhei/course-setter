@@ -6,7 +6,7 @@ import { ALL_CONTROLS, type Course, controlById, courseById, type EventDoc, type
 import { courseLength } from '../course/length.ts'
 import type { Bounds, PathCommand, Primitive } from '../render/primitives.ts'
 import { layoutText, textPrimitives } from '../text/lines.ts'
-import type { PageElementSpec, PrintLayout } from './elements.ts'
+import type { PageElementSpec, PrintLayout, WhiteAreaNode } from './elements.ts'
 import { northArrowDrawing, qrDrawing, roundedRect, scaleBarDrawing, shapeDrawing } from './marks.ts'
 
 /** What fields need besides the event document: the event, its club and the map (absent values print nothing). */
@@ -89,7 +89,25 @@ export function layoutFor(doc: EventDoc, settings: PrintSettings | undefined): P
       if (o.hidden) return []
       return [{ ...e, ...(o.offset ? { offset: o.offset } : {}), ...(o.size ? { size: o.size } : {}) }]
     }),
+    ...(shared.whiteAreas ? { whiteAreas: shared.whiteAreas.filter(a => !overrides[a.id]?.hidden) } : {}),
   }
+}
+
+/**
+ * A white area's closed outline with each point mapped by `to` (into page mm): straight between corners,
+ * a cubic where a point has a handle on that side.
+ */
+export function whiteAreaPath(nodes: WhiteAreaNode[], to: (p: Point) => Point): PathCommand[] {
+  const first = nodes[0]
+  if (!first) return []
+  const commands: PathCommand[] = [['M', ...to(first.at)]]
+  nodes.forEach((n, i) => {
+    const next = nodes[(i + 1) % nodes.length] as WhiteAreaNode
+    if (!n.out && !next.in) commands.push(['L', ...to(next.at)])
+    else commands.push(['C', ...to(n.out ?? n.at), ...to(next.in ?? next.at), ...to(next.at)])
+  })
+  commands.push(['Z'])
+  return commands
 }
 
 /** The images (asset ids) the layouts of these courses show, each once: what an export of them needs. */

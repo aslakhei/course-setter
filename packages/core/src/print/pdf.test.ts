@@ -176,3 +176,21 @@ describe('a printed page with a print layout', () => {
     expect(px(6, 30)).toEqual([GREY, GREY, GREY])
   })
 })
+
+describe('a printed page with a white area', () => {
+  it('covers the map with white under the course', async () => {
+    // A square on the map round control a (ground 1000, 2000; page 55, 148.5 mm), 200 m on a side.
+    const layout: PrintLayout = {
+      elements: [],
+      whiteAreas: [{ id: 'w', on: 'map', nodes: [{ at: [900, 1900] }, { at: [1100, 1900] }, { at: [1100, 2100] }, { at: [900, 2100] }] }],
+    }
+    const { px } = await render({ ...event(), printLayout: layout }, { ...SETTINGS, layout: [] })
+    // The map is white inside the square, grey outside it.
+    expect(px(50, 152)).toEqual([255, 255, 255])
+    expect(px(70, 152)).toEqual([GREY, GREY, GREY])
+    // Control a's ring is still drawn, in pure purple on the white.
+    const ring = px(55 + 3.75, 148.5)
+    expect(isPurple(ring)).toBe(true)
+    expect(ring[0]).toBeGreaterThan(150)
+  })
+})

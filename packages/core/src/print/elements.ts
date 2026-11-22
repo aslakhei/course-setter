@@ -83,10 +83,34 @@ const qr = z.object({ ...common, kind: z.literal('qr'), url: z.url({ protocol: /
 
 export const layoutElementSchema = z.discriminatedUnion('kind', [text, image, shape, northArrow, scaleBar, qr])
 
+/**
+ * A point of a white area's outline: a corner (no handles) or a curve point, whose handles shape the
+ * segments before (`in`) and after it (`out`). Same coordinates as the area's points.
+ */
+const node = z.object({ at: point, in: point.optional(), out: point.optional() })
+
+/**
+ * A white area covering part of the map (a garden, a road that must not be crossed, a part of the map
+ * not to show): a closed outline of corners and curves, filled white over the map and under the course.
+ */
+export const whiteAreaSchema = z.object({
+  id: z.string().min(1).max(64),
+  /**
+   * 'map': points in ground metres in the map frame, so the area stays on the terrain it covers when
+   * the page moves; 'page': points in page mm from the page's top-left corner, y down.
+   */
+  on: z.enum(['map', 'page']),
+  nodes: z.array(node).min(3).max(500),
+  hidden: z.boolean().optional(),
+  locked: z.boolean().optional(),
+})
+
 export const printLayoutSchema = z
   .object({
     /** Bottom to top. */
     elements: z.array(layoutElementSchema).max(100),
+    /** White areas, drawn over the map and under the course. */
+    whiteAreas: z.array(whiteAreaSchema).max(100).optional(),
     /** The map area's corners rounded with this radius, mm. */
     mapArea: z.object({ radius: z.number().min(0).max(30) }).optional(),
   })
@@ -95,6 +119,10 @@ export const printLayoutSchema = z
     layout.elements.forEach((e, i) => {
       if (ids.has(e.id)) ctx.addIssue({ code: 'custom', path: ['elements', i, 'id'], message: `duplicate element id ${e.id}` })
       ids.add(e.id)
+    })
+    layout.whiteAreas?.forEach((a, i) => {
+      if (ids.has(a.id)) ctx.addIssue({ code: 'custom', path: ['whiteAreas', i, 'id'], message: `duplicate id ${a.id}` })
+      ids.add(a.id)
     })
   })
 
@@ -105,5 +133,7 @@ export const overridesSchema = z.record(
 )
 
 export type PageElementSpec = z.infer<typeof layoutElementSchema>
+export type WhiteArea = z.infer<typeof whiteAreaSchema>
+export type WhiteAreaNode = WhiteArea['nodes'][number]
 export type PrintLayout = z.infer<typeof printLayoutSchema>
 export type ElementOverrides = z.infer<typeof overridesSchema>

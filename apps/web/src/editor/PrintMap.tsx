@@ -128,14 +128,15 @@ export function PrintMap(props: Props) {
   const { versionId, grid, tilesUrl, doc, course, title, context, settings } = props
   const { t } = useTranslation()
   const target = useRef<HTMLDivElement>(null)
-  // Bottom to top: the map, the course (Multiply), the dimmed surroundings and white paper, the print
-  // layout, the description sheet, the frame lines.
+  // Bottom to top: the map, white areas, the course (Multiply), the dimmed surroundings and white paper,
+  // the print layout, the description sheet, the frame lines.
   const [layers] = useState(() => {
     // Above the frame: course, paper, orientation and scale (OpenLayers places it, so not React).
     const label = document.createElement('div')
     label.className = 'rounded-t bg-[#0b62a4] px-2 py-0.5 text-xs font-semibold whitespace-nowrap text-white'
     label.setAttribute('data-testid', 'print-page-label')
     return {
+      white: primitiveLayer(),
       course: primitiveLayer('course-layer'),
       under: new VectorSource(),
       elements: primitiveLayer(),
@@ -191,6 +192,7 @@ export function PrintMap(props: Props) {
       target: target.current,
       layers: [
         new TileLayer({ source: tileSource(grid, tilesUrl, projection) }),
+        layers.white.layer,
         layers.course.layer,
         new VectorLayer({ source: layers.under, updateWhileInteracting: true, updateWhileAnimating: true }),
         layers.elements.layer,
@@ -376,6 +378,21 @@ export function PrintMap(props: Props) {
       current = false
     }
   }, [page])
+
+  // White areas over the map, under the course (the paper and margin above them clip them to the map area).
+  useEffect(() => {
+    layers.white.setDrawings([
+      {
+        primitives: transformPrimitives(
+          page.whiteAreas.flatMap(w => w.primitives),
+          1,
+          pageToPaperOffset(course, shown),
+        ),
+        printScale: course.printScale,
+        paint: { color: '#ffffff' },
+      },
+    ])
+  }, [layers, course, shown, page])
 
   // The print layout, above the paper (and the course, where it covers the map).
   // biome-ignore lint/correctness/useExhaustiveDependencies: drawn again once the fonts have loaded
