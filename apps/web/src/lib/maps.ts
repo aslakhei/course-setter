@@ -28,12 +28,16 @@ export type MapVersionSummary = {
 
 export type ClubMap = { id: string; name: string; versions: MapVersionSummary[] }
 
-export type MapVersionDetail = MapVersionSummary & {
-  mapId: string
-  tilesPath: string | null
-  tiles: TileGrid | null
-  transform: Similarity | null
-}
+/** What printed courses can show about a map version (null: not given). */
+export type MapDetails = { contourInterval: number | null; mapper: string | null; year: number | null }
+
+export type MapVersionDetail = MapVersionSummary &
+  MapDetails & {
+    mapId: string
+    tilesPath: string | null
+    tiles: TileGrid | null
+    transform: Similarity | null
+  }
 
 /** 50 MB: the Supabase free plan's limit per file (also set on the bucket). */
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -128,7 +132,7 @@ export function useMapVersion(versionId: string | undefined) {
     queryFn: async (): Promise<MapVersionDetail | null> => {
       const { data, error } = await supabase
         .from('map_versions')
-        .select(`${versionColumns}, map_id, tiles_path, tiles, transform_from_previous`)
+        .select(`${versionColumns}, map_id, tiles_path, tiles, transform_from_previous, contour_interval, mapper, map_year`)
         .eq('id', versionId ?? '')
         .maybeSingle()
       if (error) throw new ApiError(error)
@@ -139,6 +143,9 @@ export function useMapVersion(versionId: string | undefined) {
         tilesPath: data.tiles_path,
         tiles: data.tiles as TileGrid | null,
         transform: data.transform_from_previous as Similarity | null,
+        contourInterval: data.contour_interval === null ? null : Number(data.contour_interval),
+        mapper: data.mapper,
+        year: data.map_year,
       }
     },
   })
@@ -238,6 +245,23 @@ export function useSaveAlignment(clubId: string) {
         queryClient.invalidateQueries({ queryKey: mapKeys.maps(clubId) }),
         queryClient.invalidateQueries({ queryKey: mapKeys.version(versionId) }),
       ]),
+  })
+}
+
+/** Save a version's details (admins); a detail that is null is cleared. */
+export function useSetMapDetails() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ versionId, details }: { versionId: string; details: MapDetails }) => {
+      const { error } = await supabase.rpc('set_map_version_details', {
+        map_version_id: versionId,
+        ...(details.contourInterval !== null ? { contour_interval: details.contourInterval } : {}),
+        ...(details.mapper ? { mapper: details.mapper } : {}),
+        ...(details.year !== null ? { map_year: details.year } : {}),
+      })
+      if (error) throw new ApiError(error)
+    },
+    onSuccess: (_data, { versionId }) => queryClient.invalidateQueries({ queryKey: mapKeys.version(versionId) }),
   })
 }
 

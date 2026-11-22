@@ -1,7 +1,8 @@
 // The export_pdf job (see migration create_exports): print the courses of an export, upload the file,
 // mark the export ready. Afterwards it removes files of exports that have expired, so cleaning up needs
 // no scheduled wake-ups of the worker.
-import { parseDoc } from '@course-setter/core'
+import { type PageContext, parseDoc } from '@course-setter/core'
+import { MissingAssetError } from '@course-setter/core/pdf'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { JobHandler } from '../jobs.ts'
 import { MapError } from '../maps/source.ts'
@@ -71,11 +72,19 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
       await db.from('exports').update({ status: 'running' }).eq('id', id)
 
       try {
-        const event = await db.from('events').select('name, map_version_id').eq('id', x.event_id).single()
+        const event = await db
+          .from('events')
+          .select('name, map_version_id, event_date, clubs(name), profiles!events_created_by_fkey(display_name)')
+          .eq('id', x.event_id)
+          .single()
         if (event.error) throw new Error(`reading event: ${event.error.message}`)
         const revision = await db.from('event_revisions').select('doc').eq('event_id', x.event_id).eq('revision', x.revision).single()
         if (revision.error) throw new Error(`reading event revision ${x.revision}: ${revision.error.message}`)
-        const version = await db.from('map_versions').select('kind, scale, original_path').eq('id', event.data.map_version_id).single()
+        const version = await db
+          .from('map_versions')
+          .select('kind, scale, original_path, contour_interval, mapper, map_year, maps(name)')
+          .eq('id', event.data.map_version_id)
+          .single()
         if (version.error) throw new Error(`reading map version: ${version.error.message}`)
         const download = await db.storage.from(ORIGINALS).download(version.data.original_path)
         if (download.error) throw new Error(`downloading the map: ${download.error.message}`)
@@ -83,6 +92,7 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
         const file = await makeExport({
           doc: parseDoc(revision.data.doc, version.data.scale),
           eventName: event.data.name,
+          context: pageContext(event.data, version.data),
           courseIds: x.course_ids,
           separate: x.separate,
           map: { kind: version.data.kind, scale: version.data.scale, file: Buffer.from(await download.data.arrayBuffer()) },
@@ -99,7 +109,7 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
         const expired = await removeExpired()
         return { bytes: file.bytes.length, fileName: file.fileName, expired }
       } catch (err) {
-        if (err instanceof MapError) {
+        if (err instanceof MapError || err instanceof MissingAssetError) {
           await fail(id, err.message)
           return { failed: err.code }
         }
@@ -107,6 +117,27 @@ export function exportJobHandlers(db: SupabaseClient): Record<string, JobHandler
         if (job.attempts >= job.max_attempts) await fail(id, (err as Error).message)
         throw err
       }
+    },
+  }
+}
+
+/** A related row as supabase-js returns it: an object, or (without generated types) possibly an array. */
+const one = <T>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null))
+
+/** The print layout's fields that are not in the event document. */
+function pageContext(
+  event: { event_date: string | null; clubs: unknown; profiles: unknown },
+  version: { contour_interval: number | null; mapper: string | null; map_year: number | null; maps: unknown },
+): PageContext {
+  return {
+    eventDate: event.event_date,
+    clubName: one(event.clubs as { name: string } | null)?.name ?? null,
+    setter: one(event.profiles as { display_name: string | null } | null)?.display_name ?? null,
+    map: {
+      name: one(version.maps as { name: string } | null)?.name ?? null,
+      contour: version.contour_interval === null ? null : Number(version.contour_interval),
+      mapper: version.mapper,
+      year: version.map_year,
     },
   }
 }

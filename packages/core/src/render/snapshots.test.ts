@@ -22,6 +22,8 @@ import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
 import { testEvent } from '../course/test-doc.ts'
 import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
+import { composeLayout } from '../print/compose.ts'
+import type { PageElementSpec } from '../print/elements.ts'
 import type { Point } from '../similarity.ts'
 import { FONT_FEATURES, FONT_IDS, FONTS, type FontId } from '../text/fonts.ts'
 import { textPrimitives } from '../text/lines.ts'
@@ -495,7 +497,70 @@ const layoutShapesSheet = (): Sheet => ({
   ],
 })
 
+/** Every kind of print layout element, composed for course A of the test event (1:10 000) and drawn one per cell. */
+const layoutElementsSheet = (): Sheet => {
+  const common = { anchor: 'tl' as const, offset: [5, 5] as Point }
+  const elements: PageElementSpec[] = [
+    {
+      ...common,
+      id: 'title',
+      kind: 'text',
+      size: [56, 1],
+      text: '{event}\n{course} · {length} · {scale}',
+      font: 'display-bold',
+      sizePt: 14,
+      color: '#0b62a4',
+    },
+    {
+      ...common,
+      id: 'note',
+      kind: 'text',
+      size: [56, 1],
+      text: 'Contour {contour} · {map} ({mapYear})',
+      font: 'condensed',
+      sizePt: 10,
+      align: 'center',
+      color: '#000000',
+      backing: { padding: 1.5 },
+    },
+    {
+      ...common,
+      id: 'frame',
+      kind: 'shape',
+      size: [50, 16],
+      shape: 'rect',
+      radius: 3,
+      stroke: { color: '#7a1a6c', width: 0.6 },
+      fill: { color: '#7a1a6c', opacity: 0.15 },
+    },
+    { ...common, id: 'oval', kind: 'shape', size: [40, 16], shape: 'ellipse', fill: { color: '#f08a24', opacity: 1 } },
+    { ...common, id: 'rule', kind: 'shape', size: [50, 2], shape: 'line', stroke: { color: '#000000', width: 0.5 } },
+    { ...common, id: 'arrow', kind: 'northArrow', size: [8, 16], style: 'arrow', color: '#000000' },
+    { ...common, id: 'needle', kind: 'northArrow', size: [8, 16], style: 'needle', color: '#000000' },
+    { ...common, id: 'bar', kind: 'scaleBar', size: [50, 8], color: '#000000' },
+    { ...common, id: 'qr', kind: 'qr', size: [18, 18], url: 'https://www.livelox.com/', color: '#000000' },
+    { ...common, id: 'logo', kind: 'image', size: [30, 15], asset: 'logo' },
+  ]
+  let doc = testEvent()
+  doc = updateCourse(doc, 'A', { printScale: 10000 })
+  doc = { ...doc, printLayout: { elements } }
+  const course = courseById(doc, 'A')
+  const settings = { paper: 'A4' as const, orientation: 'portrait' as const, center: [0, 0] as Point, margin: 5, layout: [] }
+  const context = { map: { name: 'Skogen', contour: 5, year: 2024 } }
+  const placed = composeLayout(doc, course, 'Club night', settings, [210, 297], context).elements
+  return {
+    name: 'layout-elements',
+    color: BLACK,
+    cell: [64, 24],
+    columns: 2,
+    between: 0.12, // text, see layoutTextSheet
+    assets: { logo: { png: testPng(240, 120) } },
+    cells: placed.map(e => ({ name: e.id, primitives: e.primitives })),
+  }
+}
+
 describe.each([
+  layoutElementsSheet,
   symbolSheet,
   courseSheet,
   specialSheet,

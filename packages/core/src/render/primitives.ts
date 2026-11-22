@@ -68,6 +68,36 @@ export function pathPoints(commands: PathCommand[]): Point[] {
   return out
 }
 
+/**
+ * The closed rings a path traces, with each bezier replaced by `steps` straight segments: for drawing
+ * an outline where only straight lines are possible (OpenLayers polygons).
+ */
+export function flattenPath(commands: PathCommand[], steps = 8): Point[][] {
+  const rings: Point[][] = []
+  let ring: Point[] = []
+  for (const c of commands) {
+    if (c[0] === 'M') {
+      if (ring.length) rings.push(ring)
+      ring = [[c[1], c[2]]]
+    } else if (c[0] === 'L') ring.push([c[1], c[2]])
+    else if (c[0] === 'C') {
+      const [x0, y0] = ring.at(-1) ?? [c[5], c[6]]
+      for (let i = 1; i <= steps; i++) {
+        const t = i / steps
+        const u = 1 - t
+        const [a, b, d, e] = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t]
+        ring.push([a * x0 + b * c[1] + d * c[3] + e * c[5], a * y0 + b * c[2] + d * c[4] + e * c[6]])
+      }
+    } else if (ring.length) {
+      ring.push(ring[0] as Point)
+      rings.push(ring)
+      ring = []
+    }
+  }
+  if (ring.length) rings.push(ring)
+  return rings
+}
+
 /** A box (in mm) that holds everything the primitives draw, including line widths; null when empty. */
 export function primitivesBounds(primitives: Primitive[]): Bounds | null {
   let b: Bounds | null = null

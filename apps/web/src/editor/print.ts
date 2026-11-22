@@ -46,10 +46,20 @@ export function dragged(doc: EventDoc, course: Course, title: string, settings: 
   return placeDescriptions(doc, course, title, settings, [element.at[0] + delta[0] * mm, element.at[1] - delta[1] * mm])
 }
 
-/** A box on the page (page mm) as a ring of ground points, to outline it on the map. */
-export function groundRing(course: Course, settings: PrintSettings, box: Bounds): Point[] {
+/** Points on the page (page mm, y up) as ground points, to draw them on the map. */
+export function groundPoints(course: Course, settings: PrintSettings, points: Point[]): Point[] {
   const [dx, dy] = pageToPaperOffset(course, settings)
   const m = course.printScale / 1000
-  const g = (x: number, y: number): Point => [(x + dx) * m, (y + dy) * m]
-  return [g(box.minX, box.minY), g(box.maxX, box.minY), g(box.maxX, box.maxY), g(box.minX, box.maxY), g(box.minX, box.minY)]
+  return points.map(([x, y]): Point => [(x + dx) * m, (y + dy) * m])
+}
+
+/** A box on the page (page mm) as a ring of ground points, to outline it on the map. */
+export function groundRing(course: Course, settings: PrintSettings, box: Bounds): Point[] {
+  return groundPoints(course, settings, [
+    [box.minX, box.minY],
+    [box.maxX, box.minY],
+    [box.maxX, box.maxY],
+    [box.minX, box.maxY],
+    [box.minX, box.minY],
+  ])
 }

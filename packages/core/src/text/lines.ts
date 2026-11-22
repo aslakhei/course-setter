@@ -24,6 +24,12 @@ export function fontExtent(font: FontId, size: number): { ascent: number; descen
   return { ascent: (m.ascent * size) / m.unitsPerEm, descent: (-m.descent * size) / m.unitsPerEm }
 }
 
+/** Height of capital letters above the baseline, mm at font size `size` mm. */
+export function capHeight(font: FontId, size: number): number {
+  const m = METRICS[font]
+  return (m.capHeight * size) / m.unitsPerEm
+}
+
 /** Slack for widths that equal the line width but come out a hair larger in floating point. */
 const EPSILON = 1e-9
 

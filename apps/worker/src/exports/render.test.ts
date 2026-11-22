@@ -121,6 +121,66 @@ describe('printing on a PDF map', () => {
     }
   })
 
+  it("prints the event's layout with its fields, in the layout's fonts, and with the controls where they were", async () => {
+    const doc: EventDoc = {
+      ...dotEvent(),
+      printLayout: {
+        elements: [
+          {
+            id: 'title',
+            kind: 'text',
+            anchor: 'tl',
+            offset: [10, 10],
+            size: [180, 1],
+            text: '{event}: {course} {length} · {club} · {setter} · Contour {contour} · {map} ({mapper} {mapYear}) · {date}',
+            font: 'condensed-bold',
+            sizePt: 9,
+            color: '#000000',
+          },
+          {
+            id: 'band',
+            kind: 'shape',
+            shape: 'rect',
+            anchor: 'bl',
+            offset: [0, 0],
+            stretch: [0, 0],
+            size: [1, 20],
+            pushMap: true,
+            fill: { color: '#0b62a4', opacity: 1 },
+          },
+        ],
+      },
+    }
+    const file = await makeExport({
+      doc,
+      eventName: 'Night',
+      context: {
+        eventDate: '2026-11-24',
+        clubName: 'Hamar OK',
+        setter: 'Kari',
+        map: { name: 'Skogen', contour: 5, mapper: 'Ola', year: 2024 },
+      },
+      courseIds: ['K'],
+      separate: false,
+      map: { kind: 'pdf', scale: 10000, file: await dotMap() },
+    })
+    const structured = mupdf.Document.openDocument(file.bytes, 'application/pdf').loadPage(0).toStructuredText('preserve-whitespace')
+    expect(structured.asText()).toContain('Night: Course K 1.0 km · Hamar OK · Kari · Contour 5 m · Skogen (Ola 2024) · 24 November 2026')
+    expect(structured.asJSON()).toContain('RobotoCondensed-Bold')
+    // The band at the bottom does not move the map: control a is still on its dot.
+    const course = courseById(doc, 'K')
+    const settings = printSettingsOf(doc, course, 'Night')
+    const plain = printPage(dotEvent(), courseById(dotEvent(), 'K'), 'Night', settings)
+    const cx = (plain.mapArea.minX + plain.mapArea.maxX) / 2
+    const cy = (plain.mapArea.minY + plain.mapArea.maxY) / 2
+    const at: Point = [cx + (1000 - settings.center[0]) / 10, cy + (1000 - settings.center[1]) / 10]
+    const raster = rasterise(file.bytes)
+    const ring = centroid(raster, at[0], at[1], 4.3, isPurple)
+    const dot = centroid(raster, at[0], at[1], 1, isDark)
+    expect(Math.hypot(ring[0] - dot[0], ring[1] - dot[1])).toBeLessThan(0.15)
+    expect(raster.px(100, 10)).toEqual([0x0b, 0x62, 0xa4])
+  })
+
   it('follows the course print settings: paper and orientation', async () => {
     const doc = setPrintSettings(dotEvent(), 'K', { paper: 'A3', orientation: 'landscape', center: [1500, 1000], margin: 10, layout: [] })
     const file = await makeExport({
