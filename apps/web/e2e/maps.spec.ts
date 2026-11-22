@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { expect, type Page, test } from '@playwright/test'
 import { PDFDocument, rgb } from 'pdf-lib'
-import { admin, createUser, deleteUsers, pageFor, type TestUser } from './users.ts'
+import { admin, createUser, deleteUsers, JOB_WAIT, pageFor, type TestUser } from './users.ts'
 
 const users: TestUser[] = []
 const clubName = `E2E maps ${randomUUID().slice(0, 8)}`
@@ -115,7 +115,7 @@ test('a file that is not a map fails with an explanation for the admin', async (
     .getByLabel('Map file')
     .setInputFiles({ name: 'notes.ocd', mimeType: 'application/octet-stream', buffer: Buffer.from('not a map') })
   await page.getByRole('button', { name: 'Upload', exact: true }).click()
-  await expect(page.getByText(/could not be processed: the file is not an OCAD map\./)).toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText(/could not be processed: the file is not an OCAD map\./)).toBeVisible({ timeout: JOB_WAIT })
 
   await page.getByLabel('Map file').setInputFiles({ name: 'photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('jpg') })
   await expect(page.getByText('Choose an OCAD (.ocd) or PDF file.')).toBeVisible()
@@ -161,7 +161,7 @@ test('a new version that cannot be lined up automatically is lined up by matchin
   await expect(page.getByLabel('Map scale')).toHaveValue('15000')
   await page.getByRole('button', { name: 'Upload', exact: true }).click()
   // The form closes once the file is uploaded; leaving earlier would cancel the upload.
-  await expect(page.getByRole('heading', { name: 'Upload a new version' })).toHaveCount(0, { timeout: 60_000 })
+  await expect(page.getByRole('heading', { name: 'Upload a new version' })).toHaveCount(0, { timeout: JOB_WAIT })
 
   await page.goto(`/clubs/${clubId}/maps`)
   await expect(page.getByText('Version 2 has to be lined up with the previous version', { exact: false })).toBeVisible({ timeout: 120_000 })

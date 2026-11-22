@@ -14,10 +14,12 @@ import {
   deleteSpecial,
   type EventDoc,
   fieldValues,
+  layoutFor,
   moveControl,
   moveDocToVersion,
   moveNodes,
   type PageContext,
+  type PageElementSpec,
   type Point,
   type PrintLayout,
   type PrintSettings,
@@ -33,6 +35,7 @@ import {
   setSpecialPoints,
   showDescriptions,
   specForBox,
+  tokenizeLayout,
   transformBetween,
   updateWhiteArea,
 } from '@course-setter/core'
@@ -40,6 +43,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
+import { useSession } from '../auth/useSession.ts'
 import { Button, ErrorMessage, Loading } from '../components/ui.tsx'
 import { CoursePanel, stopName } from '../editor/CoursePanel.tsx'
 import { onMap } from '../editor/courseLayer.ts'
@@ -79,10 +83,11 @@ import { TemplateGallery } from '../editor/TemplateGallery.tsx'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
 import { type Member, useClub, useMembers } from '../lib/api.ts'
-import { useLibrary } from '../lib/assets.ts'
+import { fetchAssets, useCopyToEvent, useLibrary } from '../lib/assets.ts'
 import { type EventDetail, eventKeys, fetchEvent, moveEvent, SaveConflict, saveAsCopy, useEvent } from '../lib/events.ts'
 import { formatScale } from '../lib/format.ts'
 import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl, useVersionLinks } from '../lib/maps.ts'
+import { useDeleteTemplate, useSaveTemplate, useTemplates } from '../lib/templates.ts'
 
 /** /clubs/:clubId/events/:eventId: the course editor (full window, below the app's top bar). */
 export function EditorPage() {
@@ -220,8 +225,41 @@ function Editor({
     },
     [doc, printCourse, event.name, pageContext, templateTarget, settingsOf],
   )
-  const applyTemplate = (layout: PrintLayout, to: 'all' | 'course', keepSheets: boolean) => {
+  // Saved templates (the club's and one's own), and who may save club ones.
+  const session = useSession()
+  const userId = session?.user.id ?? ''
+  const isAdmin = members.some(m => m.userId === userId && m.role === 'admin')
+  const templates = useTemplates(event.clubId)
+  const saveTemplate = useSaveTemplate(event.clubId, userId)
+  const deleteTemplate = useDeleteTemplate(event.clubId)
+  const copyToEvent = useCopyToEvent(event.id)
+  /**
+   * The layout's images made usable in this event: the club's library and the event's own stay; others
+   * the person may see (theirs, or another club's or event's) are copied into the event; the rest go.
+   */
+  const usableImages = async (layout: PrintLayout): Promise<{ layout: PrintLayout; dropped: number }> => {
+    const ids = [...new Set(layout.elements.flatMap(e => (e.kind === 'image' ? [e.asset] : [])))]
+    if (ids.length === 0) return { layout, dropped: 0 }
+    const rows = new Map((await fetchAssets(ids)).map(a => [a.id, a]))
+    const replaced = new Map<string, string | null>()
+    for (const id of ids) {
+      const a = rows.get(id)
+      const here = a && !a.ownerId && a.clubId === event.clubId && (a.eventId === null || a.eventId === event.id)
+      replaced.set(id, here ? id : a ? await copyToEvent.mutateAsync(a).catch(() => null) : null)
+    }
+    let dropped = 0
+    const elements = layout.elements.flatMap((e): PageElementSpec[] => {
+      if (e.kind !== 'image') return [e]
+      const id = replaced.get(e.asset)
+      if (!id) dropped++
+      return id ? [{ ...e, asset: id }] : []
+    })
+    return { layout: { ...layout, elements }, dropped }
+  }
+  const applyTemplate = async (template: PrintLayout, to: 'all' | 'course', keepSheets: boolean) => {
     if (!printCourse) return
+    const { layout, dropped } = await usableImages(template)
+    if (dropped > 0) window.alert(t('templates.imagesDropped', { count: dropped }))
     let next = applyLayout(doc, layout, templateTarget(to))
     if (!keepSheets) {
       // Description sheets go to the corner that hides the least, now that the layout has changed.
@@ -722,8 +760,22 @@ function Editor({
         <TemplateGallery
           branding={branding}
           courseName={printCourse.name}
+          clubName={club.data?.name ?? ''}
+          saved={templates.data ?? []}
+          isAdmin={isAdmin}
           pageWith={pageWith}
-          onApply={applyTemplate}
+          onApply={(layout, to, keep) => void applyTemplate(layout, to, keep)}
+          onSave={(name, scope) =>
+            saveTemplate.mutateAsync({
+              name,
+              scope,
+              layout: tokenizeLayout(layoutFor(doc, printSettings ?? undefined), branding),
+              existing: templates.data ?? [],
+            })
+          }
+          saving={saveTemplate.isPending}
+          saveFailed={saveTemplate.isError}
+          onDelete={tpl => deleteTemplate.mutate(tpl.id)}
           onClose={() => setTemplatesOpen(false)}
         />
       )}

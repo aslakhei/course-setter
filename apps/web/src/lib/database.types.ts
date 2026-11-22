@@ -257,6 +257,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"layout_templates": {
+                  Row: {
+                    "club_id": string | null,"created_at": string,"created_by": string | null,"id": string,"layout": NonNullable<Json>,"name": string,"owner_id": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "club_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"layout": NonNullable<Json>,"name": string,"owner_id"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "club_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"layout"?: NonNullable<Json>,"name"?: string,"owner_id"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "layout_templates_club_id_fkey"
+      columns: ["club_id"]
+isOneToOne: false
+      referencedRelation: "clubs"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "layout_templates_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "layout_templates_owner_id_fkey"
+      columns: ["owner_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"map_versions": {
                   Row: {
                     "club_id": string,"contour_interval": number | null,"created_at": string,"created_by": string | null,"deleted_at": string | null,"error_code": string | null,"error_message": string | null,"file_name": string,"frame": Json | null,"georef": Json | null,"id": string,"kind": Database["public"]['Enums']["map_kind"],"map_id": string,"map_year": number | null,"mapper": string | null,"ocad_version": string | null,"original_path": string,"paper_height_mm": number | null,"paper_width_mm": number | null,"previous_version_id": string | null,"processed_at": string | null,"scale": number | null,"status": Database["public"]['Enums']["map_version_status"],"tiles": Json | null,"tiles_path": string | null,"transform_from_previous": Json | null,"transform_method": string | null,"transform_rms_m": number | null,"version": number

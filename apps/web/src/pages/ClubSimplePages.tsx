@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router'
 import { BrandingPanel } from '../components/BrandingPanel.tsx'
+import { ClubTemplatesPanel } from '../components/ClubTemplatesPanel.tsx'
 import { ImageLibrary } from '../components/ImageLibrary.tsx'
 import { Button, ErrorMessage, fieldClass, Panel } from '../components/ui.tsx'
 import { useDeleteClub } from '../lib/account.ts'
@@ -61,6 +62,7 @@ export function ClubSettingsPage() {
           sponsors
         />
       )}
+      {isAdmin && <ClubTemplatesPanel clubId={club.id} />}
       {isAdmin && <DeleteClub clubId={club.id} clubName={club.name} />}
     </main>
   )

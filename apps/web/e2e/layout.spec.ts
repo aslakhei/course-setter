@@ -1,6 +1,6 @@
 import type { EventDoc, PageElementSpec, PrintSettings } from '@course-setter/core'
 import { expect, type Page, test } from '@playwright/test'
-import { admin, clientFor, clubWithPdfMap, createUser, deleteUsers, pageFor, pdfMap, removeClub, type TestUser } from './users.ts'
+import { admin, clientFor, clubWithPdfMap, createUser, deleteUsers, JOB_WAIT, pageFor, pdfMap, removeClub, type TestUser } from './users.ts'
 
 const users: TestUser[] = []
 const clubs: string[] = []
@@ -146,7 +146,7 @@ const PIXELS = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEElE
 /** Wait until the image is checked by the worker. */
 async function ready(assetId: string) {
   await expect
-    .poll(async () => (await admin.from('layout_assets').select('status').eq('id', assetId).single()).data?.status, { timeout: 60_000 })
+    .poll(async () => (await admin.from('layout_assets').select('status').eq('id', assetId).single()).data?.status, { timeout: JOB_WAIT })
     .toBe('ready')
 }
 
@@ -196,7 +196,7 @@ test('layout images: upload to the event, use a personal image (copied into the 
   await picker.getByLabel('Upload an image to this event').setInputFiles({ name: 'Sponsor.png', mimeType: 'image/png', buffer: PIXELS })
   await picker.getByRole('button', { name: 'Upload image' }).click()
   const sponsor = picker.getByRole('button', { name: 'Sponsor' })
-  await expect(sponsor).toBeEnabled({ timeout: 60_000 })
+  await expect(sponsor).toBeEnabled({ timeout: JOB_WAIT })
   await sponsor.click()
   await expect(picker).toHaveCount(0)
   await waitSaved(page)

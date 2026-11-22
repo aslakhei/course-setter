@@ -204,9 +204,11 @@ export {
   type Branding,
   DEFAULT_COLOURS,
   NO_BRANDING,
+  parseTemplate,
   resolveTemplate,
   sponsorToken,
   TOKENS,
+  tokenizeLayout,
 } from './print/templates.ts'
 export { UNIVERSAL_TEMPLATES, type UniversalTemplate, type UniversalTemplateId } from './print/universal.ts'
 export {
