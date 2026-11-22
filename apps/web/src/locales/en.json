@@ -763,6 +763,26 @@
       "bottom": "Bottoms"
     },
     "deleteAll": "Delete them",
-    "multiHelp": "Shift-click on the page or in Layers to add or take away elements. Arrow keys move them all."
+    "multiHelp": "Shift-click on the page or in Layers to add or take away elements. Arrow keys move them all.",
+    "whiteArea": "White area",
+    "whiteAreaN": "White area {{n}}",
+    "on": {
+      "label": "Belongs to",
+      "map": "The map",
+      "page": "The page",
+      "help": {
+        "map": "It stays on the part of the map it covers when the page moves.",
+        "page": "It stays at its place on the page when the page moves over the map."
+      }
+    },
+    "pen": {
+      "heading": "Drawing a white area",
+      "help": "Click for a corner, press and drag for a curve. Click the first point or press Enter to finish; Backspace takes back the last point, Escape stops.",
+      "points_one": "{{count}} point",
+      "points_other": "{{count}} points",
+      "finish": "Finish",
+      "cancel": "Cancel",
+      "editHelp": "Drag a point or a handle to change the outline (Alt: one handle alone), drag inside to move it. Alt-click a point to make it a corner or a curve; Delete removes the selected point."
+    }
   }
 }

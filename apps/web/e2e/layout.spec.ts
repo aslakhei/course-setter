@@ -243,3 +243,93 @@ test('layout images: upload to the event, use a personal image (copied into the 
   now = await saved(eventId)
   expect((now.printLayout?.elements ?? []).filter(e => e.kind === 'image' && e.asset === second.asset)).toHaveLength(2)
 })
+
+test('white areas: drawn with the pen, edited point by point, moved to the page, deleted', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId, mapVersionId } = await clubWithPdfMap(ada, 'White area club', pdfMap(300, 200), 10000)
+  clubs.push(clubId)
+  const doc: EventDoc = {
+    schemaVersion: 1,
+    standard: 'isom',
+    controls: [{ id: 'a', kind: 'control', code: 31, position: [1500, 1000] }],
+    courses: [{ id: 'K', name: 'Long', controls: ['a'], printScale: 10000, bends: {}, numberPositions: {} }],
+    specials: [],
+  }
+  const created = await admin
+    .from('events')
+    .insert({ club_id: clubId, name: 'Night', map_version_id: mapVersionId, doc, created_by: ada.id })
+    .select('id')
+    .single()
+  if (created.error) throw created.error
+  const eventId = created.data.id
+  await admin.from('event_revisions').insert({ event_id: eventId, revision: 1, doc })
+
+  const page = await pageFor(browser, ada)
+  await page.setViewportSize({ width: 1500, height: 950 })
+  await page.goto(`/clubs/${clubId}/events/${eventId}?view=print&mode=layout`)
+  const panel = page.getByRole('complementary', { name: 'Layout' })
+  const properties = page.getByRole('complementary', { name: 'Properties' })
+  await expect(panel).toBeVisible()
+  await page.waitForTimeout(1500)
+
+  // A4 portrait (one control): page mm from the top-left to the screen.
+  const at = await pageOnScreen(page, 210)
+  const screen = (x: number, y: number): [number, number] => [at.left + x * at.pxPerMm, at.top + y * at.pxPerMm]
+
+  // Two corners and a curve point, then Enter.
+  await panel.getByRole('region', { name: 'Add' }).getByRole('button', { name: 'White area' }).click()
+  await expect(properties.getByRole('heading', { name: 'Drawing a white area' })).toBeVisible()
+  await page.mouse.click(...screen(60, 80))
+  await page.mouse.click(...screen(120, 80))
+  await page.mouse.move(...screen(110, 140))
+  await page.mouse.down()
+  await page.mouse.move(...screen(100, 150), { steps: 4 })
+  await page.mouse.move(...screen(90, 150), { steps: 4 })
+  await page.mouse.up()
+  await expect(properties.getByText('3 points')).toBeVisible()
+  await page.keyboard.press('Enter')
+  await expect(properties.getByRole('heading', { name: 'White area' })).toBeVisible()
+  await expect(panel.getByRole('list', { name: 'Layers' }).getByRole('button', { name: 'White area 1', exact: true })).toBeVisible()
+  await waitSaved(page)
+  let area = (await saved(eventId)).printLayout?.whiteAreas?.[0]
+  expect(area?.on).toBe('map')
+  expect(area?.nodes.map(n => Boolean(n.out))).toEqual([false, false, true])
+  // 60 mm between the first two points is 600 m at 1:10 000.
+  const [p0, p1] = area?.nodes ?? []
+  expect(Math.abs((p1?.at[0] ?? 0) - (p0?.at[0] ?? 0) - 600)).toBeLessThan(15)
+
+  // Alt-click the first point: it becomes a curve.
+  await page.keyboard.down('Alt')
+  await page.mouse.click(...screen(60, 80))
+  await page.keyboard.up('Alt')
+  await waitSaved(page)
+  area = (await saved(eventId)).printLayout?.whiteAreas?.[0]
+  expect(area?.nodes[0]?.in).toBeDefined()
+
+  // Drag the second point 10 mm down.
+  await page.mouse.move(...screen(120, 80))
+  await page.mouse.down()
+  await page.mouse.move(...screen(120, 85), { steps: 3 })
+  await page.mouse.move(...screen(120, 90), { steps: 3 })
+  await page.mouse.up()
+  await waitSaved(page)
+  const moved = (await saved(eventId)).printLayout?.whiteAreas?.[0]?.nodes[1]?.at
+  expect(Math.abs((p1?.at[1] ?? 0) - (moved?.[1] ?? 0) - 100)).toBeLessThan(15)
+
+  // On the page instead: the same place, in page mm.
+  await properties.getByText('The page', { exact: true }).click()
+  await waitSaved(page)
+  area = (await saved(eventId)).printLayout?.whiteAreas?.[0]
+  expect(area?.on).toBe('page')
+  expect(area?.nodes[1]?.at[0]).toBeCloseTo(120, 0)
+  expect(area?.nodes[1]?.at[1]).toBeCloseTo(90, 0)
+
+  // Delete it (nothing but the area selected), and undo brings it back.
+  await panel.getByRole('list', { name: 'Layers' }).getByRole('button', { name: 'White area 1', exact: true }).click()
+  await page.keyboard.press('Delete')
+  await expect(panel.getByRole('list', { name: 'Layers' }).getByRole('button', { name: 'White area 1', exact: true })).toHaveCount(0)
+  await page.keyboard.press('Control+z')
+  await expect(panel.getByRole('list', { name: 'Layers' }).getByRole('button', { name: 'White area 1', exact: true })).toBeVisible()
+})

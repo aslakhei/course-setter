@@ -12,6 +12,7 @@ import {
   duplicateLayoutElement,
   type EventDoc,
   FIELDS,
+  mapNodes,
   NORTH_ARROW_STYLES,
   type PageElementSpec,
   type PlacedElement,
@@ -23,6 +24,8 @@ import {
   setMapAreaRadius,
   specForBox,
   updateLayoutElement,
+  updateWhiteArea,
+  type WhiteArea,
 } from '@course-setter/core'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -32,18 +35,22 @@ import { type ChosenImage, ImagePicker } from './ImagePicker.tsx'
 import { MAP_LAYER } from './LayoutPanel.tsx'
 import {
   type AppliesTo,
+  areaCoordinates,
   baseElement,
   FONT_FAMILIES,
   type FontFamily,
   familyOf,
   fontFor,
   isBold,
+  type Pen,
   pinnedText,
   placeElement,
   placeMany,
+  removeArea,
   removeMany,
   SWATCHES,
   shownElement,
+  whiteAreaOf,
 } from './layout.ts'
 import { Segmented } from './PrintView.tsx'
 
@@ -63,6 +70,10 @@ export type LayoutPropertiesProps = {
   onEdit: (doc: EventDoc) => void
   clubId: string
   eventId: string
+  /** The white area being drawn, or null. */
+  pen: Pen | null
+  onPen: (pen: Pen | null) => void
+  onPenDone: () => void
 }
 
 /** A text field or area that keeps what is typed and saves it on blur or Enter (Ctrl+Enter in an area). */
@@ -275,6 +286,96 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
   ) : (
     scope
   )
+
+  // Drawing a white area with the pen.
+  const pen = props.pen
+  if (pen) {
+    const convertPen = (on: WhiteArea['on']) => {
+      const c = areaCoordinates(course, settings)
+      props.onPen({ on, nodes: mapNodes(pen.nodes, p => c.toArea(on, c.fromArea(pen.on, p))) })
+    }
+    return frame(
+      <>
+        <h2 className="m-0 text-[15px] font-semibold">{t('layout.pen.heading')}</h2>
+        <p className="m-0 text-[13px]">{t('layout.pen.help')}</p>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-body">{t('layout.on.label')}</span>
+          <Segmented
+            name="layout-pen-on"
+            label={t('layout.on.label')}
+            options={['map', 'page'] as const}
+            value={pen.on}
+            text={o => t(`layout.on.${o}`)}
+            onChange={convertPen}
+          />
+          <span className="text-xs text-muted">{t(`layout.on.help.${pen.on}`)}</span>
+        </div>
+        <span className="text-xs text-muted">{t('layout.pen.points', { count: pen.nodes.length })}</span>
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="primary" disabled={pen.nodes.length < 3} onClick={props.onPenDone}>
+            {t('layout.pen.finish')}
+          </Button>
+          <Button size="sm" onClick={() => props.onPen(null)}>
+            {t('layout.pen.cancel')}
+          </Button>
+        </div>
+      </>,
+    )
+  }
+
+  // A white area: on the map or the page, lock, delete; its points are edited on the page.
+  const area = single ? whiteAreaOf(doc, settings, single) : undefined
+  if (area) {
+    const changeArea = (change: (a: WhiteArea) => WhiteArea) => onEdit(updateWhiteArea(doc, course.id, settings, area.id, change))
+    const convert = (on: WhiteArea['on']) => {
+      if (on === area.on) return
+      const c = areaCoordinates(course, settings)
+      changeArea(a => ({ ...a, on, nodes: mapNodes(a.nodes, p => c.toArea(on, c.fromArea(a.on, p))) }))
+    }
+    return frame(
+      <>
+        <div className="flex items-center gap-2">
+          <h2 className="m-0 grow text-[15px] font-semibold">{t('layout.whiteArea')}</h2>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => {
+              onEdit(removeArea(doc, course, settings, appliesTo, area.id))
+              if (!courseOnly) props.onSelect(null)
+            }}
+          >
+            {t('layout.delete')}
+          </Button>
+        </div>
+        {appliesBlock}
+        <fieldset disabled={courseOnly} className="m-0 flex flex-col gap-1.5 border-0 p-0 disabled:opacity-60">
+          <span className="text-xs font-semibold text-body">{t('layout.on.label')}</span>
+          <Segmented
+            name="layout-area-on"
+            label={t('layout.on.label')}
+            options={['map', 'page'] as const}
+            value={area.on}
+            text={o => t(`layout.on.${o}`)}
+            onChange={convert}
+          />
+          <span className="text-xs text-muted">{t(`layout.on.help.${area.on}`)}</span>
+        </fieldset>
+        <span className="text-xs text-muted">{t('layout.pen.points', { count: area.nodes.length })}</span>
+        <p className="m-0 text-xs text-body">{t('layout.pen.editHelp')}</p>
+        <Check
+          label={t('layout.locked')}
+          checked={area.locked === true}
+          disabled={courseOnly}
+          onChange={on =>
+            changeArea(a => {
+              const { locked: _old, ...rest } = a
+              return on ? { ...rest, locked: true } : rest
+            })
+          }
+        />
+      </>,
+    )
+  }
 
   if (single === MAP_LAYER) {
     const radius = (settings.ownLayout ?? doc.printLayout)?.mapArea?.radius ?? 0
