@@ -2,7 +2,7 @@
 // pointer, resizing a box by its handles, snapping to page edges, the margin, the centre lines, the map
 // area and other elements, and aligning boxes.
 import type { Point } from '../course/doc.ts'
-import type { Bounds } from '../render/primitives.ts'
+import { type Bounds, flattenPath, type PathCommand } from '../render/primitives.ts'
 import type { PlacedElement } from './compose.ts'
 
 /** The topmost element under `point` (within `tolerance` mm of its box), skipping locked ones; null if none. */
@@ -143,4 +143,26 @@ export function alignBoxes(boxes: Bounds[], how: Alignment): Bounds[] {
     const y = how === 'bottom' ? all.minY : how === 'top' ? all.maxY - h : how === 'middle' ? (all.minY + all.maxY - h) / 2 : b.minY
     return { minX: x, maxX: x + w, minY: y, maxY: y + h }
   })
+}
+
+/** Whether a point is inside a closed outline (even-odd, curves flattened). */
+export function insidePath(commands: PathCommand[], [x, y]: Point): boolean {
+  let inside = false
+  for (const ring of flattenPath(commands, 12)) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i] as Point
+      const [xj, yj] = ring[j] as Point
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+    }
+  }
+  return inside
+}
+
+/** The topmost white area under a point, skipping locked ones; null if none. */
+export function whiteAreaAt<T extends { commands: PathCommand[]; locked: boolean }>(areas: T[], point: Point): T | null {
+  for (let i = areas.length - 1; i >= 0; i--) {
+    const a = areas[i] as T
+    if (!a.locked && insidePath(a.commands, point)) return a
+  }
+  return null
 }

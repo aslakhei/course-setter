@@ -22,7 +22,7 @@ import { allControlsDrawing, courseDrawing } from '../course/symbols.ts'
 import { testEvent } from '../course/test-doc.ts'
 import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts'
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
-import { composeLayout } from '../print/compose.ts'
+import { composeLayout, whiteAreaPath } from '../print/compose.ts'
 import type { PageElementSpec } from '../print/elements.ts'
 import type { Point } from '../similarity.ts'
 import { FONT_FEATURES, FONT_IDS, FONTS, type FontId } from '../text/fonts.ts'
@@ -494,6 +494,24 @@ const layoutShapesSheet = (): Sheet => ({
       ],
     },
     { name: 'image', primitives: [{ type: 'image', role: 'layout', box: { minX: 0, minY: 0, maxX: 30, maxY: 15 }, asset: 'logo' }] },
+    {
+      name: 'white area over a coloured field',
+      primitives: [
+        { type: 'path', role: 'layout', commands: square(0, 0, 18), lineWidth: 0, filled: true, color: '#0b62a4' },
+        {
+          type: 'path',
+          role: 'layout',
+          commands: whiteAreaPath(
+            // A corner, two curve points and a corner, all inside the 18 mm field.
+            [{ at: [3, 4] }, { at: [15, 3], in: [9, 1], out: [17, 8] }, { at: [14, 15] }, { at: [4, 13], in: [8, 16], out: [2, 9] }],
+            p => p,
+          ),
+          lineWidth: 0,
+          filled: true,
+          color: '#ffffff',
+        },
+      ],
+    },
   ],
 })
 

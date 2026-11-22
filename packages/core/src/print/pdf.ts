@@ -1,5 +1,5 @@
-// A printed page as PDF: the map in the map area, the course on top in purple with Multiply (so map
-// detail shows through, as overprinting does), the print layout's elements (titles, logos, frames …)
+// A printed page as PDF: the map in the map area, white areas over it, the course on top in purple with
+// Multiply (so map detail shows through, as overprinting does), the print layout's elements (titles, logos, frames …)
 // and the description sheet in black on white. The worker supplies the map (an image of exactly the map
 // area, or the original PDF map page placed at scale), the fonts and the images the layout uses.
 import {
@@ -85,6 +85,17 @@ export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer 
     } else {
       page.drawPage(map.page, { x: pt(map.at[0]), y: pt(map.at[1]), xScale: map.scale, yScale: map.scale })
     }
+    page.pushOperators(popGraphicsState())
+  }
+
+  // White areas over the map (the course stays on top of them), clipped to the map area.
+  if (layout.whiteAreas.length) {
+    page.pushOperators(pushGraphicsState(), ...clipTo(layout.mapClip))
+    drawPrimitivesOnPage(
+      page,
+      layout.whiteAreas.flatMap(w => w.primitives),
+      { origin: [0, 0], color: WHITE, font: fonts.regular },
+    )
     page.pushOperators(popGraphicsState())
   }
 

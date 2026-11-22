@@ -21,7 +21,7 @@ import { descriptionSheet, drawDescriptionSheet, SHEET } from '../descriptions/s
 import { type Bounds, type PathCommand, type Primitive, pathPoints, primitivesBounds, transformPrimitives } from '../render/primitives.ts'
 import type { FontId } from '../text/fonts.ts'
 import type { Extent } from '../tiles.ts'
-import { composeLayout, type PageContext, type PlacedElement } from './compose.ts'
+import { composeLayout, layoutFor, type PageContext, type PlacedElement, whiteAreaPath } from './compose.ts'
 
 export const DEFAULT_MARGIN = 5
 const DEFAULT_PAPER: Paper = 'A4'
@@ -51,7 +51,12 @@ export type PrintPage = {
   descriptions: { box: Bounds; primitives: Primitive[] } | null
   /** The print layout's elements, bottom to top, with fields filled in for the course; drawn above the course. */
   elements: PlacedElement[]
+  /** White areas, page mm (y up): drawn white over the map and under the course, clipped to the map area. */
+  whiteAreas: PlacedWhiteArea[]
 }
+
+/** A white area on the page: its outline (page mm, y up) and the white fill that draws it. */
+export type PlacedWhiteArea = { id: string; on: 'map' | 'page'; commands: PathCommand[]; primitives: Primitive[]; locked: boolean }
 
 /** Ground metres -> page mm for a page showing `center` in the middle of `mapArea`. */
 export function groundToPage(center: Point, mapArea: Bounds, printScale: number): (p: Point) => Point {
@@ -189,6 +194,14 @@ export function printPage(
     course: onPage,
     descriptions: descriptionsOn(doc, course, title, settings.layout, size),
     elements: layout.elements,
+    whiteAreas: (layoutFor(doc, settings).whiteAreas ?? [])
+      .filter(a => !a.hidden)
+      .map(a => {
+        // On the map: through the page's ground mapping; on the page: y down from the top to y up.
+        const commands = whiteAreaPath(a.nodes, a.on === 'map' ? toPage : ([x, y]) => [x, size[1] - y])
+        const fill: Primitive = { type: 'path', role: 'layout', owner: a.id, commands, lineWidth: 0, filled: true, color: '#ffffff' }
+        return { id: a.id, on: a.on, commands, primitives: [fill], locked: a.locked === true }
+      }),
   }
 }
 
