@@ -58,9 +58,10 @@ import { dragged, formatPaper, type Grab, grabAt, groundPoints, groundRing } fro
 
 /** What the Layout mode needs from the print view. */
 export type LayoutEditing = {
-  /** The selected element's id. */
-  selected: string | null
-  onSelect: (id: string | null) => void
+  /** The selected elements' ids (handles show when there is one). */
+  selected: string[]
+  /** A click on an element (null: on nothing); `additive` (Shift) adds it to the selection or takes it away. */
+  onSelect: (id: string | null, additive?: boolean) => void
   /** The document with an element placed at a box (page mm, y up): for the preview while dragging and the drop. */
   place: (id: string, box: Bounds) => EventDoc
   onEdit: (doc: EventDoc) => void
@@ -229,7 +230,8 @@ export function PrintMap(props: Props) {
       const { props: p, page: pg } = latest.current
       if (!p.layout) return null
       const at = toPage(point)
-      const selected = pg.elements.find(e => e.id === p.layout?.selected)
+      const only = p.layout.selected.length === 1 ? p.layout.selected[0] : undefined
+      const selected = pg.elements.find(e => e.id === only)
       if (selected && !selected.locked) {
         const handle = handleAt(selected.box, at, HANDLE_PX * mmPerPx(), handlesOf(selected.id))
         if (handle) return { id: selected.id, handle, box: selected.box }
@@ -244,7 +246,13 @@ export function PrintMap(props: Props) {
           const point = e.coordinate as Point
           const layoutHit = layoutGrab(point)
           if (layoutHit) {
-            latest.current.props.layout?.onSelect(layoutHit.id)
+            // Shift: add to the selection or take away, without dragging.
+            if ((e.originalEvent as PointerEvent).shiftKey) {
+              latest.current.props.layout?.onSelect(layoutHit.id, true)
+              return true
+            }
+            if (!latest.current.props.layout?.selected.includes(layoutHit.id) || layoutHit.handle)
+              latest.current.props.layout?.onSelect(layoutHit.id)
             const d: ElementDrag = {
               id: layoutHit.id,
               handle: layoutHit.handle,
@@ -407,10 +415,12 @@ export function PrintMap(props: Props) {
     }
     const under = [feature(new Polygon([world, whole]), styles.dim), feature(new Polygon([whole, inner]), styles.paper)]
     const over: Feature[] = [feature(new LineString(whole), styles.frame)]
-    // Layout mode: the selected element's outline and handles, and the lines it snapped to.
-    const selected = layout ? page.elements.find(el => el.id === (elementDrag?.id ?? layout.selected)) : undefined
+    // Layout mode: the selected elements' outlines, one element's handles, and the lines it snapped to.
+    const ids = elementDrag ? [elementDrag.id] : (layout?.selected ?? [])
+    const chosen = page.elements.filter(el => ids.includes(el.id))
+    for (const el of chosen) over.push(feature(new LineString(groundRing(course, shown, el.box)), styles.selection))
+    const selected = chosen.length === 1 ? chosen[0] : undefined
     if (selected) {
-      over.push(feature(new LineString(groundRing(course, shown, selected.box)), styles.selection))
       if (!selected.locked) {
         const handles = Object.entries(handlePoints(selected.box))
           .filter(([h]) => selected.kind !== 'text' || h === 'e' || h === 'w')

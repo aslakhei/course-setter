@@ -729,6 +729,40 @@
       "fromCentreV": "{{value}} {{side}} the centre",
       "across": "across the page ({{left}} and {{right}} in)"
     },
-    "mapLabel": "The printed page: select an element to change it, drag it to move it"
+    "mapLabel": "The printed page: select an element to change it, drag it to move it",
+    "picker": {
+      "heading": "Choose an image",
+      "close": "Close",
+      "tabs": {
+        "club": "Club images",
+        "personal": "Your images",
+        "event": "This event"
+      },
+      "help": {
+        "club": "The club's logos and sponsors. Admins add them on the club's Settings page.",
+        "personal": "Only you see these; one you choose is copied into this event, so everyone editing it sees it too.",
+        "event": "Images for this event only. Everyone who edits the event can use and add them."
+      },
+      "upload": "Upload an image to this event",
+      "failed": "Could not be used",
+      "copying": "Copying the image into this event…"
+    },
+    "image": "Image",
+    "replaceImage": "Replace image",
+    "naturalSize": "Original proportions",
+    "imageWaiting": "The image is being checked; it shows as a grey box until then.",
+    "imageMissing": "You cannot see this image (someone else’s personal image, or deleted). It prints if it is still there.",
+    "selectedCount": "{{count}} elements",
+    "alignTitle": "Align",
+    "alignTo": {
+      "left": "Left edges",
+      "center": "Centres",
+      "right": "Right edges",
+      "top": "Tops",
+      "middle": "Middles",
+      "bottom": "Bottoms"
+    },
+    "deleteAll": "Delete them",
+    "multiHelp": "Shift-click on the page or in Layers to add or take away elements. Arrow keys move them all."
   }
 }

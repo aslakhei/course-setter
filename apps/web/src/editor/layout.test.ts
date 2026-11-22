@@ -18,9 +18,12 @@ import {
   hiddenState,
   isBold,
   layerName,
+  nextSelection,
   paletteElement,
   pinnedText,
   placeElement,
+  placeMany,
+  removeMany,
   setHidden,
   shownElement,
 } from './layout.ts'
@@ -108,5 +111,34 @@ describe('naming and describing elements', () => {
 
   it('places a new element 10 mm inside the margin', () => {
     expect(paletteElement('text', 'n', 5).offset).toEqual([15, 15])
+  })
+})
+
+describe('several elements at once', () => {
+  const two = (): EventDoc => ({ ...event(), printLayout: { elements: [rect('x'), rect('y', { offset: [60, 40] })] } })
+
+  it('selects with Shift adding and taking away, the map alone', () => {
+    expect(nextSelection([], 'x', false, '#map')).toEqual(['x'])
+    expect(nextSelection(['x'], 'y', true, '#map')).toEqual(['x', 'y'])
+    expect(nextSelection(['x', 'y'], 'x', true, '#map')).toEqual(['y'])
+    expect(nextSelection(['x', 'y'], 'y', false, '#map')).toEqual(['y'])
+    expect(nextSelection(['x'], '#map', true, '#map')).toEqual(['#map'])
+    expect(nextSelection(['#map'], 'x', true, '#map')).toEqual(['x'])
+    expect(nextSelection(['x'], null, false, '#map')).toEqual([])
+  })
+
+  it('places them for one course, each becoming its override', () => {
+    const doc = two()
+    const next = placeMany(doc, courseById(doc, 'A'), settings, 'course', [rect('x', { offset: [1, 1] }), rect('y', { offset: [1, 2] })])
+    expect(courseById(next, 'A').print?.overrides).toEqual({ x: { offset: [1, 1], size: [40, 20] }, y: { offset: [1, 2], size: [40, 20] } })
+    expect(next.printLayout).toEqual(doc.printLayout)
+  })
+
+  it('removes them for every course, or hides them on one', () => {
+    const doc = two()
+    expect(removeMany(doc, courseById(doc, 'A'), settings, 'all', ['x', 'y']).printLayout?.elements).toEqual([])
+    const hidden = removeMany(doc, courseById(doc, 'A'), settings, 'course', ['x', 'y'])
+    expect(hidden.printLayout).toEqual(doc.printLayout)
+    expect(courseById(hidden, 'A').print?.overrides).toEqual({ x: { hidden: true }, y: { hidden: true } })
   })
 })

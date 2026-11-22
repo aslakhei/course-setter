@@ -14,6 +14,8 @@ import {
 import { type FormEvent, type ReactNode, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Button, ErrorMessage, fieldClass } from '../components/ui.tsx'
+import { useAssetRows } from '../lib/assets.ts'
+import { type ChosenImage, ImagePicker } from './ImagePicker.tsx'
 import { type AppliesTo, hiddenState, layerName, paletteElement, setHidden } from './layout.ts'
 
 /** The Layers entry for the map area (element ids are uuids, so this never clashes). */
@@ -24,9 +26,13 @@ export type LayoutPanelProps = {
   course: Course
   settings: PrintSettings
   appliesTo: AppliesTo
-  selected: string | null
-  onSelect: (id: string | null) => void
+  /** The selected elements' ids (or the map). */
+  selected: string[]
+  /** A click on a layer; `additive` (Shift) adds it to the selection or takes it away. */
+  onSelect: (id: string | null, additive?: boolean) => void
   onEdit: (doc: EventDoc) => void
+  clubId: string
+  eventId: string
   descriptionsShown: boolean
   onDescriptions: (show: boolean) => void
   /** The shown course's field values, to name text elements as they print. */
@@ -65,14 +71,23 @@ export function LayoutPanel(props: LayoutPanelProps) {
   const { doc, course, settings, appliesTo, selected, onSelect, onEdit } = props
   const { t } = useTranslation()
   const [qrOpen, setQrOpen] = useState(false)
+  const [picking, setPicking] = useState(false)
   const [qrUrl, setQrUrl] = useState('https://')
   const elements = (settings.ownLayout ?? doc.printLayout ?? { elements: [] }).elements
+  // Image layers are named after their image.
+  const imageIds = [...new Set(elements.flatMap(e => (e.kind === 'image' ? [e.asset] : [])))].sort()
+  const imageRows = useAssetRows(imageIds)
+  const imageNames = new Map((imageRows.data ?? []).map(a => [a.id, a.name]))
   const qrOk = /^https?:\/\/[^\s/]+\.[^\s]+$/.test(qrUrl.trim())
 
-  const add = (kind: NewElementKind, extra: { url?: string } = {}) => {
+  const add = (kind: NewElementKind, extra: { url?: string; asset?: string; aspect?: number } = {}) => {
     const id = crypto.randomUUID()
     onEdit(addLayoutElement(doc, course.id, settings, paletteElement(kind, id, settings.margin, extra)))
     onSelect(id)
+  }
+  const addImage = (image: ChosenImage) => {
+    setPicking(false)
+    add('image', { asset: image.id, ...(image.aspect ? { aspect: image.aspect } : {}) })
   }
   const addQr = (e: FormEvent) => {
     e.preventDefault()
@@ -101,6 +116,9 @@ export function LayoutPanel(props: LayoutPanelProps) {
               {t(`layout.kinds.${kind}`)}
             </Button>
           ))}
+          <Button size="sm" onClick={() => setPicking(true)}>
+            {t('layout.kinds.image')}
+          </Button>
           <Button size="sm" onClick={() => setQrOpen(o => !o)} aria-expanded={qrOpen}>
             {t('layout.kinds.qr')}
           </Button>
@@ -126,16 +144,16 @@ export function LayoutPanel(props: LayoutPanelProps) {
         {elements.length === 0 && <span className="px-1 text-xs text-muted">{t('layout.layersEmpty')}</span>}
         <ul aria-label={t('layout.layers')} className="m-0 flex list-none flex-col gap-0.5 p-0">
           {[...elements].reverse().map((e, i) => {
-            const name = layerName(e, t, props.values)
+            const name = layerName(e, t, props.values, imageNames)
             const hidden = hiddenState(doc, settings, e.id)
             const index = elements.length - 1 - i
             return (
-              <li key={e.id} className={rowClass(selected === e.id)}>
+              <li key={e.id} className={rowClass(selected.includes(e.id))}>
                 <button
                   type="button"
                   className={`flex min-w-0 grow flex-col py-1 text-left text-[13px] ${hidden !== 'no' ? 'text-muted' : ''}`}
-                  aria-current={selected === e.id ? 'true' : undefined}
-                  onClick={() => onSelect(e.id)}
+                  aria-current={selected.includes(e.id) ? 'true' : undefined}
+                  onClick={click => onSelect(e.id, click.shiftKey)}
                 >
                   <span className="truncate">{name}</span>
                   {hidden !== 'no' && (
@@ -197,13 +215,14 @@ export function LayoutPanel(props: LayoutPanelProps) {
               {t('layout.descriptions')}
             </label>
           </li>
-          <li className={rowClass(selected === MAP_LAYER)}>
+          <li className={rowClass(selected.includes(MAP_LAYER))}>
             <button type="button" className="grow py-1 text-left text-[13px]" onClick={() => onSelect(MAP_LAYER)}>
               {t('layout.map')}
             </button>
           </li>
         </ul>
       </section>
+      {picking && <ImagePicker clubId={props.clubId} eventId={props.eventId} onChoose={addImage} onClose={() => setPicking(false)} />}
     </aside>
   )
 }

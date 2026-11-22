@@ -3,6 +3,7 @@
 import {
   type Bounds,
   type Course,
+  courseById,
   type EventDoc,
   type Field,
   type FontId,
@@ -14,6 +15,7 @@ import {
   type PageElementSpec,
   type Point,
   type PrintSettings,
+  removeLayoutElement,
   setElementOverride,
   specForBox,
   updateLayoutElement,
@@ -120,8 +122,12 @@ export function paletteElement(kind: NewElementKind, id: string, margin: number,
   return newElement(kind, id, [margin + 10, margin + 10], extra)
 }
 
-/** How the Layers list names an element: its text's first line (fields filled in for the shown course), or its kind. */
-export function layerName(spec: PageElementSpec, t: TFunction, values?: Record<Field, string>): string {
+/**
+ * How the Layers list names an element: its text's first line (fields filled in for the shown course),
+ * an image's name (from `imageNames`, by asset id), or its kind.
+ */
+export function layerName(spec: PageElementSpec, t: TFunction, values?: Record<Field, string>, imageNames?: Map<string, string>): string {
+  if (spec.kind === 'image') return imageNames?.get(spec.asset) ?? t('layout.kinds.image')
   if (spec.kind === 'text') {
     const line = (values ? fillFields(spec.text, values) : spec.text)
       .split('\n')
@@ -160,4 +166,36 @@ export function pinnedText(spec: PageElementSpec, t: TFunction): string {
           })
       : t('layout.pinned.fromSide', { value: mm(spec.offset[1]), side: t(`layout.pinned.${v}`) })
   return `${across}, ${down}`
+}
+
+/** The settings the course prints with in `doc` after an edit (a course's first override stores them). */
+const settingsIn = (doc: EventDoc, course: Course, before: PrintSettings): PrintSettings => courseById(doc, course.id).print ?? before
+
+/** Several elements placed at once (each as the course sees it), for every course or only this one. */
+export function placeMany(
+  doc: EventDoc,
+  course: Course,
+  settings: PrintSettings,
+  appliesTo: AppliesTo,
+  specs: PageElementSpec[],
+): EventDoc {
+  return specs.reduce((next, spec) => placeElement(next, course, settingsIn(next, course, settings), appliesTo, spec), doc)
+}
+
+/** Several elements removed (for every course), or hidden on this course only. */
+export function removeMany(doc: EventDoc, course: Course, settings: PrintSettings, appliesTo: AppliesTo, ids: string[]): EventDoc {
+  return ids.reduce((next, id) => {
+    const s = settingsIn(next, course, settings)
+    return !s.ownLayout && appliesTo === 'course'
+      ? setHidden(next, course, s, 'course', id, true)
+      : removeLayoutElement(next, course.id, s, id)
+  }, doc)
+}
+
+/** The selection after a click on `id` (null: nothing), Shift adding or taking away; the map is chosen alone. */
+export function nextSelection(selected: string[], id: string | null, additive: boolean, mapLayer: string): string[] {
+  if (id === null) return []
+  if (!additive || id === mapLayer) return [id]
+  const without = selected.filter(s => s !== mapLayer)
+  return without.includes(id) ? without.filter(s => s !== id) : [...without, id]
 }

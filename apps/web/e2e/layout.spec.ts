@@ -1,6 +1,6 @@
 import type { EventDoc, PageElementSpec, PrintSettings } from '@course-setter/core'
 import { expect, type Page, test } from '@playwright/test'
-import { admin, clubWithPdfMap, createUser, deleteUsers, pageFor, pdfMap, removeClub, type TestUser } from './users.ts'
+import { admin, clientFor, clubWithPdfMap, createUser, deleteUsers, pageFor, pdfMap, removeClub, type TestUser } from './users.ts'
 
 const users: TestUser[] = []
 const clubs: string[] = []
@@ -138,4 +138,108 @@ test('layout mode: add and edit elements for every course or one, its own layout
   await expect(layers.getByRole('button', { name: 'Shape', exact: true })).toHaveCount(0)
   await waitSaved(page)
   expect((await saved(eventId)).printLayout?.elements.map(e => e.id)).toEqual([text.id])
+})
+
+/** A 2 × 1 pixel PNG. */
+const PIXELS = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAEElEQVR4nGP4z8DAwMDAAAAfAAQBXd1+NQAAAABJRU5ErkJggg==', 'base64')
+
+/** Wait until the image is checked by the worker. */
+async function ready(assetId: string) {
+  await expect
+    .poll(async () => (await admin.from('layout_assets').select('status').eq('id', assetId).single()).data?.status, { timeout: 60_000 })
+    .toBe('ready')
+}
+
+test('layout images: upload to the event, use a personal image (copied into the event), align two', async ({ browser }) => {
+  test.setTimeout(240_000)
+  const ada = await createUser('Ada Admin')
+  users.push(ada)
+  const { clubId, mapVersionId } = await clubWithPdfMap(ada, 'Layout images club', pdfMap(300, 200), 10000)
+  clubs.push(clubId)
+  const doc: EventDoc = {
+    schemaVersion: 1,
+    standard: 'isom',
+    controls: [{ id: 'a', kind: 'control', code: 31, position: [1500, 1000] }],
+    courses: [{ id: 'K', name: 'Long', controls: ['a'], printScale: 10000, bends: {}, numberPositions: {} }],
+    specials: [],
+  }
+  const created = await admin
+    .from('events')
+    .insert({ club_id: clubId, name: 'Night', map_version_id: mapVersionId, doc, created_by: ada.id })
+    .select('id')
+    .single()
+  if (created.error) throw created.error
+  const eventId = created.data.id
+  await admin.from('event_revisions').insert({ event_id: eventId, revision: 1, doc })
+
+  // Ada's own logo, uploaded through the API.
+  const client = await clientFor(ada)
+  const started = await client.rpc('start_asset_upload', { scope: 'personal', asset_name: 'My logo', kind: 'png' })
+  if (started.error) throw started.error
+  const personal = started.data[0]
+  if (!personal) throw new Error('no upload')
+  await client.storage.from('layout-assets').upload(personal.upload_path, PIXELS, { contentType: 'image/png' })
+  await client.rpc('finish_asset_upload', { asset_id: personal.asset_id })
+  await ready(personal.asset_id)
+
+  const page = await pageFor(browser, ada)
+  await page.setViewportSize({ width: 1500, height: 950 })
+  await page.goto(`/clubs/${clubId}/events/${eventId}?view=print&mode=layout`)
+  const panel = page.getByRole('complementary', { name: 'Layout' })
+  const properties = page.getByRole('complementary', { name: 'Properties' })
+  const layers = panel.getByRole('list', { name: 'Layers' })
+  const picker = page.getByRole('dialog', { name: 'Choose an image' })
+
+  // An image uploaded to the event, then chosen.
+  await panel.getByRole('region', { name: 'Add' }).getByRole('button', { name: 'Image', exact: true }).click()
+  await picker.getByText('This event', { exact: true }).click()
+  await picker.getByLabel('Upload an image to this event').setInputFiles({ name: 'Sponsor.png', mimeType: 'image/png', buffer: PIXELS })
+  await picker.getByRole('button', { name: 'Upload image' }).click()
+  const sponsor = picker.getByRole('button', { name: 'Sponsor' })
+  await expect(sponsor).toBeEnabled({ timeout: 60_000 })
+  await sponsor.click()
+  await expect(picker).toHaveCount(0)
+  await waitSaved(page)
+  let now = await saved(eventId)
+  const first = now.printLayout?.elements[0] as Extract<PageElementSpec, { kind: 'image' }>
+  // 2:1 like the image.
+  expect(first).toMatchObject({ kind: 'image', size: [40, 20] })
+  const { data: eventImage } = await admin.from('layout_assets').select('event_id, name').eq('id', first.asset).single()
+  expect(eventImage).toEqual({ event_id: eventId, name: 'Sponsor' })
+
+  // A personal image is copied into the event, so others editing it see it too.
+  await panel.getByRole('region', { name: 'Add' }).getByRole('button', { name: 'Image', exact: true }).click()
+  await picker.getByText('Your images', { exact: true }).click()
+  await picker.getByRole('button', { name: 'My logo' }).click()
+  await expect(picker).toHaveCount(0)
+  await waitSaved(page)
+  now = await saved(eventId)
+  const second = now.printLayout?.elements[1] as Extract<PageElementSpec, { kind: 'image' }>
+  expect(second.asset).not.toBe(personal.asset_id)
+  const { data: copy } = await admin.from('layout_assets').select('event_id, owner_id, name').eq('id', second.asset).single()
+  expect(copy).toEqual({ event_id: eventId, owner_id: null, name: 'My logo' })
+  await ready(second.asset)
+
+  // Both selected (Shift-click) and lined up on their left edges.
+  await layers.getByRole('button', { name: 'My logo', exact: true }).click()
+  await layers.getByRole('button', { name: 'Sponsor', exact: true }).click({ modifiers: ['Shift'] })
+  await expect(properties.getByRole('heading', { name: '2 elements' })).toBeVisible()
+  // Move one away first, so aligning has something to do.
+  await layers.getByRole('button', { name: 'My logo', exact: true }).click()
+  for (let i = 0; i < 3; i++) await page.keyboard.press('Shift+ArrowRight')
+  await layers.getByRole('button', { name: 'Sponsor', exact: true }).click({ modifiers: ['Shift'] })
+  await properties.getByRole('button', { name: 'Left edges' }).click()
+  await waitSaved(page)
+  now = await saved(eventId)
+  const [x1, x2] = (now.printLayout?.elements ?? []).map(e => e.offset[0])
+  expect(x1).toBe(x2)
+
+  // Replacing the sponsor (the bottom layer) with the logo keeps its place.
+  await layers.getByRole('button', { name: 'Sponsor', exact: true }).click()
+  await properties.getByRole('button', { name: 'Replace image' }).click()
+  await picker.getByText('This event', { exact: true }).click()
+  await picker.getByRole('button', { name: 'My logo' }).click()
+  await waitSaved(page)
+  now = await saved(eventId)
+  expect((now.printLayout?.elements ?? []).filter(e => e.kind === 'image' && e.asset === second.asset)).toHaveLength(2)
 })
