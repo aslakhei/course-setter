@@ -53,17 +53,23 @@ isOneToOne: false
                   ]
                 },"clubs": {
                   Row: {
-                    "created_at": string,"created_by": string | null,"id": string,"name": string
+                    "colour": string | null,"colour2": string | null,"created_at": string,"created_by": string | null,"id": string,"logo_asset_id": string | null,"name": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string
+                    "colour"?: string | null,"colour2"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name": string
                   }
                   Update: {
-                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string
+                    "colour"?: string | null,"colour2"?: string | null,"created_at"?: string,"created_by"?: string | null,"id"?: string,"logo_asset_id"?: string | null,"name"?: string
                   }
                   Relationships: [
-                    
+                    {
+      foreignKeyName: "clubs_logo_asset_id_fkey"
+      columns: ["logo_asset_id"]
+isOneToOne: false
+      referencedRelation: "layout_assets"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"event_members": {
                   Row: {
@@ -215,14 +221,14 @@ isOneToOne: false
                   ]
                 },"layout_assets": {
                   Row: {
-                    "bytes": number | null,"club_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"height": number | null,"id": string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id": string | null,"preview_path": string | null,"status": Database["public"]['Enums']["asset_status"],"uploaded_by": string | null,"width": number | null
+                    "bytes": number | null,"club_id": string | null,"created_at": string,"error_code": string | null,"event_id": string | null,"height": number | null,"id": string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id": string | null,"preview_path": string | null,"sponsor": boolean,"status": Database["public"]['Enums']["asset_status"],"uploaded_by": string | null,"width": number | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id"?: string | null,"preview_path"?: string | null,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
+                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind": Database["public"]['Enums']["asset_kind"],"name": string,"original_path": string,"owner_id"?: string | null,"preview_path"?: string | null,"sponsor"?: boolean,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
                   }
                   Update: {
-                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind"?: Database["public"]['Enums']["asset_kind"],"name"?: string,"original_path"?: string,"owner_id"?: string | null,"preview_path"?: string | null,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
+                    "bytes"?: number | null,"club_id"?: string | null,"created_at"?: string,"error_code"?: string | null,"event_id"?: string | null,"height"?: number | null,"id"?: string,"kind"?: Database["public"]['Enums']["asset_kind"],"name"?: string,"original_path"?: string,"owner_id"?: string | null,"preview_path"?: string | null,"sponsor"?: boolean,"status"?: Database["public"]['Enums']["asset_status"],"uploaded_by"?: string | null,"width"?: number | null
                   }
                   Relationships: [
                     {
@@ -406,6 +412,12 @@ isOneToOne: false
                            },
 "save_event":
 { Args: { "doc": Json,"event": string,"expected_revision": number }; Returns: number
+                           },
+"set_asset_sponsor":
+{ Args: { "asset_id": string,"sponsor": boolean }; Returns: undefined
+                           },
+"set_club_branding":
+{ Args: { "club": string,"colour"?: string,"colour2"?: string,"logo_asset_id"?: string }; Returns: undefined
                            },
 "set_map_version_alignment":
 { Args: { "map_version_id": string,"rms_m": number,"transform": Json }; Returns: undefined

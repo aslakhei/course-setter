@@ -41,6 +41,7 @@ export type LayoutPanelProps = {
   /** Whether a white area is being drawn. */
   penActive: boolean
   onStartPen: () => void
+  onOpenTemplates: () => void
 }
 
 const PALETTE: NewElementKind[] = ['text', 'shape', 'northArrow', 'scaleBar']
@@ -106,9 +107,14 @@ export function LayoutPanel(props: LayoutPanelProps) {
 
   return (
     <aside aria-label={t('layout.panel')} className="flex min-h-0 w-60 shrink-0 flex-col overflow-auto border-r border-line bg-white">
-      <p className="m-0 border-b border-line-soft px-3 py-2 text-xs text-body" data-testid="layout-scope">
-        {settings.ownLayout ? t('layout.own', { course: course.name }) : t('layout.shared')}
-      </p>
+      <div className="flex flex-col gap-2 border-b border-line-soft px-3 py-2">
+        <p className="m-0 text-xs text-body" data-testid="layout-scope">
+          {settings.ownLayout ? t('layout.own', { course: course.name }) : t('layout.shared')}
+        </p>
+        <Button size="sm" onClick={props.onOpenTemplates}>
+          {t('templates.button')}
+        </Button>
+      </div>
 
       <section aria-labelledby="layout-add" className="flex flex-col gap-1.5 border-b border-line-soft px-3 py-2.5">
         <h2 id="layout-add" className="m-0 text-[13px] font-semibold">

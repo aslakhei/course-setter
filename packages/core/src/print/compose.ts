@@ -193,20 +193,33 @@ export function composeLayout(
     .filter(spec => !spec.hidden)
     .map((spec): PlacedElement => {
       const width = widthOf(spec, size)
-      const height =
+      const text =
         spec.kind === 'text'
           ? layoutText({
               text: fillFields(spec.text, values),
               font: spec.font,
               sizePt: spec.sizePt,
               width,
+              ...(spec.align ? { align: spec.align } : {}),
               ...(spec.lineHeight ? { lineHeight: spec.lineHeight } : {}),
-            }).height
-          : spec.size[1]
+            })
+          : null
+      const height = text ? text.height : spec.size[1]
       const box = elementBox(spec, size, width, height)
       const primitives = drawElement(spec, box, values, course.printScale)
       const pad = spec.backing?.padding
-      const outer = pad === undefined ? box : { minX: box.minX - pad, minY: box.minY - pad, maxX: box.maxX + pad, maxY: box.maxY + pad }
+      // A text's white box hugs its lines (not its whole width), covering no more map than it must.
+      const printed = text?.lines.filter(l => l.width > 0) ?? []
+      const behind =
+        text && printed.length
+          ? {
+              ...box,
+              minX: box.minX + Math.min(...printed.map(l => l.x)),
+              maxX: box.minX + Math.max(...printed.map(l => l.x + l.width)),
+            }
+          : box
+      const outer =
+        pad === undefined ? box : { minX: behind.minX - pad, minY: behind.minY - pad, maxX: behind.maxX + pad, maxY: behind.maxY + pad }
       if (pad !== undefined)
         primitives.unshift({
           type: 'path',

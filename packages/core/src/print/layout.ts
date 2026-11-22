@@ -53,6 +53,8 @@ export type PrintPage = {
   elements: PlacedElement[]
   /** White areas, page mm (y up): drawn white over the map and under the course, clipped to the map area. */
   whiteAreas: PlacedWhiteArea[]
+  /** The line round the map area, if the layout has one: drawn above the course, under the elements. */
+  mapOutline: Primitive[]
 }
 
 /** A white area on the page: its outline (page mm, y up) and the white fill that draws it. */
@@ -194,6 +196,19 @@ export function printPage(
     course: onPage,
     descriptions: descriptionsOn(doc, course, title, settings.layout, size),
     elements: layout.elements,
+    mapOutline: (() => {
+      const stroke = layoutFor(doc, settings).mapArea?.stroke
+      if (!stroke) return []
+      const outline: Primitive = {
+        type: 'path',
+        role: 'layout',
+        commands: layout.mapClip,
+        lineWidth: stroke.width,
+        join: 'round',
+        color: stroke.color,
+      }
+      return [outline]
+    })(),
     whiteAreas: (layoutFor(doc, settings).whiteAreas ?? [])
       .filter(a => !a.hidden)
       .map(a => {

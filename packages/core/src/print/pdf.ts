@@ -113,11 +113,11 @@ export function addPrintPage(pdf: PDFDocument, layout: PrintPage, map: MapLayer 
   page.pushOperators(popGraphicsState())
 
   // The layout, as it is (no Multiply): a white band or backing covers the map and the course.
-  drawPrimitivesOnPage(
-    page,
-    layout.elements.flatMap(e => e.primitives),
-    { origin: [0, 0], color: BLACK, ...textOptions },
-  )
+  drawPrimitivesOnPage(page, [...layout.mapOutline, ...layout.elements.flatMap(e => e.primitives)], {
+    origin: [0, 0],
+    color: BLACK,
+    ...textOptions,
+  })
 
   if (layout.descriptions) {
     const { box, primitives } = layout.descriptions

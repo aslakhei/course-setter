@@ -27,6 +27,8 @@ export type LayoutAsset = {
   /** A PNG the browser can show for a PDF image. */
   previewPath: string | null
   createdAt: string
+  /** A club library image marked as a sponsor (templates show sponsors). */
+  sponsor: boolean
 }
 
 /** 5 MB, also set on the bucket. */
@@ -58,7 +60,7 @@ export const assetKeys = {
   images: (ids: string[]) => ['layout-asset-images', ...ids] as const,
 }
 
-const columns = 'id, name, kind, status, width, height, bytes, error_code, original_path, preview_path, created_at'
+const columns = 'id, name, kind, status, width, height, bytes, error_code, original_path, preview_path, created_at, sponsor'
 type Row = {
   id: string
   name: string
@@ -71,6 +73,7 @@ type Row = {
   original_path: string
   preview_path: string | null
   created_at: string
+  sponsor: boolean
 }
 const toAsset = (r: Row): LayoutAsset => ({
   id: r.id,
@@ -84,6 +87,7 @@ const toAsset = (r: Row): LayoutAsset => ({
   originalPath: r.original_path,
   previewPath: r.preview_path,
   createdAt: r.created_at,
+  sponsor: r.sponsor,
 })
 
 const busy = (a: LayoutAsset) => a.status === 'uploading' || a.status === 'processing'
@@ -140,6 +144,27 @@ export function useDeleteAsset(scope: AssetScope) {
       if (error) throw new ApiError(error)
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: assetKeys.library(scope) }),
+  })
+}
+
+/** Mark a club library image as a sponsor or not (admins). */
+export function useSetSponsor(clubId: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ assetId, sponsor }: { assetId: string; sponsor: boolean }) => {
+      const { error } = await supabase.rpc('set_asset_sponsor', { asset_id: assetId, sponsor })
+      if (error) throw new ApiError(error)
+    },
+    // Shown at once; put back if the save fails.
+    onMutate: async ({ assetId, sponsor }) => {
+      const key = assetKeys.library({ scope: 'club', clubId })
+      await queryClient.cancelQueries({ queryKey: key })
+      const before = queryClient.getQueryData<LayoutAsset[]>(key)
+      queryClient.setQueryData<LayoutAsset[]>(key, old => old?.map(a => (a.id === assetId ? { ...a, sponsor } : a)))
+      return { before }
+    },
+    onError: (_err, _vars, context) => queryClient.setQueryData(assetKeys.library({ scope: 'club', clubId }), context?.before),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: assetKeys.library({ scope: 'club', clubId }) }),
   })
 }
 

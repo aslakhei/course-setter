@@ -107,9 +107,31 @@ export function reorderLayoutElement(doc: EventDoc, courseId: string, settings: 
 
 /** Round the map area's corners (0: square), in the layout the course uses. */
 export function setMapAreaRadius(doc: EventDoc, courseId: string, settings: PrintSettings, radius: number): EventDoc {
+  return withMapArea(doc, courseId, settings, area => {
+    const { radius: _old, ...rest } = area
+    return radius > 0 ? { ...rest, radius } : rest
+  })
+}
+
+/** Draw a line round the map area (null: none), in the layout the course uses. */
+export function setMapAreaStroke(
+  doc: EventDoc,
+  courseId: string,
+  settings: PrintSettings,
+  stroke: { color: string; width: number } | null,
+): EventDoc {
+  return withMapArea(doc, courseId, settings, area => {
+    const { stroke: _old, ...rest } = area
+    return stroke ? { ...rest, stroke } : rest
+  })
+}
+
+type MapArea = NonNullable<PrintLayout['mapArea']>
+function withMapArea(doc: EventDoc, courseId: string, settings: PrintSettings, change: (area: MapArea) => MapArea): EventDoc {
   return withLayout(doc, courseById(doc, courseId), settings, l => {
-    const { mapArea: _old, ...rest } = l
-    return radius > 0 ? { ...rest, mapArea: { radius } } : rest
+    const { mapArea: old, ...rest } = l
+    const next = change(old ?? {})
+    return Object.keys(next).length ? { ...rest, mapArea: next } : rest
   })
 }
 

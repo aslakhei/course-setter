@@ -24,6 +24,9 @@ import { descriptionSheet, drawDescriptionSheet } from '../descriptions/sheet.ts
 import { DESCRIPTION_SYMBOLS, drawDescriptionSymbol } from '../descriptions/symbols.ts'
 import { composeLayout, whiteAreaPath } from '../print/compose.ts'
 import type { PageElementSpec } from '../print/elements.ts'
+import { printPage } from '../print/layout.ts'
+import { resolveTemplate } from '../print/templates.ts'
+import { UNIVERSAL_TEMPLATES } from '../print/universal.ts'
 import type { Point } from '../similarity.ts'
 import { FONT_FEATURES, FONT_IDS, FONTS, type FontId } from '../text/fonts.ts'
 import { textPrimitives } from '../text/lines.ts'
@@ -577,7 +580,72 @@ const layoutElementsSheet = (): Sheet => {
   }
 }
 
+/**
+ * Every universal template on A4 portrait and A3 landscape, with a logo, two club colours and three
+ * sponsors: the page's edge, the map area (beige), its outline and the elements, at a quarter of their size.
+ */
+const layoutTemplatesSheet = (): Sheet => {
+  let doc = testEvent()
+  doc = updateCourse(doc, 'A', { printScale: 10000, climb: 85 })
+  const branding = { logo: 'logo', colour: '#1f5a3a', colour2: '#d9b44a', sponsors: ['s1', 's2', 's3'] }
+  const context = {
+    eventDate: '2026-11-24',
+    clubName: 'Nordskog OK',
+    setter: 'Kari',
+    map: { name: 'Nordåsen', contour: 5, mapper: 'Ola', year: 2024 },
+  }
+  const papers = [
+    ['A4', 'portrait'],
+    ['A3', 'landscape'],
+  ] as const
+  const cells: Cell[] = []
+  for (const t of UNIVERSAL_TEMPLATES)
+    for (const [paper, orientation] of papers) {
+      let n = 0
+      const layout = resolveTemplate(t.layout, branding, () => `${t.id}-${++n}`)
+      const withLayout = { ...doc, printLayout: layout }
+      const course = courseById(withLayout, 'A')
+      const page = printPage(withLayout, course, 'Club night', { paper, orientation, center: [0, 0], margin: 5, layout: [] }, context)
+      const [w, h] = page.size
+      const primitives: Primitive[] = [
+        {
+          type: 'polyline',
+          role: 'layout',
+          points: [
+            [0, 0],
+            [w, 0],
+            [w, h],
+            [0, h],
+          ],
+          closed: true,
+          lineWidth: 0.6,
+          color: '#9a949c',
+        },
+        { type: 'path', role: 'layout', commands: page.mapClip, lineWidth: 0, filled: true, color: '#f1ecdf' },
+        ...page.mapOutline,
+        ...page.elements.flatMap(e => e.primitives),
+      ]
+      cells.push({ name: `${t.id} ${paper} ${orientation}`, primitives: transformPrimitives(primitives, 0.25, [0, 0]) })
+    }
+  const sponsor = (field: string) => ({ png: testPng(180, 70, { field, disc: '#ffffff' }) })
+  return {
+    name: 'layout-templates',
+    color: BLACK,
+    cell: [112, 80],
+    columns: 2,
+    between: 0.12, // text, see layoutTextSheet
+    assets: {
+      logo: { png: testPng(120, 120, { field: '#1f5a3a', disc: '#d9b44a' }) },
+      s1: sponsor('#c8102e'),
+      s2: sponsor('#0b62a4'),
+      s3: sponsor('#2e7d32'),
+    },
+    cells,
+  }
+}
+
 describe.each([
+  layoutTemplatesSheet,
   layoutElementsSheet,
   symbolSheet,
   courseSheet,

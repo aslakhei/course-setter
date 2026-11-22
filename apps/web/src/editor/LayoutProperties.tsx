@@ -22,6 +22,7 @@ import {
   removeLayoutElement,
   SHAPES,
   setMapAreaRadius,
+  setMapAreaStroke,
   specForBox,
   updateLayoutElement,
   updateWhiteArea,
@@ -378,7 +379,9 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
   }
 
   if (single === MAP_LAYER) {
-    const radius = (settings.ownLayout ?? doc.printLayout)?.mapArea?.radius ?? 0
+    const mapArea = (settings.ownLayout ?? doc.printLayout)?.mapArea
+    const radius = mapArea?.radius ?? 0
+    const stroke = mapArea?.stroke
     return frame(
       <>
         <h2 className="m-0 text-[15px] font-semibold">{t('layout.map')}</h2>
@@ -396,6 +399,31 @@ export function LayoutProperties(props: LayoutPropertiesProps) {
             {t('layout.mm', { value: '' }).trim()}
           </span>
         </Field>
+        <Check
+          label={t('layout.mapOutline')}
+          checked={Boolean(stroke)}
+          onChange={on => onEdit(setMapAreaStroke(doc, course.id, settings, on ? { color: '#000000', width: 0.8 } : null))}
+        />
+        {stroke && (
+          <>
+            <ColorField
+              id="layout-map-stroke"
+              label={t('layout.outline')}
+              value={stroke.color}
+              onChange={color => onEdit(setMapAreaStroke(doc, course.id, settings, { ...stroke, color }))}
+            />
+            <Field label={t('layout.lineWidth')} htmlFor="layout-map-stroke-width">
+              <CommitNumber
+                id="layout-map-stroke-width"
+                value={stroke.width}
+                min={0.1}
+                max={5}
+                step={0.1}
+                onCommit={width => onEdit(setMapAreaStroke(doc, course.id, settings, { ...stroke, width }))}
+              />
+            </Field>
+          </>
+        )}
       </>,
     )
   }

@@ -3,9 +3,12 @@ import {
   addCourse,
   addWhiteArea,
   allControlsCourse,
+  applyLayout,
+  type Branding,
   type Course,
   changePaper,
   changePrintSize,
+  courseById,
   defaultPrintSettings,
   deleteControl,
   deleteSpecial,
@@ -16,6 +19,7 @@ import {
   moveNodes,
   type PageContext,
   type Point,
+  type PrintLayout,
   type PrintSettings,
   pageSize,
   parseDoc,
@@ -71,9 +75,11 @@ import {
   shapeOf,
   type Tool,
 } from '../editor/state.ts'
+import { TemplateGallery } from '../editor/TemplateGallery.tsx'
 import { Toolbar } from '../editor/Toolbar.tsx'
 import { type SaveStatus, useAutosave } from '../editor/useAutosave.ts'
 import { type Member, useClub, useMembers } from '../lib/api.ts'
+import { useLibrary } from '../lib/assets.ts'
 import { type EventDetail, eventKeys, fetchEvent, moveEvent, SaveConflict, saveAsCopy, useEvent } from '../lib/events.ts'
 import { formatScale } from '../lib/format.ts'
 import { type MapVersionDetail, useMaps, useMapVersion, useTilesUrl, useVersionLinks } from '../lib/maps.ts'
@@ -165,9 +171,9 @@ function Editor({
   const grid = version.tiles as NonNullable<typeof version.tiles>
   // An empty course's page is centred on the map, as the worker does.
   const settingsOf = useCallback(
-    (c: Course) => {
+    (c: Course, inDoc: EventDoc = doc) => {
       const centre: Point = [(grid.extent.minX + grid.extent.maxX) / 2, (grid.extent.minY + grid.extent.maxY) / 2]
-      return printSettingsOf(doc, c, event.name, centre)
+      return printSettingsOf(inDoc, c, event.name, centre)
     },
     [doc, event.name, grid],
   )
@@ -185,6 +191,52 @@ function Editor({
   const [layoutSelected, setLayoutSelected] = useState<string[]>([])
   // Drawing a white area with the pen, and the selected point of a selected white area.
   const [pen, setPen] = useState<Pen | null>(null)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  // What templates fill in: the club's logo and colours, and its sponsor images in the order they came.
+  const clubImages = useLibrary({ scope: 'club', clubId: event.clubId })
+  const branding = useMemo<Branding>(
+    () => ({
+      logo: club.data?.logoAssetId ?? null,
+      colour: club.data?.colour ?? null,
+      colour2: club.data?.colour2 ?? null,
+      sponsors: (clubImages.data ?? [])
+        .filter(a => a.sponsor && a.status === 'ready')
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map(a => a.id),
+    }),
+    [club.data, clubImages.data],
+  )
+  const templateTarget = useCallback(
+    (to: 'all' | 'course') =>
+      to === 'all' || !printCourse || !printSettings ? ('all' as const) : { courseId: printCourse.id, settings: printSettings },
+    [printCourse, printSettings],
+  )
+  /** The shown course's page with a template's layout applied, for the gallery's previews. */
+  const pageWith = useCallback(
+    (layout: PrintLayout, to: 'all' | 'course') => {
+      const next = applyLayout(doc, layout, templateTarget(to))
+      const c = courseById(next, printCourse?.id ?? '')
+      return printPage(next, c, event.name, settingsOf(c, next), pageContext)
+    },
+    [doc, printCourse, event.name, pageContext, templateTarget, settingsOf],
+  )
+  const applyTemplate = (layout: PrintLayout, to: 'all' | 'course', keepSheets: boolean) => {
+    if (!printCourse) return
+    let next = applyLayout(doc, layout, templateTarget(to))
+    if (!keepSheets) {
+      // Description sheets go to the corner that hides the least, now that the layout has changed.
+      const ids = to === 'all' ? [...next.courses.map(c => c.id), ...(next.allControls?.print ? [ALL_CONTROLS] : [])] : [printCourse.id]
+      for (const id of ids) {
+        const c = courseById(next, id)
+        if (!c.print?.layout.some(e => e.kind === 'descriptions')) continue
+        const moved = showDescriptions(next, c, event.name, showDescriptions(next, c, event.name, c.print, false), true)
+        next = setPrintSettings(next, id, moved)
+      }
+    }
+    edit(next)
+    setTemplatesOpen(false)
+    setLayoutSelected([])
+  }
   const [layoutNode, setLayoutNode] = useState<number | null>(null)
   // Selecting anything lets go of a white area's selected point.
   const selectLayout = useCallback((id: string | null, additive = false) => {
@@ -550,6 +602,7 @@ function Editor({
             clubId={event.clubId}
             eventId={event.id}
             onEdit={next => edit(next)}
+            onOpenTemplates={() => setTemplatesOpen(true)}
             penActive={pen !== null}
             onStartPen={() => {
               setPen({ on: 'map', nodes: [] })
@@ -663,6 +716,15 @@ function Editor({
           error={moveError}
           onMove={() => void moveToNewer()}
           onCancel={() => setMoveOpen(false)}
+        />
+      )}
+      {templatesOpen && layoutMode && printCourse && (
+        <TemplateGallery
+          branding={branding}
+          courseName={printCourse.name}
+          pageWith={pageWith}
+          onApply={applyTemplate}
+          onClose={() => setTemplatesOpen(false)}
         />
       )}
       {accessOpen && <AccessDialog event={event} clubMembers={members} onClose={() => setAccessOpen(false)} />}

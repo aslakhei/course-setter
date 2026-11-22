@@ -563,7 +563,7 @@
   },
   "images": {
     "clubHeading": "Club images",
-    "clubHelp": "Logos and sponsor images for printed courses. Everyone in the club can use them in print layouts; only admins add and delete them.",
+    "clubHelp": "Logos and sponsor images for printed courses. Everyone in the club can use them in print layouts; only admins add and delete them. Templates show the images marked as sponsors.",
     "personalHeading": "Your images",
     "personalHelp": "Only you see these. You can use them in print layouts of any event you have access to.",
     "empty": "No images yet.",
@@ -592,7 +592,9 @@
       "unreadable_image": "The image could not be read. Save it again from the program that made it.",
       "image_too_large": "The image is too large. Use one under 5 MB and 80 million pixels.",
       "processing_failed": "Something went wrong checking the image. Delete it and upload it again."
-    }
+    },
+    "sponsor": "Sponsor",
+    "sponsorLabel": "{{name}} is a sponsor"
   },
   "layout": {
     "modeLabel": "View",
@@ -783,6 +785,55 @@
       "finish": "Finish",
       "cancel": "Cancel",
       "editHelp": "Drag a point or a handle to change the outline (Alt: one handle alone), drag inside to move it. Alt-click a point to make it a corner or a curve; Delete removes the selected point."
+    },
+    "mapOutline": "Line round the map"
+  },
+  "branding": {
+    "heading": "Branding",
+    "help": "Universal print templates use the club's logo and colours, so every print looks like the club's without making a template.",
+    "logo": "Club logo",
+    "noLogo": "No logo",
+    "noImages": "Add the logo to the club images below first, then choose it here.",
+    "colour": "Club colour 1",
+    "colour2": "Club colour 2",
+    "badColour": "Give colours as #rrggbb, for example #1f5a3a.",
+    "coloursHelp": "Left empty, templates use the colour shown."
+  },
+  "templates": {
+    "heading": "Templates",
+    "button": "Templates",
+    "universal": "Universal templates",
+    "universalHelp": "Universal templates take the club's logo and colours from the club settings. Each fits A4 and A3, portrait and landscape.",
+    "selected": "Chosen template",
+    "previewOf": "The template on {{course}}",
+    "previewHelp": "On {{course}}, with the club's logo and colours (the map is left out).",
+    "useFor": "Use for",
+    "forAll": "All courses (replaces the shared layout)",
+    "forCourse": "Only {{course}}",
+    "keepSheets": "Keep description sheets where they are",
+    "copied": "The template is copied into the event: changing it later does not change this event.",
+    "use": "Use this template",
+    "universalTemplates": {
+      "plain": {
+        "name": "Plain",
+        "description": "Title, scale and credits. Nothing else."
+      },
+      "header": {
+        "name": "Header band",
+        "description": "A band in the club colour with title, course, date and logo."
+      },
+      "frame": {
+        "name": "Frame",
+        "description": "A rounded frame in the club colour, the map name in a corner, the logo opposite."
+      },
+      "training": {
+        "name": "Training",
+        "description": "As much map as possible: course and date in small white boxes."
+      },
+      "competition": {
+        "name": "Competition",
+        "description": "Header band, a frame and a row of sponsors, for club races."
+      }
     }
   }
 }

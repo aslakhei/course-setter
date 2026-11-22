@@ -143,6 +143,7 @@ export {
   reorderLayoutElement,
   setElementOverride,
   setMapAreaRadius,
+  setMapAreaStroke,
   specForBox,
   updateLayoutElement,
   updateWhiteArea,
@@ -198,6 +199,16 @@ export {
 } from './print/layout.ts'
 export { ellipse, roundedRect, scaleBarLength } from './print/marks.ts'
 export { insertNode, mapNodes, moveHandle, moveNode, moveNodes, penNode, removeNode, toggleCorner } from './print/nodes.ts'
+export {
+  applyLayout,
+  type Branding,
+  DEFAULT_COLOURS,
+  NO_BRANDING,
+  resolveTemplate,
+  sponsorToken,
+  TOKENS,
+} from './print/templates.ts'
+export { UNIVERSAL_TEMPLATES, type UniversalTemplate, type UniversalTemplateId } from './print/universal.ts'
 export {
   type CanvasOptions,
   type CanvasTarget,

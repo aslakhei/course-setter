@@ -10,7 +10,12 @@ export const ada: Member = { userId: 'u-ada', role: 'admin', joinedAt: '2026-11-
 export const mo: Member = { userId: 'u-mo', role: 'member', joinedAt: '2026-11-19T10:00:00Z', name: 'Mo Lund', avatarUrl: null }
 
 export function clubContext(me: Member, members: Member[] = [ada, mo]): ClubContext {
-  return { club: { id: 'club-1', name: 'Skogly OK' }, members, me, isAdmin: me.role === 'admin' }
+  return {
+    club: { id: 'club-1', name: 'Skogly OK', logoAssetId: null, colour: null, colour2: null },
+    members,
+    me,
+    isAdmin: me.role === 'admin',
+  }
 }
 
 /** Render a club page as the club layout would: inside a route that provides the club context. */
